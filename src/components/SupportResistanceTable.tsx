@@ -1,9 +1,10 @@
 import { Fragment } from 'react'
 import { describeLevelDistance, formatQuotePrice } from '../lib/priceFormatting'
-import type { NearestLevel } from '../lib/supportResistance'
+import type { SupportResistanceLevel } from '../lib/supportResistance'
 import type { SupportResistanceRow } from '../lib/supportResistanceFilters'
 import { useScannerStore } from '../store/scannerStore'
 import type { SupportResistanceSort } from '../types'
+import { SupportResistanceBreakouts, SupportResistanceBreakoutTitle } from './SupportResistanceBreakouts'
 import './SupportResistanceTable.css'
 
 const TREND_LABELS = {
@@ -15,7 +16,7 @@ const TREND_LABELS = {
 
 interface LevelCellsProps {
   kind: 'support' | 'resistance'
-  level: NearestLevel | null
+  level: SupportResistanceLevel | null
   price: number
 }
 
@@ -38,7 +39,6 @@ function LevelCells({ kind, level, price }: LevelCellsProps) {
         <span className="sr-table__muted">
           {level.touches} {level.touches === 1 ? 'touch' : 'touches'}
         </span>
-        {level.testing && <span className={`sr-table__testing sr-table__testing--${kind}`}>Testing</span>}
       </td>
     </>
   )
@@ -86,6 +86,7 @@ export function SupportResistanceTable({ rows }: SupportResistanceTableProps) {
             <th scope="col">Trend</th>
             <SortHeader label="Support" sortKey="support" activeSort={sort} onSort={setSort} colSpan={2} />
             <SortHeader label="Resistance" sortKey="resistance" activeSort={sort} onSort={setSort} colSpan={2} />
+            <th scope="col" className="sr-table__breakouts"><SupportResistanceBreakoutTitle /></th>
           </tr>
         </thead>
         <tbody>
@@ -102,9 +103,14 @@ export function SupportResistanceTable({ rows }: SupportResistanceTableProps) {
                     <td className={`sr-table__trend sr-table__trend--${snapshot.trend}`}>{TREND_LABELS[snapshot.trend]}</td>
                     <LevelCells kind="support" level={snapshot.support} price={snapshot.price} />
                     <LevelCells kind="resistance" level={snapshot.resistance} price={snapshot.price} />
+                    <td className="sr-table__breakouts">
+                      {snapshot.pendingBreakouts.length > 0 ? (
+                        <SupportResistanceBreakouts pendingBreakouts={snapshot.pendingBreakouts} currentPrice={snapshot.price} compact />
+                      ) : <span className="sr-table__muted">—</span>}
+                    </td>
                   </Fragment>
                 ) : (
-                  <td colSpan={6} className="sr-table__muted">Loading…</td>
+                  <td colSpan={7} className="sr-table__muted">Loading…</td>
                 )}
               </tr>
             )

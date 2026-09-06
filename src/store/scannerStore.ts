@@ -25,7 +25,19 @@ export const DEFAULT_SUPPORT_RESISTANCE_FILTERS: SupportResistanceFilters = {
   maxDistancePercent: null,
   trend: 'any',
   minTouches: 1,
-  testingOnly: false,
+  pendingBreakoutsOnly: false,
+}
+
+/** Preserve the old Testing-only preference under its clearer breakout name. */
+export function restoreSupportResistanceFilters(
+  saved?: Partial<SupportResistanceFilters> & { testingOnly?: boolean },
+): SupportResistanceFilters {
+  const { testingOnly, ...filters } = saved ?? {}
+  return {
+    ...DEFAULT_SUPPORT_RESISTANCE_FILTERS,
+    ...filters,
+    pendingBreakoutsOnly: filters.pendingBreakoutsOnly ?? testingOnly ?? false,
+  }
 }
 
 interface ScannerState {
@@ -110,7 +122,7 @@ export const useScannerStore = create<ScannerState>()(
           settings: { ...DEFAULT_SETTINGS, ...saved?.settings },
           supportResistanceView: saved?.supportResistanceView === 'list' ? 'list' : 'cards',
           supportResistanceSort: SORT_KEYS.find((key) => key === saved?.supportResistanceSort) ?? 'symbol',
-          supportResistanceFilters: { ...DEFAULT_SUPPORT_RESISTANCE_FILTERS, ...saved?.supportResistanceFilters },
+          supportResistanceFilters: restoreSupportResistanceFilters(saved?.supportResistanceFilters),
         }
       },
     },

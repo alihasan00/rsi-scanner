@@ -36,11 +36,16 @@ Filters narrow the market to pairs that are interacting with a level:
 - **Within:** keep pairs whose chosen level is within 0.25% to 5% of price.
 - **Trend:** uptrend, downtrend, or sideways.
 - **Touches:** require a zone built from two or three or more confirmed swings.
-- **Testing only:** price is beyond a level that no candle has closed past yet.
+- **Pending breakouts only:** price is beyond a surviving level, awaiting a
+  candle close more than 0.1% beyond it. Side, distance, and touches then apply
+  to that pending breakout.
 - **Sort:** list order, nearest level, closest support, or closest resistance.
 
 All level conditions must hold on the same level, so "within 0.5%" with
-"2+ touches" means one zone that is both close and well tested. Pairs still
+"2+ touches" means one zone that is both close and well tested. Normally these
+conditions use the nearest support/resistance; **Pending breakouts only** uses
+the crossed zones displayed separately. Sorting always uses the nearest
+support/resistance columns. Pairs still
 loading are hidden while any filter is active, because they cannot be
 evaluated. Market-wide updates for filtering and sorting are throttled to a few
 per second; individual cards still update on their own ticks.
@@ -55,10 +60,17 @@ third right-hand candle closes. RSI values do not enter this calculation.
 - **Retirement:** a closed candle's close more than 0.1% beyond a zone retires
   it. Wicks, equal closes, and closes inside that buffer keep the zone.
 - **Support:** the highest surviving zone from swing lows at or below the live
-  price. If the live price has crossed below a surviving support without a
-  confirming close, that zone is shown instead and marked **Testing**.
-- **Resistance:** the mirror image using swing highs, marked Testing when the
-  live price has crossed above a surviving resistance.
+  price.
+- **Resistance:** the lowest surviving zone from swing highs at or above the
+  live price.
+- **Pending breakouts:** crossed zones appear separately under **Breakout
+  awaiting confirmation**, showing their price, distance, and touches. The
+  closest crossed support above price and closest crossed resistance below
+  price are shown. They never replace the nearest support/resistance. A candle
+  close more than 0.1% beyond the zone confirms the break and retires it; a close
+  inside that buffer remains pending. Returning to the original side clears
+  the pending breakout and makes the level eligible again. Exact touches are
+  eligible support/resistance, without a pending breakout.
 - **Trend:** the latest two confirmed highs and latest two confirmed lows must
   both rise for an uptrend or both fall for a downtrend. Mixed or equal swings
   show sideways; insufficient swings show unknown.
@@ -67,6 +79,12 @@ Only closed candles form, confirm, or retire zones. Broken zones do not
 automatically switch roles. Missing levels show a dash instead of extrapolating
 beyond the available history. Invalid bars and gaps prevent comparisons with
 older segments.
+
+For example, with resistance zones at 100 and 110 and live price at 105,
+resistance shows 110 and the crossed 100 zone appears separately as a pending
+breakout. If there is no resistance at or above price, resistance shows a dash
+while the pending breakout remains visible. The former **Testing only** saved
+preference carries over to **Pending breakouts only**.
 
 Levels are computed for every symbol in `src/store/supportResistanceStore.ts`
 as candles are published, not inside the visible cards. The closed-bar structure

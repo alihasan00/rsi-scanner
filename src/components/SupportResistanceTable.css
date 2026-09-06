@@ -103,21 +103,7 @@
   color: var(--text-secondary);
 }
 
-.sr-table__testing {
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.sr-table__testing--support {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
-}
-
-.sr-table__testing--resistance {
-  background: color-mix(in srgb, var(--danger) 18%, transparent);
-  color: var(--danger);
+.sr-table .sr-table__breakouts {
+  min-width: 220px;
+  white-space: normal;
 }

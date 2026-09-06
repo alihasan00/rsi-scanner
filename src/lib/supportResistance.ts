@@ -12,12 +12,9 @@ export interface SupportResistanceLevel {
   touches: number
 }
 
-export interface NearestLevel extends SupportResistanceLevel {
-  /**
-   * Live price is beyond the level without a closed candle confirming the
-   * break, so the level is currently being tested rather than broken.
-   */
-  testing: boolean
+/** A crossed zone whose break has not been confirmed beyond the close buffer. */
+export interface PendingBreakout extends SupportResistanceLevel {
+  kind: 'support' | 'resistance'
 }
 
 /** Everything derived from closed candles only. Changes once per candle close. */
@@ -32,8 +29,12 @@ export interface SupportResistanceStructure {
 
 export interface SupportResistanceAnalysis {
   trend: SupportResistanceTrend
-  support: NearestLevel | null
-  resistance: NearestLevel | null
+  /** Nearest surviving support at or below the live price. */
+  support: SupportResistanceLevel | null
+  /** Nearest surviving resistance at or above the live price. */
+  resistance: SupportResistanceLevel | null
+  /** Nearest crossed surviving zone per side, separate from nearby levels. */
+  pendingBreakouts: readonly PendingBreakout[]
   closedBarCount: number
 }
 
@@ -190,11 +191,11 @@ export function buildSupportResistanceStructure(
 }
 
 /**
- * Picks the level the live price is interacting with on each side. A surviving
- * support above the live price has not been broken by a close, so price is
- * testing it; the lowest such zone is the one price most recently crossed.
- * Otherwise the highest support at or below price is nearest. Resistance is
- * the mirror image. The live price never creates or retires zones.
+ * Picks support at or below the live price and resistance at or above it.
+ * Crossed surviving zones are reported separately as pending breakouts: the
+ * lowest support above price and the highest resistance below price. A recross
+ * clears the pending status; only a closed close beyond the buffer retires a
+ * zone. The live price never creates, retires, or changes the role of zones.
  */
 export function selectNearestLevels(
   structure: SupportResistanceStructure,
@@ -202,29 +203,41 @@ export function selectNearestLevels(
 ): SupportResistanceAnalysis {
   const { trend, closedBarCount } = structure
   if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
-    return { trend, support: null, resistance: null, closedBarCount }
+    return { trend, support: null, resistance: null, pendingBreakouts: [], closedBarCount }
   }
 
-  let support: NearestLevel | null = null
-  const testedSupport = structure.supports.find((level) => level.price > currentPrice)
-  if (testedSupport) {
-    support = { ...testedSupport, testing: true }
-  } else if (structure.supports.length > 0) {
-    support = { ...structure.supports[structure.supports.length - 1], testing: false }
+  const pendingBreakouts: PendingBreakout[] = []
+  let support: SupportResistanceLevel | null = null
+  for (const level of structure.supports) {
+    if (level.price <= currentPrice) {
+      support = level
+    } else {
+      pendingBreakouts.push({ ...level, kind: 'support' })
+      break
+    }
   }
 
-  let resistance: NearestLevel | null = null
-  let testedResistance: SupportResistanceLevel | null = null
+  let resistance: SupportResistanceLevel | null = null
+  let crossedResistance: SupportResistanceLevel | null = null
   for (const level of structure.resistances) {
-    if (level.price < currentPrice) testedResistance = level
+    if (level.price < currentPrice) {
+      crossedResistance = level
+    } else {
+      resistance = level
+      break
+    }
   }
-  if (testedResistance) {
-    resistance = { ...testedResistance, testing: true }
-  } else if (structure.resistances.length > 0) {
-    resistance = { ...structure.resistances[0], testing: false }
+  if (crossedResistance) {
+    pendingBreakouts.push({ ...crossedResistance, kind: 'resistance' })
   }
 
-  return { trend, support, resistance, closedBarCount }
+  return {
+    trend,
+    support: support ? { ...support } : null,
+    resistance: resistance ? { ...resistance } : null,
+    pendingBreakouts,
+    closedBarCount,
+  }
 }
 
 /** Convenience for callers that do not cache the closed-bar structure. */

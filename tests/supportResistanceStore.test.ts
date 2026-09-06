@@ -62,8 +62,9 @@ describe('supportResistanceStore', () => {
 
     expect(getSupportResistance('BTCUSDT')).toEqual({
       trend: 'unknown',
-      support: { price: 90, touches: 1, testing: false },
-      resistance: { price: 120, touches: 1, testing: false },
+      support: { price: 90, touches: 1 },
+      resistance: { price: 120, touches: 1 },
+      pendingBreakouts: [],
       closedBarCount: 16,
       price: 100,
       hasData: true,
@@ -82,21 +83,77 @@ describe('supportResistanceStore', () => {
 
     updateSupportResistance('BTCUSDT', snapshot(withPreview(bars, 89)))
     expect(getSupportResistance('BTCUSDT')).toMatchObject({
-      price: 89, closedBarCount: 16, support: { price: 90, touches: 1, testing: true },
+      price: 89, closedBarCount: 16, support: null,
+      resistance: { price: 120, touches: 1 },
+      pendingBreakouts: [{ kind: 'support', price: 90, touches: 1 }],
     })
 
     updateSupportResistance('BTCUSDT', snapshot(withPreview(bars, 121)))
     expect(getSupportResistance('BTCUSDT')).toMatchObject({
       price: 121, closedBarCount: 16,
-      support: { price: 90, testing: false }, resistance: { price: 120, testing: true },
+      support: { price: 90, touches: 1 }, resistance: null,
+      pendingBreakouts: [{ kind: 'resistance', price: 120, touches: 1 }],
+    })
+
+    updateSupportResistance('BTCUSDT', snapshot(withPreview(bars, 100)))
+    expect(getSupportResistance('BTCUSDT')).toMatchObject({
+      price: 100, closedBarCount: 16,
+      support: { price: 90, touches: 1 }, resistance: { price: 120, touches: 1 }, pendingBreakouts: [],
     })
   })
 
-  test('a closed break retires the level once the candle is final', () => {
+  test('publishes the next available levels while live crossed zones remain pending', () => {
+    const bars = makeBars(Array.from({ length: 30 }, () => 100))
+    bars[3].low = 80
+    bars[10].low = 90
+    bars[17].high = 120
+    bars[24].high = 110
+    updateSupportResistance('BTCUSDT', snapshot(bars))
+
+    updateSupportResistance('BTCUSDT', snapshot(withPreview(bars, 89)))
+    expect(getSupportResistance('BTCUSDT')).toMatchObject({
+      price: 89, closedBarCount: 30,
+      support: { price: 80, touches: 1 }, resistance: { price: 110, touches: 1 },
+      pendingBreakouts: [{ kind: 'support', price: 90, touches: 1 }],
+    })
+
+    updateSupportResistance('BTCUSDT', snapshot(withPreview(bars, 111)))
+    expect(getSupportResistance('BTCUSDT')).toMatchObject({
+      price: 111, closedBarCount: 30,
+      support: { price: 90, touches: 1 }, resistance: { price: 120, touches: 1 },
+      pendingBreakouts: [{ kind: 'resistance', price: 110, touches: 1 }],
+    })
+  })
+
+  test.each([
+    { close: 85, kind: 'support', price: 90, support: null, resistance: { price: 120, touches: 1 } },
+    { close: 125, kind: 'resistance', price: 120, support: { price: 90, touches: 1 }, resistance: null },
+  ])('a closed $kind break clears its pending status and retires the zone', ({ close, kind, price, support, resistance }) => {
     const bars = seededBars()
-    const closedBreak = withPreview(bars, 85).map((bar) => ({ ...bar, isClosed: true }))
+    const preview = withPreview(bars, close)
+    updateSupportResistance('BTCUSDT', snapshot(preview))
+    expect(getSupportResistance('BTCUSDT')).toMatchObject({
+      support, resistance, pendingBreakouts: [{ kind, price, touches: 1 }], closedBarCount: 16,
+    })
+
+    const closedBreak = preview.map((bar) => ({ ...bar, isClosed: true }))
     updateSupportResistance('BTCUSDT', snapshot(closedBreak))
-    expect(getSupportResistance('BTCUSDT')).toMatchObject({ support: null, closedBarCount: 17 })
+    expect(getSupportResistance('BTCUSDT')).toMatchObject({
+      support, resistance, pendingBreakouts: [], closedBarCount: 17,
+    })
+  })
+
+  test('a final close within the buffer keeps the zone pending until price recrosses it', () => {
+    const bars = withPreview(seededBars(), 89.95).map((bar) => ({ ...bar, isClosed: true }))
+    updateSupportResistance('BTCUSDT', snapshot(bars))
+    expect(getSupportResistance('BTCUSDT')).toMatchObject({
+      support: null, pendingBreakouts: [{ kind: 'support', price: 90, touches: 1 }], closedBarCount: 17,
+    })
+
+    updateSupportResistance('BTCUSDT', snapshot(withPreview(bars, 90)))
+    expect(getSupportResistance('BTCUSDT')).toMatchObject({
+      support: { price: 90, touches: 1 }, pendingBreakouts: [], closedBarCount: 17,
+    })
   })
 
   test('publishes the empty snapshot for symbols without closed bars', () => {
