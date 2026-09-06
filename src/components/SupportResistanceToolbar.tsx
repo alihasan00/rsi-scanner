@@ -1,12 +1,19 @@
 import type React from 'react'
-import { Button, Checkbox, Input, Segmented, Select, Tooltip } from 'antd'
+import { Button, Input, Segmented, Select, Tooltip } from 'antd'
 import { AppstoreOutlined, BarsOutlined, InfoCircleOutlined, SearchOutlined } from '@ant-design/icons'
 import { useShallow } from 'zustand/react/shallow'
 import { hasActiveFilters } from '../lib/supportResistanceFilters'
 import { useScannerStore } from '../store/scannerStore'
-import type { SupportResistanceSort, SupportResistanceView, Timeframe } from '../types'
+import type { SupportResistanceBreakFilter, SupportResistanceSort, SupportResistanceView, Timeframe } from '../types'
 
-const METHOD_DESCRIPTION = 'Levels come from price swing highs and lows within the latest 300 closed candles. Each swing needs 3 closed candles on both sides, so confirmation takes 3 candles. Swings within 0.1% of a surviving level merge into one zone, and touches count the merged swings. A close more than 0.1% beyond a zone retires it; wicks, equal closes, and closes inside that buffer do not. When live price is beyond a zone before the candle closes, the zone shows as Testing. Trend follows the latest two highs and two lows: both rising means uptrend, both falling means downtrend, and mixed or equal swings mean sideways.'
+const METHOD_DESCRIPTION = 'Levels come from price swing highs and lows within the latest 300 closed candles. Each swing needs 3 closed candles on both sides, so confirmation takes 3 candles. Swings within 0.1% of a surviving level merge into one zone, and touches count the merged swings. The main support is at or below live price; resistance is at or above it. Price above resistance appears as a breakout awaiting confirmation; price below support appears as a breakdown awaiting confirmation. Only a close more than 0.1% beyond a zone retires it. Returning to the zone or its original side clears the pending break. A broken zone does not automatically switch roles. Trend follows the latest two highs and two lows: both rising means uptrend, both falling means downtrend, and mixed or equal swings mean sideways.'
+
+const BREAK_OPTIONS: { value: SupportResistanceBreakFilter; label: string }[] = [
+  { value: 'all', label: 'All levels' },
+  { value: 'breakouts', label: 'Pending breakouts only' },
+  { value: 'breakdowns', label: 'Pending breakdowns only' },
+  { value: 'either', label: 'Both pending directions' },
+]
 
 const SIDE_OPTIONS = [
   { value: 'any', label: 'Either level' },
@@ -137,13 +144,14 @@ export function SupportResistanceToolbar({
           options={TOUCH_OPTIONS}
           popupMatchSelectWidth={false}
         />
-        <Tooltip title="Only pairs whose live price is beyond a level that no candle has closed past yet.">
-          <Checkbox
-            checked={filters.testingOnly}
-            onChange={(event) => updateFilters({ testingOnly: event.target.checked })}
-          >
-            Testing only
-          </Checkbox>
+        <Tooltip title="Breakouts are moves above resistance; breakdowns are moves below support. Both await a candle close more than 0.1% beyond the crossed level. Side, distance, and touch filters must match the same pending break. Sorting still uses the main support and resistance levels." trigger={['hover', 'focus']}>
+          <Select<SupportResistanceBreakFilter>
+            aria-label="Break direction"
+            value={filters.breakFilter}
+            onChange={(breakFilter) => updateFilters({ breakFilter, side: 'any' })}
+            options={BREAK_OPTIONS}
+            popupMatchSelectWidth={false}
+          />
         </Tooltip>
         <Select<SupportResistanceSort>
           aria-label="Sort order"

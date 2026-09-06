@@ -2,8 +2,9 @@ import { memo } from 'react'
 import { useNearViewport } from '../hooks/useNearViewport'
 import { useSupportResistanceData } from '../hooks/useSupportResistanceData'
 import { describeLevelDistance, formatQuotePrice } from '../lib/priceFormatting'
-import type { NearestLevel } from '../lib/supportResistance'
+import type { SupportResistanceLevel } from '../lib/supportResistance'
 import type { Timeframe } from '../types'
+import { SupportResistanceBreakouts } from './SupportResistanceBreakouts'
 import './SupportResistanceCard.css'
 
 interface SupportResistanceCardProps {
@@ -22,17 +23,15 @@ const TREND_ICONS = { uptrend: '↗', downtrend: '↘', sideways: '↔', unknown
 
 interface LevelRowProps {
   kind: 'support' | 'resistance'
-  level: NearestLevel | null
+  level: SupportResistanceLevel | null
   currentPrice: number
   loading: boolean
 }
 
 function LevelRow({ kind, level, currentPrice, loading }: LevelRowProps) {
   const label = kind === 'support' ? 'Support' : 'Resistance'
-  const testing = !loading && level?.testing === true
-
   return (
-    <div className={`sr-card__level sr-card__level--${kind}${testing ? ' sr-card__level--testing' : ''}`}>
+    <div className={`sr-card__level sr-card__level--${kind}`}>
       <div className="sr-card__level-heading">
         <span className="sr-card__level-label"><span aria-hidden="true" />{label}</span>
         {level && !loading && (
@@ -45,19 +44,7 @@ function LevelRow({ kind, level, currentPrice, loading }: LevelRowProps) {
         )}
       </div>
       <div className="sr-card__distance">
-        {loading ? 'Awaiting candles' : level ? (
-          <>
-            {describeLevelDistance(level.price, currentPrice)}
-            {testing && (
-              <span
-                className="sr-card__testing"
-                title="Price is beyond this level, but no candle has closed past it yet."
-              >
-                Testing
-              </span>
-            )}
-          </>
-        ) : 'No confirmed level'}
+        {loading ? 'Awaiting candles' : level ? describeLevelDistance(level.price, currentPrice) : 'No confirmed level'}
       </div>
     </div>
   )
@@ -65,7 +52,7 @@ function LevelRow({ kind, level, currentPrice, loading }: LevelRowProps) {
 
 function SupportResistanceCardImpl({ symbol, timeframe }: SupportResistanceCardProps) {
   const { ref, isNearViewport } = useNearViewport<HTMLElement>()
-  const { price, hasData, trend: liveTrend, support, resistance } = useSupportResistanceData(symbol, isNearViewport)
+  const { price, hasData, trend: liveTrend, support, resistance, pendingBreaks } = useSupportResistanceData(symbol, isNearViewport)
   const hasPrice = Number.isFinite(price) && price > 0
   const loading = !hasData || !hasPrice
   const formattedPrice = formatQuotePrice(price)
@@ -103,6 +90,7 @@ function SupportResistanceCardImpl({ symbol, timeframe }: SupportResistanceCardP
         <LevelRow kind="resistance" level={resistance} currentPrice={price} loading={loading} />
         <LevelRow kind="support" level={support} currentPrice={price} loading={loading} />
       </div>
+      {!loading && <SupportResistanceBreakouts pendingBreaks={pendingBreaks} currentPrice={price} />}
     </article>
   )
 }

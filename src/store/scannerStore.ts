@@ -25,7 +25,24 @@ export const DEFAULT_SUPPORT_RESISTANCE_FILTERS: SupportResistanceFilters = {
   maxDistancePercent: null,
   trend: 'any',
   minTouches: 1,
-  testingOnly: false,
+  breakFilter: 'all',
+}
+
+/** Preserve the selected side when migrating the old combined pending-break filter. */
+export function restoreSupportResistanceFilters(
+  saved?: Partial<SupportResistanceFilters> & { testingOnly?: boolean; pendingBreakoutsOnly?: boolean },
+): SupportResistanceFilters {
+  const { testingOnly, pendingBreakoutsOnly, breakFilter, ...filters } = saved ?? {}
+  const legacyBreakFilter = (pendingBreakoutsOnly ?? testingOnly)
+    ? filters.side === 'support' ? 'breakdowns'
+      : filters.side === 'resistance' ? 'breakouts' : 'either'
+    : 'all'
+  return {
+    ...DEFAULT_SUPPORT_RESISTANCE_FILTERS,
+    ...filters,
+    breakFilter: breakFilter === 'all' || breakFilter === 'breakouts' || breakFilter === 'breakdowns' || breakFilter === 'either'
+      ? breakFilter : legacyBreakFilter,
+  }
 }
 
 interface ScannerState {
@@ -110,7 +127,7 @@ export const useScannerStore = create<ScannerState>()(
           settings: { ...DEFAULT_SETTINGS, ...saved?.settings },
           supportResistanceView: saved?.supportResistanceView === 'list' ? 'list' : 'cards',
           supportResistanceSort: SORT_KEYS.find((key) => key === saved?.supportResistanceSort) ?? 'symbol',
-          supportResistanceFilters: { ...DEFAULT_SUPPORT_RESISTANCE_FILTERS, ...saved?.supportResistanceFilters },
+          supportResistanceFilters: restoreSupportResistanceFilters(saved?.supportResistanceFilters),
         }
       },
     },

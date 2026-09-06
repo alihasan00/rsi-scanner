@@ -169,26 +169,3 @@
   font-weight: 400;
   letter-spacing: 0;
 }
-
-.sr-card__distance {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 6px;
-}
-
-.sr-card__testing {
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.sr-card__level--resistance .sr-card__testing {
-  background: color-mix(in srgb, var(--danger) 18%, transparent);
-  color: var(--danger);
-}

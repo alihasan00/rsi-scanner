@@ -16,6 +16,7 @@ export const EMPTY_SUPPORT_RESISTANCE: SupportResistanceSnapshot = Object.freeze
   trend: 'unknown',
   support: null,
   resistance: null,
+  pendingBreaks: Object.freeze([]),
   closedBarCount: 0,
   price: 0,
   hasData: false,

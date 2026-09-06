@@ -1,6 +1,6 @@
 import type { SupportResistanceSnapshot } from '../store/supportResistanceStore'
 import type { SupportResistanceFilters, SupportResistanceSort } from '../types'
-import type { NearestLevel } from './supportResistance'
+import type { SupportResistanceLevel } from './supportResistance'
 
 export interface SupportResistanceRow {
   symbol: string
@@ -8,12 +8,12 @@ export interface SupportResistanceRow {
 }
 
 /** Unsigned percent distance between a level and the live price, or null. */
-export function levelDistancePercent(level: NearestLevel | null, price: number): number | null {
+export function levelDistancePercent(level: SupportResistanceLevel | null, price: number): number | null {
   if (!level || !Number.isFinite(price) || price <= 0) return null
   return Math.abs((level.price - price) / price) * 100
 }
 
-/** Distance to whichever level is closer, or null when neither exists. */
+/** Distance to the nearer support/resistance; pending breaks are separate. */
 export function nearestDistancePercent(snapshot: SupportResistanceSnapshot): number | null {
   const support = levelDistancePercent(snapshot.support, snapshot.price)
   const resistance = levelDistancePercent(snapshot.resistance, snapshot.price)
@@ -27,20 +27,32 @@ export function hasActiveFilters(filters: SupportResistanceFilters): boolean {
     || filters.maxDistancePercent !== null
     || filters.trend !== 'any'
     || filters.minTouches > 1
-    || filters.testingOnly
+    || filters.breakFilter !== 'all'
 }
 
-function levelsForSide(snapshot: SupportResistanceSnapshot, side: SupportResistanceFilters['side']): NearestLevel[] {
+function levelsForFilters(
+  snapshot: SupportResistanceSnapshot,
+  { side, breakFilter }: SupportResistanceFilters,
+): readonly SupportResistanceLevel[] {
+  if (breakFilter !== 'all') {
+    return snapshot.pendingBreaks.filter((level) => (
+      (side === 'any' || level.kind === side)
+      && (breakFilter === 'either'
+        || (breakFilter === 'breakouts' && level.kind === 'resistance')
+        || (breakFilter === 'breakdowns' && level.kind === 'support'))
+    ))
+  }
   const levels = side === 'support' ? [snapshot.support]
     : side === 'resistance' ? [snapshot.resistance]
       : [snapshot.support, snapshot.resistance]
-  return levels.filter((level): level is NearestLevel => level !== null)
+  return levels.filter((level): level is SupportResistanceLevel => level !== null)
 }
 
 /**
  * A pair passes when at least one level on the chosen side satisfies every
- * level condition together. Pairs still loading pass only when no filter is
- * active, so an empty result never hides a pair that could not be evaluated.
+ * level condition together. Pending-break modes evaluate the matching crossed zones
+ * instead of the nearest support/resistance. Loading pairs pass only when no
+ * filter is active.
  */
 export function matchesFilters(snapshot: SupportResistanceSnapshot, filters: SupportResistanceFilters): boolean {
   if (!hasActiveFilters(filters)) return true
@@ -50,12 +62,11 @@ export function matchesFilters(snapshot: SupportResistanceSnapshot, filters: Sup
   const needsLevel = filters.side !== 'any'
     || filters.maxDistancePercent !== null
     || filters.minTouches > 1
-    || filters.testingOnly
+    || filters.breakFilter !== 'all'
   if (!needsLevel) return true
 
-  return levelsForSide(snapshot, filters.side).some((level) => {
+  return levelsForFilters(snapshot, filters).some((level) => {
     if (level.touches < filters.minTouches) return false
-    if (filters.testingOnly && !level.testing) return false
     if (filters.maxDistancePercent !== null) {
       const distance = levelDistancePercent(level, snapshot.price)
       if (distance === null || distance > filters.maxDistancePercent) return false
