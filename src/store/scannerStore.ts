@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { ChartSettings, Timeframe } from '../types'
+import type {
+  ChartSettings, ScannerTab, SupportResistanceFilters, SupportResistanceSort, SupportResistanceView, Timeframe,
+} from '../types'
 
 export const DEFAULT_SETTINGS: ChartSettings = {
   rsiColor: '#29ffb8',
@@ -18,13 +20,30 @@ export const DEFAULT_SETTINGS: ChartSettings = {
 
 export const DEFAULT_STARRED_TIMEFRAMES: Timeframe[] = ['15m', '1h', '4h', '1d']
 
+export const DEFAULT_SUPPORT_RESISTANCE_FILTERS: SupportResistanceFilters = {
+  side: 'any',
+  maxDistancePercent: null,
+  trend: 'any',
+  minTouches: 1,
+  testingOnly: false,
+}
+
 interface ScannerState {
+  scannerTab: ScannerTab
   timeframe: Timeframe
   cellSize: number
   starredTimeframes: Timeframe[]
   selectedSymbol: string | null
   settingsOpen: boolean
   settings: ChartSettings
+  supportResistanceView: SupportResistanceView
+  supportResistanceSort: SupportResistanceSort
+  supportResistanceFilters: SupportResistanceFilters
+  setScannerTab: (scannerTab: ScannerTab) => void
+  setSupportResistanceView: (view: SupportResistanceView) => void
+  setSupportResistanceSort: (sort: SupportResistanceSort) => void
+  updateSupportResistanceFilters: (filters: Partial<SupportResistanceFilters>) => void
+  resetSupportResistanceFilters: () => void
   setTimeframe: (timeframe: Timeframe) => void
   setCellSize: (cellSize: number) => void
   toggleStarredTimeframe: (timeframe: Timeframe) => void
@@ -35,15 +54,28 @@ interface ScannerState {
   updateSettings: (patch: Partial<ChartSettings>) => void
 }
 
+const SORT_KEYS: readonly SupportResistanceSort[] = ['symbol', 'nearest', 'support', 'resistance']
+
 export const useScannerStore = create<ScannerState>()(
   persist(
     (set) => ({
+      scannerTab: 'rsi',
       timeframe: '15m',
       cellSize: 120,
       starredTimeframes: DEFAULT_STARRED_TIMEFRAMES,
       selectedSymbol: null,
       settingsOpen: false,
       settings: DEFAULT_SETTINGS,
+      supportResistanceView: 'cards',
+      supportResistanceSort: 'symbol',
+      supportResistanceFilters: DEFAULT_SUPPORT_RESISTANCE_FILTERS,
+      setScannerTab: (scannerTab) => set({ scannerTab, selectedSymbol: null, settingsOpen: false }),
+      setSupportResistanceView: (supportResistanceView) => set({ supportResistanceView }),
+      setSupportResistanceSort: (supportResistanceSort) => set({ supportResistanceSort }),
+      updateSupportResistanceFilters: (filters) => set((state) => ({
+        supportResistanceFilters: { ...state.supportResistanceFilters, ...filters },
+      })),
+      resetSupportResistanceFilters: () => set({ supportResistanceFilters: DEFAULT_SUPPORT_RESISTANCE_FILTERS }),
       setTimeframe: (timeframe) => set({ timeframe }),
       setCellSize: (cellSize) => set({ cellSize }),
       toggleStarredTimeframe: (timeframe) => set((state) => ({
@@ -61,16 +93,24 @@ export const useScannerStore = create<ScannerState>()(
     }),
     {
       name: 'rsi-scanner-preferences',
-      partialize: ({ timeframe, cellSize, starredTimeframes, settings }) => (
-        { timeframe, cellSize, starredTimeframes, settings }
-      ),
+      partialize: ({
+        scannerTab, timeframe, cellSize, starredTimeframes, settings,
+        supportResistanceView, supportResistanceSort, supportResistanceFilters,
+      }) => ({
+        scannerTab, timeframe, cellSize, starredTimeframes, settings,
+        supportResistanceView, supportResistanceSort, supportResistanceFilters,
+      }),
       // Keep defaults for preferences added after a user's settings were saved.
       merge: (persisted, current) => {
         const saved = persisted as Partial<ScannerState> | undefined
         return {
           ...current,
           ...saved,
+          scannerTab: saved?.scannerTab === 'support-resistance' ? 'support-resistance' : 'rsi',
           settings: { ...DEFAULT_SETTINGS, ...saved?.settings },
+          supportResistanceView: saved?.supportResistanceView === 'list' ? 'list' : 'cards',
+          supportResistanceSort: SORT_KEYS.find((key) => key === saved?.supportResistanceSort) ?? 'symbol',
+          supportResistanceFilters: { ...DEFAULT_SUPPORT_RESISTANCE_FILTERS, ...saved?.supportResistanceFilters },
         }
       },
     },
