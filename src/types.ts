@@ -5,6 +5,8 @@ export type Timeframe =
 
 export type DrawingTool = 'brush' | 'trendline' | 'eraser' | null
 
+export type ScannerTab = 'rsi' | 'support-resistance'
+
 export interface Point {
   x: number
   y: number
@@ -63,4 +65,20 @@ export interface SymbolSnapshot {
   volume: number
   series: number[]
   bars: RsiBar[]
+}
+
+export type SupportResistanceView = 'cards' | 'list'
+
+export type SupportResistanceSide = 'any' | 'support' | 'resistance'
+
+export type SupportResistanceSort = 'symbol' | 'nearest' | 'support' | 'resistance'
+
+export interface SupportResistanceFilters {
+  /** Which level the distance, touches, and testing filters apply to. */
+  side: SupportResistanceSide
+  /** Keep pairs whose chosen level is within this percent of price; null means any distance. */
+  maxDistancePercent: number | null
+  trend: 'any' | 'uptrend' | 'downtrend' | 'sideways'
+  minTouches: number
+  testingOnly: boolean
 }

@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import {
   getSymbolSnapshot,
+  getSymbolStoreVersion,
   resetSymbolData,
   setSymbolSnapshot,
+  subscribeAllSymbols,
   subscribeSymbol,
 } from '../src/store/dataStore'
 
@@ -50,5 +52,26 @@ describe('dataStore', () => {
     setSymbolSnapshot('BTCUSDT', { price: 102, volume: 3, series: [60], bars: [] })
 
     expect(notifications).toBe(0)
+  })
+})
+
+describe('store-wide subscriptions', () => {
+  test('bumps the version and notifies store-wide listeners on any set or reset', () => {
+    const before = getSymbolStoreVersion()
+    let notifications = 0
+    const unsubscribe = subscribeAllSymbols(() => { notifications += 1 })
+
+    setSymbolSnapshot('BTCUSDT', { price: 1, volume: 0, series: [], bars: [] })
+    setSymbolSnapshot('ETHUSDT', { price: 2, volume: 0, series: [], bars: [] })
+    expect(notifications).toBe(2)
+    expect(getSymbolStoreVersion()).toBe(before + 2)
+
+    resetSymbolData()
+    expect(notifications).toBe(3)
+    expect(getSymbolStoreVersion()).toBe(before + 3)
+
+    unsubscribe()
+    setSymbolSnapshot('BTCUSDT', { price: 3, volume: 0, series: [], bars: [] })
+    expect(notifications).toBe(3)
   })
 })

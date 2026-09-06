@@ -1,0 +1,123 @@
+.sr-table__wrap {
+  overflow-x: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: var(--panel-bg);
+}
+
+.sr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.sr-table th,
+.sr-table td {
+  padding: 9px 12px;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.sr-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel-bg);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sr-table tbody tr:last-child th,
+.sr-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.sr-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.sr-table__sort {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.sr-table__sort:hover,
+.sr-table__sort--active {
+  color: var(--text-primary);
+}
+
+.sr-table__sort:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.sr-table__symbol {
+  color: var(--text-primary);
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.sr-table__symbol > span {
+  margin-left: 3px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.sr-table__price {
+  color: var(--text-primary);
+  font-family: 'SFMono-Regular', ui-monospace, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-table__price--support { color: var(--accent); }
+.sr-table__price--resistance { color: var(--danger); }
+
+.sr-table__trend--uptrend { color: var(--accent); }
+.sr-table__trend--downtrend { color: var(--danger); }
+.sr-table__trend--sideways { color: #c2b0f5; }
+.sr-table__trend--unknown { color: var(--text-secondary); }
+
+.sr-table__detail {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-table__detail > span + span {
+  margin-left: 8px;
+}
+
+.sr-table__muted {
+  color: var(--text-secondary);
+}
+
+.sr-table__testing {
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sr-table__testing--support {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.sr-table__testing--resistance {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+}

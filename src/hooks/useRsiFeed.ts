@@ -6,10 +6,18 @@ import { recoverRsiHistory, snapshotFromRsiHistory, updateRsiHistory } from '../
 import type { RsiHistory } from '../lib/rsiHistory'
 import { SYMBOLS } from '../lib/symbols'
 import { resetSymbolData, setSymbolSnapshot } from '../store/dataStore'
+import { resetSupportResistance, updateSupportResistance } from '../store/supportResistanceStore'
 import { useScannerStore } from '../store/scannerStore'
 
 const RESEED_RETRY_MS = 5000
 const MAX_BUFFERED_CANDLES = 200
+
+/** Every derived per-symbol store reads from the same published snapshot. */
+function publishHistory(symbol: string, history: RsiHistory): void {
+  const snapshot = snapshotFromRsiHistory(history)
+  setSymbolSnapshot(symbol, snapshot)
+  updateSupportResistance(symbol, snapshot)
+}
 
 /**
  * Connect before seeding and replay buffered candles by identity, so a candle
@@ -75,7 +83,7 @@ export function useRsiFeed(): void {
           history = update.history
         }
         histories.set(symbol, history)
-        setSymbolSnapshot(symbol, snapshotFromRsiHistory(history))
+        publishHistory(symbol, history)
       } catch (error) {
         if (!controller.signal.aborted) {
           console.error(`RSI seed failed for ${symbol}`, error)
@@ -102,11 +110,12 @@ export function useRsiFeed(): void {
         void seedSymbol(tick.symbol)
       } else if (update.status === 'updated') {
         histories.set(tick.symbol, update.history)
-        setSymbolSnapshot(tick.symbol, snapshotFromRsiHistory(update.history))
+        publishHistory(tick.symbol, update.history)
       }
     })
 
     resetSymbolData()
+    resetSupportResistance()
     manager.connect(SYMBOLS, timeframe)
     for (const symbol of SYMBOLS) void seedSymbol(symbol)
 

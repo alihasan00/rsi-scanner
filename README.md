@@ -1,6 +1,9 @@
-# RSI Scanner
+# Market Scanners
 
-A Vite + React + TypeScript port of `RSI Scanner.html`. It seeds Wilder RSI data from Binance REST, keeps each symbol current with combined kline WebSocket streams, and renders compact canvas charts plus an annotatable detail view.
+A Vite + React + TypeScript app with separate **RSI** and **Support & Resistance**
+tabs. It seeds Binance spot candles from REST and keeps each symbol current with
+combined kline WebSocket streams. The RSI view, ported from `RSI Scanner.html`,
+renders compact canvas charts plus an annotatable detail view.
 
 ## Development
 
@@ -16,6 +19,59 @@ bun test
 bun run lint
 bun run build
 ```
+
+## Support & Resistance
+
+Select **Support & Resistance** to see every symbol's current price in USDT,
+trend, nearest support, and nearest resistance, each with its percentage
+distance from the live price. Toggle between **Cards** and **List**; the list
+view is a compact table whose Pair, Support, and Resistance headers also set the
+sort order. Search filters by symbol, and the timeframe picker applies to both
+scanners. Switching tabs reuses the existing feed; the tab, view, sort, and
+filters are saved across reloads.
+
+Filters narrow the market to pairs that are interacting with a level:
+
+- **Side:** apply the level conditions to support, resistance, or either.
+- **Within:** keep pairs whose chosen level is within 0.25% to 5% of price.
+- **Trend:** uptrend, downtrend, or sideways.
+- **Touches:** require a zone built from two or three or more confirmed swings.
+- **Testing only:** price is beyond a level that no candle has closed past yet.
+- **Sort:** list order, nearest level, closest support, or closest resistance.
+
+All level conditions must hold on the same level, so "within 0.5%" with
+"2+ touches" means one zone that is both close and well tested. Pairs still
+loading are hidden while any filter is active, because they cannot be
+evaluated. Market-wide updates for filtering and sorting are throttled to a few
+per second; individual cards still update on their own ticks.
+
+The detector uses the latest 300 closed candles from the most recent continuous
+history segment. A price swing low or high must be strictly lower or higher than
+the three candles on each side, so a swing becomes available only after its
+third right-hand candle closes. RSI values do not enter this calculation.
+
+- **Zones:** confirmed swings within 0.1% of a surviving level merge into one
+  zone whose price is the mean of its swings. Touches count the merged swings.
+- **Retirement:** a closed candle's close more than 0.1% beyond a zone retires
+  it. Wicks, equal closes, and closes inside that buffer keep the zone.
+- **Support:** the highest surviving zone from swing lows at or below the live
+  price. If the live price has crossed below a surviving support without a
+  confirming close, that zone is shown instead and marked **Testing**.
+- **Resistance:** the mirror image using swing highs, marked Testing when the
+  live price has crossed above a surviving resistance.
+- **Trend:** the latest two confirmed highs and latest two confirmed lows must
+  both rise for an uptrend or both fall for a downtrend. Mixed or equal swings
+  show sideways; insufficient swings show unknown.
+
+Only closed candles form, confirm, or retire zones. Broken zones do not
+automatically switch roles. Missing levels show a dash instead of extrapolating
+beyond the available history. Invalid bars and gaps prevent comparisons with
+older segments.
+
+Levels are computed for every symbol in `src/store/supportResistanceStore.ts`
+as candles are published, not inside the visible cards. The closed-bar structure
+is rebuilt only when a candle closes; live ticks just reselect the nearest zone
+against the new price. This keeps a market-wide proximity ranking possible.
 
 ## RSI divergences
 
@@ -162,6 +218,17 @@ plus candle/RSI alignment and seed-to-stream handling.
 - `src/store/dataStore.ts` is intentionally a per-symbol external store. Market ticks notify only the matching card instead of running every grid selector on every update.
 - `src/hooks/useRsiFeed.ts` owns REST/WebSocket lifecycle state, including cancellation when the timeframe changes.
 - `src/lib/rsi.ts` contains the framework-independent RSI implementation.
+- `src/lib/supportResistance.ts` detects confirmed price swings, merges them
+  into zones, retires broken zones, and calculates trend. Structure building is
+  separate from nearest-level selection so ticks stay cheap.
+- `src/store/supportResistanceStore.ts` derives per-symbol levels from published
+  market snapshots and caches the closed-bar structure between ticks.
+- `src/lib/supportResistanceFilters.ts` holds the pure filter and sort rules;
+  `useSupportResistanceRows` feeds them a throttled market-wide snapshot.
+- `src/lib/symbols.ts` lists Binance Spot USDT pairs. `bun run check:symbols`
+  reports pairs that are halted, delisted, or duplicated.
+- `SupportResistanceGrid` and `SupportResistanceCard` render the separate price
+  scanner with symbol search and per-symbol store subscriptions.
 - `src/lib/rsiHistory.ts` aligns OHLC and RSI, separates live previews from closed
   candles, and recovers stream gaps without recalculating established history.
 - `src/lib/divergence.ts` contains the pure pivot-pair detector and shared validation.

@@ -1,15 +1,9 @@
-import { useCallback, useSyncExternalStore } from 'react'
 import { getSymbolSnapshot, subscribeSymbol } from '../store/dataStore'
 import type { SymbolSnapshot } from '../types'
+import { useSymbolStore } from './useSymbolStore'
 
-const NOOP_SUBSCRIBE = (): (() => void) => () => undefined
+const MARKET_STORE = { get: getSymbolSnapshot, subscribe: subscribeSymbol }
 
 export function useSymbolData(symbol: string, active = true): SymbolSnapshot {
-  const subscribe = useCallback(
-    (callback: () => void) => active ? subscribeSymbol(symbol, callback) : NOOP_SUBSCRIBE(),
-    [active, symbol],
-  )
-  const getSnapshot = useCallback(() => getSymbolSnapshot(symbol), [symbol])
-
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  return useSymbolStore(MARKET_STORE, symbol, active)
 }
