@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "bun test",
+    "backtest:divergence": "bun run scripts/backtest-divergence.ts",
     "preview": "vite preview"
   },
   "dependencies": {

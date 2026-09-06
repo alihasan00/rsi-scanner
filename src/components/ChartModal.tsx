@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, ColorPicker, Modal, Segmented, Slider, Space, Tooltip } from 'antd'
 import {
   ClearOutlined,
@@ -12,11 +12,16 @@ import {
 import type Konva from 'konva'
 import { useShallow } from 'zustand/react/shallow'
 import { useSymbolData } from '../hooks/useSymbolData'
+import { useDivergences } from '../hooks/useDivergences'
 import { useElementSize } from '../hooks/useElementSize'
 import { useDrawingTools } from '../hooks/useDrawingTools'
 import { drawDetailRsiChart } from '../lib/drawRsiChart'
+import { formatSignalTime } from '../lib/divergencePresentation'
+import { isLiveDivergence } from '../lib/divergenceLifecycle'
 import { useScannerStore } from '../store/scannerStore'
 import { DrawingCanvas } from './DrawingCanvas'
+import { DivergenceDetails } from './DivergenceDetails'
+import { DivergenceBacktest } from './DivergenceBacktest'
 import type { DrawingTool } from '../types'
 import './ChartModal.css'
 
@@ -27,18 +32,32 @@ const TOOL_OPTIONS = [
 ]
 
 export function ChartModal() {
-  const { symbol, closeChart, rsiColor, smaColor, midlineColor, lineWidth } = useScannerStore(
+  const { symbol, timeframe, closeChart, rsiColor, smaColor, midlineColor, lineWidth, showDivergences, showHiddenDivergences, requireBodyAgreement, requireSameRsiCycle, divergenceInvalidationAnchor } = useScannerStore(
     useShallow((state) => ({
       symbol: state.selectedSymbol,
+      timeframe: state.timeframe,
       closeChart: state.closeChart,
       rsiColor: state.settings.rsiColor,
       smaColor: state.settings.smaColor,
       midlineColor: state.settings.midlineColor,
       lineWidth: state.settings.lineWidth,
+      showDivergences: state.settings.showDivergences,
+      showHiddenDivergences: state.settings.showHiddenDivergences,
+      requireBodyAgreement: state.settings.requireBodyAgreement,
+      requireSameRsiCycle: state.settings.requireSameRsiCycle,
+      divergenceInvalidationAnchor: state.settings.divergenceInvalidationAnchor,
     })),
   )
   const open = symbol !== null
-  const { price, volume, series } = useSymbolData(symbol ?? '')
+  const { price, volume, series, bars } = useSymbolData(symbol ?? '')
+  const divergenceOptions = {
+    includeHidden: showHiddenDivergences, requireBodyAgreement, requireSameRsiCycle,
+    invalidationAnchor: divergenceInvalidationAnchor,
+  }
+  const divergences = useDivergences(bars, showDivergences, divergenceOptions)
+  const [overlayScope, setOverlayScope] = useState<'live' | 'history'>('live')
+  const liveDivergences = useMemo(() => divergences.filter(isLiveDivergence), [divergences])
+  const chartDivergences = overlayScope === 'live' ? liveDivergences : divergences
   const { ref: chartAreaRef, width, height } = useElementSize<HTMLDivElement>()
   const baseCanvasRef = useRef<HTMLCanvasElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -53,11 +72,16 @@ export function ChartModal() {
   useEffect(() => {
     const canvas = baseCanvasRef.current
     if (canvas && width > 0 && height > 0) {
-      drawDetailRsiChart(canvas, series, { rsiColor, smaColor, midlineColor, lineWidth })
+      drawDetailRsiChart(
+        canvas, series, { rsiColor, smaColor, midlineColor, lineWidth },
+        { bars, signals: chartDivergences, showPricePanel: showDivergences },
+      )
     }
-  }, [series, rsiColor, smaColor, midlineColor, lineWidth, width, height])
+  }, [series, bars, chartDivergences, showDivergences, rsiColor, smaColor, midlineColor, lineWidth, width, height])
 
   const currentRsi = series.length > 0 ? series[series.length - 1] : null
+  const firstVisibleBar = series.length > 0 ? bars[Math.max(0, bars.length - series.length)] : undefined
+  const lastVisibleBar = bars.at(-1)
 
   function handleExport(): void {
     const base = baseCanvasRef.current
@@ -75,7 +99,7 @@ export function ChartModal() {
     ctx.drawImage(overlay, 0, 0, merged.width, merged.height)
 
     const link = document.createElement('a')
-    link.download = `${symbol}_RSI_Chart.png`
+    link.download = `${symbol}_${timeframe}_RSI_Chart.png`
     link.href = merged.toDataURL('image/png')
     link.click()
   }
@@ -89,7 +113,7 @@ export function ChartModal() {
       destroyOnHidden
       title={
         <div className="chart-modal__title">
-          <span className="chart-modal__symbol">{symbol}</span>
+          <span className="chart-modal__symbol">{symbol} · {timeframe}</span>
           <Space size="middle" className="chart-modal__stats">
             <span>Price: <strong>{price.toFixed(4)}</strong></span>
             <span>Volume: <strong>{volume.toFixed(2)}</strong></span>
@@ -123,6 +147,35 @@ export function ChartModal() {
         </Space>
       </div>
 
+      {showDivergences && (
+        <div className="chart-modal__divergence-controls">
+          <Segmented
+            aria-label="Divergence chart overlays"
+            value={overlayScope}
+            onChange={(value: 'live' | 'history') => setOverlayScope(value)}
+            options={[
+              { label: `Live setups (${liveDivergences.length})`, value: 'live' },
+              { label: 'All retained setups', value: 'history' },
+            ]}
+            size="small"
+          />
+          <span>Lines require both pivots in view{overlayScope === 'history' ? ' · resolved setups are faded' : ''}</span>
+        </div>
+      )}
+      {firstVisibleBar && lastVisibleBar && (
+        <div className="chart-modal__time-range">
+          <span>Candle times (UTC)</span>
+          <span>
+            <time dateTime={new Date(firstVisibleBar.openTime).toISOString()}>
+              {formatSignalTime(firstVisibleBar.openTime)}
+            </time>
+            {' → '}
+            <time dateTime={new Date(lastVisibleBar.openTime).toISOString()}>
+              {formatSignalTime(lastVisibleBar.openTime)}
+            </time>
+          </span>
+        </div>
+      )}
       <div className="chart-modal__chart-area" ref={chartAreaRef}>
         <canvas ref={baseCanvasRef} className="chart-modal__base-canvas" />
         {width > 0 && height > 0 && (
@@ -139,6 +192,26 @@ export function ChartModal() {
           />
         )}
       </div>
+      {showDivergences && (
+        <>
+          <DivergenceDetails
+            signals={divergences}
+            bars={bars}
+            includeHidden={showHiddenDivergences}
+            requireBodyAgreement={requireBodyAgreement}
+            requireSameRsiCycle={requireSameRsiCycle}
+            invalidationAnchor={divergenceInvalidationAnchor}
+          />
+          {symbol && (
+            <DivergenceBacktest
+              key={`${symbol}:${timeframe}`}
+              symbol={symbol}
+              timeframe={timeframe}
+              options={divergenceOptions}
+            />
+          )}
+        </>
+      )}
     </Modal>
   )
 }

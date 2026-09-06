@@ -4,7 +4,7 @@ import type { SymbolSnapshot } from '../types'
 // own symbol via useSyncExternalStore, so a tick for BTCUSDT re-renders one
 // canvas instead of the whole ~100-cell grid.
 
-const EMPTY_SNAPSHOT: SymbolSnapshot = { price: 0, volume: 0, series: [] }
+const EMPTY_SNAPSHOT: SymbolSnapshot = { price: 0, volume: 0, series: [], bars: [] }
 
 const snapshots = new Map<string, SymbolSnapshot>()
 const listeners = new Map<string, Set<() => void>>()

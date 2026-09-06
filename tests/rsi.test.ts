@@ -16,6 +16,15 @@ describe('seedRsiState', () => {
     expect(seedRsiState(closesWithStep(1, RSI_LENGTH))).toBeNull()
   })
 
+  test('includes the first valid RSI from the initial fourteen changes', () => {
+    const closes = [44.34, 44.09, 44.15, 43.61, 44.33, 44.83, 45.10, 45.42, 45.84,
+      46.08, 45.89, 46.03, 45.61, 46.28, 46.28]
+    const state = seedRsiState(closes)
+
+    expect(state?.series).toHaveLength(1)
+    expect(state?.series[0]).toBeCloseTo(70.464135, 5)
+  })
+
   test('returns neutral RSI for a flat market', () => {
     const state = seedRsiState(closesWithStep(0))
 
