@@ -4,7 +4,7 @@ import {
   buildSupportResistanceStructure,
   DEFAULT_SUPPORT_RESISTANCE_OPTIONS,
   selectNearestLevels,
-  type PendingBreakout,
+  type PendingLevelBreak,
   type PriceBar,
   type SupportResistanceOptions,
 } from '../src/lib/supportResistance'
@@ -47,7 +47,7 @@ function nextBar(bars: readonly PriceBar[], changes: Partial<PriceBar> = {}): Pr
 }
 
 const level = (price: number, touches = 1) => ({ price, touches })
-const pending = (kind: PendingBreakout['kind'], price: number, touches = 1) => ({ kind, price, touches })
+const pending = (kind: PendingLevelBreak['kind'], price: number, touches = 1) => ({ kind, price, touches })
 
 describe('confirmed price swing structure', () => {
   test('defaults to strict 3/3 pivots, a 300-candle lookback, and 0.1% zone and break tolerances', () => {
@@ -68,7 +68,7 @@ describe('confirmed price swing structure', () => {
   test('requires two confirmed highs and two confirmed lows to classify a trend', () => {
     expect(analyzeSupportResistance(makeBars([10, 15, 11, 16]), 16, smallPivots).trend).toBe('unknown')
     expect(analyzeSupportResistance([], 100)).toEqual({
-      trend: 'unknown', support: null, resistance: null, pendingBreakouts: [], closedBarCount: 0,
+      trend: 'unknown', support: null, resistance: null, pendingBreaks: [], closedBarCount: 0,
     })
   })
 
@@ -86,7 +86,7 @@ describe('confirmed price swing structure', () => {
   test('does not confirm an equal-height or equal-low plateau', () => {
     const bars = makeBars([100, 100, 100, 100, 100])
     expect(analyzeSupportResistance(bars, 100, smallPivots)).toEqual({
-      trend: 'unknown', support: null, resistance: null, pendingBreakouts: [], closedBarCount: 5,
+      trend: 'unknown', support: null, resistance: null, pendingBreaks: [], closedBarCount: 5,
     })
   })
 
@@ -134,18 +134,18 @@ describe('zones and break buffers', () => {
     const bars = horizontalLevels()
     const shallow = [...bars, nextBar(bars, { open: 100, high: 101, low: 89, close: 89.95 })]
     expect(analyzeSupportResistance(shallow, 89.95, smallPivots)).toMatchObject({
-      support: level(80), pendingBreakouts: [pending('support', 90)],
+      support: level(80), pendingBreaks: [pending('support', 90)],
     })
     expect(analyzeSupportResistance(shallow, 89.95, exact)).toMatchObject({
-      support: level(80), pendingBreakouts: [],
+      support: level(80), pendingBreaks: [],
     })
 
     const shallowUp = [...bars, nextBar(bars, { open: 100, high: 111, low: 99, close: 110.05 })]
     expect(analyzeSupportResistance(shallowUp, 110.05, smallPivots)).toMatchObject({
-      resistance: level(120), pendingBreakouts: [pending('resistance', 110)],
+      resistance: level(120), pendingBreaks: [pending('resistance', 110)],
     })
     expect(analyzeSupportResistance(shallowUp, 110.05, exact)).toMatchObject({
-      resistance: level(120), pendingBreakouts: [],
+      resistance: level(120), pendingBreaks: [],
     })
   })
 })
@@ -153,7 +153,7 @@ describe('zones and break buffers', () => {
 describe('nearest surviving support and resistance', () => {
   test('selects the closest valid level on each side of the current price', () => {
     expect(analyzeSupportResistance(horizontalLevels(), 100, smallPivots)).toEqual({
-      trend: 'sideways', support: level(90), resistance: level(110), pendingBreakouts: [], closedBarCount: 9,
+      trend: 'sideways', support: level(90), resistance: level(110), pendingBreaks: [], closedBarCount: 9,
     })
     expect(analyzeSupportResistance(horizontalLevels(), 95, smallPivots).support).toEqual(level(90))
     expect(analyzeSupportResistance(horizontalLevels(), 105, smallPivots).resistance).toEqual(level(110))
@@ -161,10 +161,10 @@ describe('nearest surviving support and resistance', () => {
 
   test('keeps an exact touch eligible without marking that zone as a pending breakout', () => {
     expect(analyzeSupportResistance(horizontalLevels(), 90, smallPivots)).toMatchObject({
-      support: level(90), pendingBreakouts: [],
+      support: level(90), pendingBreaks: [],
     })
     expect(analyzeSupportResistance(horizontalLevels(), 110, smallPivots)).toMatchObject({
-      resistance: level(110), pendingBreakouts: [],
+      resistance: level(110), pendingBreaks: [],
     })
   })
 
@@ -173,7 +173,7 @@ describe('nearest surviving support and resistance', () => {
       trend: 'sideways', supports: [level(90)], resistances: [level(100, 2), level(110)], closedBarCount: 9,
     }, 105)).toEqual({
       trend: 'sideways', support: level(90), resistance: level(110),
-      pendingBreakouts: [pending('resistance', 100, 2)], closedBarCount: 9,
+      pendingBreaks: [pending('resistance', 100, 2)], closedBarCount: 9,
     })
   })
 
@@ -182,35 +182,35 @@ describe('nearest surviving support and resistance', () => {
       trend: 'sideways', supports: [level(100), level(110, 2)], resistances: [level(120)], closedBarCount: 9,
     }, 105)).toEqual({
       trend: 'sideways', support: level(100), resistance: level(120),
-      pendingBreakouts: [pending('support', 110, 2)], closedBarCount: 9,
+      pendingBreaks: [pending('support', 110, 2)], closedBarCount: 9,
     })
   })
 
   test('keeps the next valid level separate from the nearest crossed zone on either side', () => {
     expect(analyzeSupportResistance(horizontalLevels(), 80.1, smallPivots)).toMatchObject({
-      support: level(80), resistance: level(110), pendingBreakouts: [pending('support', 90)],
+      support: level(80), resistance: level(110), pendingBreaks: [pending('support', 90)],
     })
     expect(analyzeSupportResistance(horizontalLevels(), 119.9, smallPivots)).toMatchObject({
-      support: level(90), resistance: level(120), pendingBreakouts: [pending('resistance', 110)],
+      support: level(90), resistance: level(120), pendingBreaks: [pending('resistance', 110)],
     })
   })
 
   test('returns no next level when price crosses them all and reports only the nearest crossed zone', () => {
     expect(analyzeSupportResistance(horizontalLevels(), 70, smallPivots)).toMatchObject({
-      support: null, resistance: level(110), pendingBreakouts: [pending('support', 80)],
+      support: null, resistance: level(110), pendingBreaks: [pending('support', 80)],
     })
     expect(analyzeSupportResistance(horizontalLevels(), 130, smallPivots)).toMatchObject({
-      support: level(90), resistance: null, pendingBreakouts: [pending('resistance', 120)],
+      support: level(90), resistance: null, pendingBreaks: [pending('resistance', 120)],
     })
   })
 
   test('a live recross clears pending status and restores the zone to nearest levels', () => {
     const structure = buildSupportResistanceStructure(horizontalLevels(), smallPivots)
     const original = structuredClone(structure)
-    expect(selectNearestLevels(structure, 89).pendingBreakouts).toEqual([pending('support', 90)])
-    expect(selectNearestLevels(structure, 90)).toMatchObject({ support: level(90), pendingBreakouts: [] })
-    expect(selectNearestLevels(structure, 111).pendingBreakouts).toEqual([pending('resistance', 110)])
-    expect(selectNearestLevels(structure, 110)).toMatchObject({ resistance: level(110), pendingBreakouts: [] })
+    expect(selectNearestLevels(structure, 89).pendingBreaks).toEqual([pending('support', 90)])
+    expect(selectNearestLevels(structure, 90)).toMatchObject({ support: level(90), pendingBreaks: [] })
+    expect(selectNearestLevels(structure, 111).pendingBreaks).toEqual([pending('resistance', 110)])
+    expect(selectNearestLevels(structure, 110)).toMatchObject({ resistance: level(110), pendingBreaks: [] })
     expect(structure).toEqual(original)
   })
 
@@ -218,10 +218,10 @@ describe('nearest surviving support and resistance', () => {
     const bars = horizontalLevels()
     const breakBar = nextBar(bars, { open: 100, high: 101, low: 85, close: 89 })
     expect(analyzeSupportResistance([...bars, { ...breakBar, isClosed: false }], 89, smallPivots))
-      .toMatchObject({ support: level(80), pendingBreakouts: [pending('support', 90)] })
+      .toMatchObject({ support: level(80), pendingBreaks: [pending('support', 90)] })
     const afterBreak = [...bars, breakBar]
     expect(analyzeSupportResistance(afterBreak, 89, smallPivots))
-      .toMatchObject({ support: level(80), resistance: level(110), pendingBreakouts: [] })
+      .toMatchObject({ support: level(80), resistance: level(110), pendingBreaks: [] })
     expect(analyzeSupportResistance(afterBreak, 100, smallPivots).support).toEqual(level(80))
     expect(analyzeSupportResistance(afterBreak, 85, smallPivots).resistance).toEqual(level(110))
 
@@ -234,9 +234,9 @@ describe('nearest surviving support and resistance', () => {
     const bars = horizontalLevels()
     const breakBar = nextBar(bars, { open: 100, high: 115, low: 99, close: 111 })
     expect(analyzeSupportResistance([...bars, { ...breakBar, isClosed: false }], 111, smallPivots))
-      .toMatchObject({ resistance: level(120), pendingBreakouts: [pending('resistance', 110)] })
+      .toMatchObject({ resistance: level(120), pendingBreaks: [pending('resistance', 110)] })
     expect(analyzeSupportResistance([...bars, breakBar], 111, smallPivots))
-      .toMatchObject({ support: level(90), resistance: level(120), pendingBreakouts: [] })
+      .toMatchObject({ support: level(90), resistance: level(120), pendingBreaks: [] })
     expect(analyzeSupportResistance([...bars, breakBar], 100, smallPivots).resistance).toEqual(level(120))
     expect(analyzeSupportResistance([...bars, breakBar], 115, smallPivots).support).toEqual(level(90))
   })
@@ -296,7 +296,7 @@ describe('history boundaries and validation', () => {
     const bars = horizontalLevels()
     bars.splice(4, 1)
     expect(analyzeSupportResistance(bars, 100, smallPivots)).toEqual({
-      trend: 'unknown', support: null, resistance: level(110), pendingBreakouts: [], closedBarCount: 4,
+      trend: 'unknown', support: null, resistance: level(110), pendingBreaks: [], closedBarCount: 4,
     })
   })
 
@@ -307,7 +307,7 @@ describe('history boundaries and validation', () => {
     const bars = horizontalLevels()
     bars[4] = { ...bars[4], ...changes }
     expect(analyzeSupportResistance(bars, 100, smallPivots)).toEqual({
-      trend: 'unknown', support: null, resistance: level(110), pendingBreakouts: [], closedBarCount: 4,
+      trend: 'unknown', support: null, resistance: level(110), pendingBreaks: [], closedBarCount: 4,
     })
   })
 
@@ -322,19 +322,19 @@ describe('history boundaries and validation', () => {
     const bars = horizontalLevels()
     bars[bars.length - 1].close = NaN
     expect(analyzeSupportResistance(bars, 100, smallPivots)).toEqual({
-      trend: 'unknown', support: null, resistance: null, pendingBreakouts: [], closedBarCount: 0,
+      trend: 'unknown', support: null, resistance: null, pendingBreaks: [], closedBarCount: 0,
     })
   })
 
   test('bounds the closed window and requires the full pivot window inside it', () => {
     const bars = horizontalLevels()
     expect(analyzeSupportResistance(bars, 100, { ...smallPivots, lookbackBars: 6 })).toEqual({
-      trend: 'unknown', support: null, resistance: level(110), pendingBreakouts: [], closedBarCount: 6,
+      trend: 'unknown', support: null, resistance: level(110), pendingBreaks: [], closedBarCount: 6,
     })
     const longHistory = makeBars(Array.from({ length: 350 }, () => 100))
     longHistory[10].low = 50
     expect(analyzeSupportResistance(longHistory, 100)).toEqual({
-      trend: 'unknown', support: null, resistance: null, pendingBreakouts: [], closedBarCount: 300,
+      trend: 'unknown', support: null, resistance: null, pendingBreaks: [], closedBarCount: 300,
     })
     expect(analyzeSupportResistance([...longHistory, nextBar(longHistory, { isClosed: false })], 100)
       .closedBarCount).toBe(300)
@@ -342,7 +342,7 @@ describe('history boundaries and validation', () => {
 
   test.each([0, -1, NaN, Infinity])('returns no nearby levels for invalid current price %p', (price) => {
     expect(analyzeSupportResistance(horizontalLevels(), price, smallPivots)).toEqual({
-      trend: 'sideways', support: null, resistance: null, pendingBreakouts: [], closedBarCount: 9,
+      trend: 'sideways', support: null, resistance: null, pendingBreaks: [], closedBarCount: 9,
     })
   })
 

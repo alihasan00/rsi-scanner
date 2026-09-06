@@ -15,7 +15,7 @@ const level = (price: number, touches = 1) => ({ price, touches })
 
 function snapshot(overrides: Partial<SupportResistanceSnapshot>): SupportResistanceSnapshot {
   return {
-    trend: 'sideways', support: level(99), resistance: level(101), pendingBreakouts: [], closedBarCount: 50,
+    trend: 'sideways', support: level(99), resistance: level(101), pendingBreaks: [], closedBarCount: 50,
     price: 100, hasData: true, ...overrides,
   }
 }
@@ -41,11 +41,11 @@ describe('distances', () => {
   test('a crossed level does not replace the distance to the nearest eligible level', () => {
     expect(nearestDistancePercent(snapshot({
       support: level(95), resistance: level(110),
-      pendingBreakouts: [{ kind: 'resistance', ...level(99.9) }],
+      pendingBreaks: [{ kind: 'resistance', ...level(99.9) }],
     }))).toBeCloseTo(5)
     expect(nearestDistancePercent(snapshot({
       support: null, resistance: null,
-      pendingBreakouts: [{ kind: 'resistance', ...level(99.9) }],
+      pendingBreaks: [{ kind: 'resistance', ...level(99.9) }],
     }))).toBeNull()
   })
 })
@@ -59,7 +59,8 @@ describe('matchesFilters', () => {
   test('any active filter excludes pairs that have not loaded', () => {
     for (const active of [
       filters({ side: 'support' }), filters({ maxDistancePercent: 5 }), filters({ trend: 'uptrend' }),
-      filters({ minTouches: 2 }), filters({ pendingBreakoutsOnly: true }),
+      filters({ minTouches: 2 }), filters({ breakFilter: 'breakouts' }),
+      filters({ breakFilter: 'breakdowns' }), filters({ breakFilter: 'either' }),
     ]) {
       expect(hasActiveFilters(active)).toBe(true)
       expect(matchesFilters(EMPTY_SUPPORT_RESISTANCE, active)).toBe(false)
@@ -84,19 +85,19 @@ describe('matchesFilters', () => {
     const mixed = snapshot({ support: level(99.9, 1), resistance: level(101, 3) })
     expect(matchesFilters(mixed, filters({ minTouches: 3 }))).toBe(true)
     expect(matchesFilters(mixed, filters({ minTouches: 3, maxDistancePercent: 0.5 }))).toBe(false)
-    expect(matchesFilters(mixed, filters({ pendingBreakoutsOnly: true }))).toBe(false)
+    expect(matchesFilters(mixed, filters({ breakFilter: 'either' }))).toBe(false)
   })
 
   test('pending mode applies side, touches, and distance to the same crossed zone', () => {
     const mixed = snapshot({
       support: level(99.95, 5), resistance: level(101, 5),
-      pendingBreakouts: [
+      pendingBreaks: [
         { kind: 'resistance', ...level(99.9, 1) },
         { kind: 'support', ...level(102, 3) },
       ],
     })
     const pending = (overrides: Partial<SupportResistanceFilters> = {}) => filters({
-      pendingBreakoutsOnly: true, ...overrides,
+      breakFilter: 'either', ...overrides,
     })
     expect(matchesFilters(mixed, pending())).toBe(true)
     expect(matchesFilters(mixed, pending({ minTouches: 3 }))).toBe(true)
@@ -108,16 +109,74 @@ describe('matchesFilters', () => {
     expect(matchesFilters(mixed, pending({ trend: 'uptrend' }))).toBe(false)
   })
 
+  test('a nearby, well-tested support breakdown cannot pass the breakout filter', () => {
+    const breakdown = snapshot({
+      support: level(99.95, 5), resistance: level(100.2, 5),
+      pendingBreaks: [{ kind: 'support', ...level(100.1, 5) }],
+    })
+    const conditions = { maxDistancePercent: 0.5, minTouches: 3 }
+    expect(matchesFilters(breakdown, filters({ ...conditions, breakFilter: 'breakouts' }))).toBe(false)
+    expect(matchesFilters(breakdown, filters({ ...conditions, breakFilter: 'breakdowns' }))).toBe(true)
+    expect(matchesFilters(breakdown, filters({ ...conditions, breakFilter: 'either' }))).toBe(true)
+  })
+
+  test('a nearby, well-tested resistance breakout cannot pass the breakdown filter', () => {
+    const breakout = snapshot({
+      support: level(99.95, 5), resistance: level(100.2, 5),
+      pendingBreaks: [{ kind: 'resistance', ...level(99.9, 5) }],
+    })
+    const conditions = { maxDistancePercent: 0.5, minTouches: 3 }
+    expect(matchesFilters(breakout, filters({ ...conditions, breakFilter: 'breakdowns' }))).toBe(false)
+    expect(matchesFilters(breakout, filters({ ...conditions, breakFilter: 'breakouts' }))).toBe(true)
+    expect(matchesFilters(breakout, filters({ ...conditions, breakFilter: 'either' }))).toBe(true)
+  })
+
+  test('direction, side, distance, touches, and trend must agree for a crossed zone', () => {
+    const mixed = snapshot({
+      trend: 'uptrend',
+      support: level(99.95, 5), resistance: level(100.2, 5),
+      pendingBreaks: [
+        { kind: 'resistance', ...level(99.9, 1) },
+        { kind: 'support', ...level(102, 3) },
+      ],
+    })
+    expect(matchesFilters(mixed, filters({ breakFilter: 'breakouts', maxDistancePercent: 0.5 }))).toBe(true)
+    expect(matchesFilters(mixed, filters({ breakFilter: 'breakouts', minTouches: 3 }))).toBe(false)
+    expect(matchesFilters(mixed, filters({ breakFilter: 'breakouts', side: 'support' }))).toBe(false)
+    expect(matchesFilters(mixed, filters({ breakFilter: 'breakouts', trend: 'downtrend' }))).toBe(false)
+    expect(matchesFilters(mixed, filters({ breakFilter: 'breakdowns', minTouches: 3 }))).toBe(true)
+    expect(matchesFilters(mixed, filters({ breakFilter: 'breakdowns', maxDistancePercent: 0.5 }))).toBe(false)
+    expect(matchesFilters(mixed, filters({ breakFilter: 'breakdowns', side: 'resistance' }))).toBe(false)
+    expect(matchesFilters(mixed, filters({ breakFilter: 'breakdowns', trend: 'downtrend' }))).toBe(false)
+    expect(matchesFilters(mixed, filters({ breakFilter: 'either', minTouches: 3, maxDistancePercent: 0.5 }))).toBe(false)
+  })
+
   test('pending breakouts remain filterable when no next resistance exists', () => {
     const crossed = snapshot({
       resistance: null,
-      pendingBreakouts: [{ kind: 'resistance', ...level(99.9, 2) }],
+      pendingBreaks: [{ kind: 'resistance', ...level(99.9, 2) }],
     })
     expect(matchesFilters(crossed, filters({ side: 'resistance' }))).toBe(false)
-    expect(matchesFilters(crossed, filters({ side: 'resistance', pendingBreakoutsOnly: true }))).toBe(true)
-    expect(matchesFilters(crossed, filters({ side: 'support', pendingBreakoutsOnly: true }))).toBe(false)
+    expect(matchesFilters(crossed, filters({ side: 'resistance', breakFilter: 'breakouts' }))).toBe(true)
+    expect(matchesFilters(crossed, filters({ side: 'support', breakFilter: 'breakouts' }))).toBe(false)
+    expect(matchesFilters(crossed, filters({ breakFilter: 'breakdowns' }))).toBe(false)
+    expect(matchesFilters(crossed, filters({ breakFilter: 'either' }))).toBe(true)
     expect(matchesFilters(crossed, filters({ maxDistancePercent: 0.5 }))).toBe(false)
-    expect(matchesFilters(crossed, filters({ maxDistancePercent: 0.5, pendingBreakoutsOnly: true }))).toBe(true)
+    expect(matchesFilters(crossed, filters({ maxDistancePercent: 0.5, breakFilter: 'breakouts' }))).toBe(true)
+  })
+
+  test('pending breakdowns remain filterable when no next support exists', () => {
+    const crossed = snapshot({
+      support: null,
+      pendingBreaks: [{ kind: 'support', ...level(100.1, 2) }],
+    })
+    expect(matchesFilters(crossed, filters({ side: 'support' }))).toBe(false)
+    expect(matchesFilters(crossed, filters({ side: 'support', breakFilter: 'breakdowns' }))).toBe(true)
+    expect(matchesFilters(crossed, filters({ side: 'resistance', breakFilter: 'breakdowns' }))).toBe(false)
+    expect(matchesFilters(crossed, filters({ breakFilter: 'breakouts' }))).toBe(false)
+    expect(matchesFilters(crossed, filters({ breakFilter: 'either' }))).toBe(true)
+    expect(matchesFilters(crossed, filters({ maxDistancePercent: 0.5 }))).toBe(false)
+    expect(matchesFilters(crossed, filters({ maxDistancePercent: 0.5, breakFilter: 'breakdowns' }))).toBe(true)
   })
 
   test('trend filters combine with level filters', () => {
@@ -154,12 +213,12 @@ describe('sortRows', () => {
     const pendingRows: SupportResistanceRow[] = [
       { symbol: 'CROSSED', snapshot: snapshot({
         support: level(95), resistance: level(110),
-        pendingBreakouts: [{ kind: 'resistance', ...level(99.99) }],
+        pendingBreaks: [{ kind: 'resistance', ...level(99.99) }],
       }) },
       { symbol: 'NEAREST', snapshot: snapshot({}) },
       { symbol: 'NO_NEXT', snapshot: snapshot({
         support: null, resistance: null,
-        pendingBreakouts: [{ kind: 'resistance', ...level(99.999) }],
+        pendingBreaks: [{ kind: 'resistance', ...level(99.999) }],
       }) },
     ]
     for (const sort of ['nearest', 'support', 'resistance'] as const) {
@@ -169,16 +228,56 @@ describe('sortRows', () => {
 })
 
 describe('saved support/resistance filters', () => {
-  test('migrates Testing only while retaining other saved filter choices', () => {
-    expect(restoreSupportResistanceFilters({ testingOnly: true, side: 'resistance', minTouches: 3 }))
-      .toEqual(filters({ pendingBreakoutsOnly: true, side: 'resistance', minTouches: 3 }))
+  test('restores defaults when no saved break filter is enabled', () => {
     expect(restoreSupportResistanceFilters({ testingOnly: false })).toEqual(DEFAULT_SUPPORT_RESISTANCE_FILTERS)
+    expect(restoreSupportResistanceFilters({ pendingBreakoutsOnly: false })).toEqual(DEFAULT_SUPPORT_RESISTANCE_FILTERS)
     expect(restoreSupportResistanceFilters()).toEqual(DEFAULT_SUPPORT_RESISTANCE_FILTERS)
   })
 
-  test('the new preference takes priority over the legacy value and drops the old key', () => {
+  test('migrates both legacy filters according to the saved side and retains other choices', () => {
+    for (const legacyKey of ['testingOnly', 'pendingBreakoutsOnly'] as const) {
+      for (const [side, breakFilter] of [
+        ['support', 'breakdowns'], ['resistance', 'breakouts'], ['any', 'either'],
+      ] as const) {
+        const restored = restoreSupportResistanceFilters({
+          [legacyKey]: true, side, minTouches: 3, maxDistancePercent: 0.5, trend: 'uptrend',
+        })
+        expect(restored).toEqual(filters({ side, breakFilter, minTouches: 3, maxDistancePercent: 0.5, trend: 'uptrend' }))
+        expect(restored).not.toHaveProperty('testingOnly')
+        expect(restored).not.toHaveProperty('pendingBreakoutsOnly')
+      }
+      expect(restoreSupportResistanceFilters({ [legacyKey]: true })).toEqual(filters({ breakFilter: 'either' }))
+    }
+  })
+
+  test('pendingBreakoutsOnly takes priority over the earlier testingOnly preference', () => {
     const restored = restoreSupportResistanceFilters({ testingOnly: true, pendingBreakoutsOnly: false })
-    expect(restored.pendingBreakoutsOnly).toBe(false)
+    expect(restored).toEqual(DEFAULT_SUPPORT_RESISTANCE_FILTERS)
     expect(restored).not.toHaveProperty('testingOnly')
+    expect(restored).not.toHaveProperty('pendingBreakoutsOnly')
+    expect(restoreSupportResistanceFilters({ testingOnly: false, pendingBreakoutsOnly: true, side: 'support' }))
+      .toEqual(filters({ breakFilter: 'breakdowns', side: 'support' }))
+  })
+
+  test('an explicit valid direction takes priority over both legacy preferences', () => {
+    for (const breakFilter of ['all', 'breakouts', 'breakdowns', 'either'] as const) {
+      const restored = restoreSupportResistanceFilters({
+        breakFilter, testingOnly: true, pendingBreakoutsOnly: true, side: 'support',
+      })
+      expect(restored).toEqual(filters({ breakFilter, side: 'support' }))
+      expect(restored).not.toHaveProperty('testingOnly')
+      expect(restored).not.toHaveProperty('pendingBreakoutsOnly')
+    }
+  })
+
+  test('an invalid saved direction falls back to a legacy preference or the default', () => {
+    const breakFilter = 'invalid' as SupportResistanceFilters['breakFilter']
+    expect(restoreSupportResistanceFilters({ breakFilter })).toEqual(DEFAULT_SUPPORT_RESISTANCE_FILTERS)
+    expect(restoreSupportResistanceFilters({ breakFilter, testingOnly: true, side: 'support' }))
+      .toEqual(filters({ breakFilter: 'breakdowns', side: 'support' }))
+    expect(restoreSupportResistanceFilters({ breakFilter, pendingBreakoutsOnly: true, side: 'resistance' }))
+      .toEqual(filters({ breakFilter: 'breakouts', side: 'resistance' }))
+    expect(restoreSupportResistanceFilters({ breakFilter, testingOnly: true, pendingBreakoutsOnly: false }))
+      .toEqual(DEFAULT_SUPPORT_RESISTANCE_FILTERS)
   })
 })

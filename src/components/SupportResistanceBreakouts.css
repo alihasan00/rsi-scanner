@@ -1,16 +1,23 @@
 .sr-breakouts {
   margin-top: 15px;
-  padding: 10px 11px;
-  border: 1px solid rgba(242, 198, 109, 0.2);
-  border-radius: 7px;
-  background: rgba(242, 198, 109, 0.045);
 }
+
+.sr-breakouts__group {
+  padding: 10px 11px;
+  border: 1px solid color-mix(in srgb, var(--break-color) 20%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--break-color) 4.5%, transparent);
+}
+
+.sr-breakouts__group + .sr-breakouts__group { margin-top: 10px; }
+.sr-breakouts__group--breakout { --break-color: var(--accent); }
+.sr-breakouts__group--breakdown { --break-color: var(--danger); }
 
 .sr-breakouts__heading {
   display: flex;
   align-items: center;
   gap: 5px;
-  color: #f2c66d;
+  color: var(--break-color);
   font-size: 10px;
   font-weight: 600;
   line-height: 1.4;
@@ -36,7 +43,7 @@
 }
 
 .sr-breakouts__info:hover { color: var(--text-primary); }
-.sr-breakouts__info:focus-visible { outline: 1px solid #f2c66d; }
+.sr-breakouts__info:focus-visible { outline: 1px solid var(--break-color); }
 
 .sr-breakouts__list {
   display: flex;
@@ -88,9 +95,12 @@
 
 .sr-breakouts--compact {
   margin: 0;
+}
+
+.sr-breakouts--compact .sr-breakouts__group {
   padding: 0;
   border: 0;
   background: none;
 }
 
-.sr-breakouts--compact .sr-breakouts__list { margin: 0; }
+.sr-breakouts--compact .sr-breakouts__list { margin-top: 4px; }

@@ -36,17 +36,19 @@ Filters narrow the market to pairs that are interacting with a level:
 - **Within:** keep pairs whose chosen level is within 0.25% to 5% of price.
 - **Trend:** uptrend, downtrend, or sideways.
 - **Touches:** require a zone built from two or three or more confirmed swings.
-- **Pending breakouts only:** price is beyond a surviving level, awaiting a
-  candle close more than 0.1% beyond it. Side, distance, and touches then apply
-  to that pending breakout.
+- **Break direction:** choose **All levels**, **Pending breakouts only** (price
+  above resistance), **Pending breakdowns only** (price below support), or
+  **Both pending directions**. Pending breaks await a candle close more than
+  0.1% beyond the crossed level. Side, distance, and touches then apply to that
+  same pending break. Changing direction resets Side to **Either level**.
 - **Sort:** list order, nearest level, closest support, or closest resistance.
 
 All level conditions must hold on the same level, so "within 0.5%" with
 "2+ touches" means one zone that is both close and well tested. Normally these
-conditions use the nearest support/resistance; **Pending breakouts only** uses
-the crossed zones displayed separately. Sorting always uses the nearest
-support/resistance columns. Pairs still
-loading are hidden while any filter is active, because they cannot be
+conditions use the nearest support/resistance; pending-direction filters use
+only the matching crossed zones displayed separately. Sorting always uses the
+nearest support/resistance columns. Pairs still loading are hidden while any
+filter is active, because they cannot be
 evaluated. Market-wide updates for filtering and sorting are throttled to a few
 per second; individual cards still update on their own ticks.
 
@@ -63,14 +65,16 @@ third right-hand candle closes. RSI values do not enter this calculation.
   price.
 - **Resistance:** the lowest surviving zone from swing highs at or above the
   live price.
-- **Pending breakouts:** crossed zones appear separately under **Breakout
-  awaiting confirmation**, showing their price, distance, and touches. The
-  closest crossed support above price and closest crossed resistance below
-  price are shown. They never replace the nearest support/resistance. A candle
-  close more than 0.1% beyond the zone confirms the break and retires it; a close
+- **Pending breaks:** price above resistance appears under **Breakout awaiting
+  confirmation**; price below support appears under **Breakdown awaiting
+  confirmation**, each showing price, distance, and touches. The closest
+  crossed support above price and closest crossed resistance below price are
+  shown in separate directional groups. They never replace the nearest
+  support/resistance. A candle close more than 0.1% beyond the zone confirms
+  the break and retires it; a close
   inside that buffer remains pending. Returning to the original side clears
-  the pending breakout and makes the level eligible again. Exact touches are
-  eligible support/resistance, without a pending breakout.
+  the pending break and makes the level eligible again. Exact touches are
+  eligible support/resistance, without a pending break.
 - **Trend:** the latest two confirmed highs and latest two confirmed lows must
   both rise for an uptrend or both fall for a downtrend. Mixed or equal swings
   show sideways; insufficient swings show unknown.
@@ -83,8 +87,11 @@ older segments.
 For example, with resistance zones at 100 and 110 and live price at 105,
 resistance shows 110 and the crossed 100 zone appears separately as a pending
 breakout. If there is no resistance at or above price, resistance shows a dash
-while the pending breakout remains visible. The former **Testing only** saved
-preference carries over to **Pending breakouts only**.
+while the pending breakout remains visible. In list view, the shared column is
+**Awaiting confirmation**, and every group is labeled **Breakout** or
+**Breakdown**. Saved **Testing only** and former combined **Pending breakouts
+only** preferences retain their selected side: Support becomes breakdowns,
+Resistance becomes breakouts, and Either level becomes both pending directions.
 
 Levels are computed for every symbol in `src/store/supportResistanceStore.ts`
 as candles are published, not inside the visible cards. The closed-bar structure

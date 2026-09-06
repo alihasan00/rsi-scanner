@@ -13,7 +13,7 @@ export function levelDistancePercent(level: SupportResistanceLevel | null, price
   return Math.abs((level.price - price) / price) * 100
 }
 
-/** Distance to the nearer support/resistance; pending breakouts are separate. */
+/** Distance to the nearer support/resistance; pending breaks are separate. */
 export function nearestDistancePercent(snapshot: SupportResistanceSnapshot): number | null {
   const support = levelDistancePercent(snapshot.support, snapshot.price)
   const resistance = levelDistancePercent(snapshot.resistance, snapshot.price)
@@ -27,15 +27,20 @@ export function hasActiveFilters(filters: SupportResistanceFilters): boolean {
     || filters.maxDistancePercent !== null
     || filters.trend !== 'any'
     || filters.minTouches > 1
-    || filters.pendingBreakoutsOnly
+    || filters.breakFilter !== 'all'
 }
 
 function levelsForFilters(
   snapshot: SupportResistanceSnapshot,
-  { side, pendingBreakoutsOnly }: SupportResistanceFilters,
+  { side, breakFilter }: SupportResistanceFilters,
 ): readonly SupportResistanceLevel[] {
-  if (pendingBreakoutsOnly) {
-    return snapshot.pendingBreakouts.filter((level) => side === 'any' || level.kind === side)
+  if (breakFilter !== 'all') {
+    return snapshot.pendingBreaks.filter((level) => (
+      (side === 'any' || level.kind === side)
+      && (breakFilter === 'either'
+        || (breakFilter === 'breakouts' && level.kind === 'resistance')
+        || (breakFilter === 'breakdowns' && level.kind === 'support'))
+    ))
   }
   const levels = side === 'support' ? [snapshot.support]
     : side === 'resistance' ? [snapshot.resistance]
@@ -45,7 +50,7 @@ function levelsForFilters(
 
 /**
  * A pair passes when at least one level on the chosen side satisfies every
- * level condition together. Pending-breakout mode evaluates the crossed zones
+ * level condition together. Pending-break modes evaluate the matching crossed zones
  * instead of the nearest support/resistance. Loading pairs pass only when no
  * filter is active.
  */
@@ -57,7 +62,7 @@ export function matchesFilters(snapshot: SupportResistanceSnapshot, filters: Sup
   const needsLevel = filters.side !== 'any'
     || filters.maxDistancePercent !== null
     || filters.minTouches > 1
-    || filters.pendingBreakoutsOnly
+    || filters.breakFilter !== 'all'
   if (!needsLevel) return true
 
   return levelsForFilters(snapshot, filters).some((level) => {

@@ -25,18 +25,23 @@ export const DEFAULT_SUPPORT_RESISTANCE_FILTERS: SupportResistanceFilters = {
   maxDistancePercent: null,
   trend: 'any',
   minTouches: 1,
-  pendingBreakoutsOnly: false,
+  breakFilter: 'all',
 }
 
-/** Preserve the old Testing-only preference under its clearer breakout name. */
+/** Preserve the selected side when migrating the old combined pending-break filter. */
 export function restoreSupportResistanceFilters(
-  saved?: Partial<SupportResistanceFilters> & { testingOnly?: boolean },
+  saved?: Partial<SupportResistanceFilters> & { testingOnly?: boolean; pendingBreakoutsOnly?: boolean },
 ): SupportResistanceFilters {
-  const { testingOnly, ...filters } = saved ?? {}
+  const { testingOnly, pendingBreakoutsOnly, breakFilter, ...filters } = saved ?? {}
+  const legacyBreakFilter = (pendingBreakoutsOnly ?? testingOnly)
+    ? filters.side === 'support' ? 'breakdowns'
+      : filters.side === 'resistance' ? 'breakouts' : 'either'
+    : 'all'
   return {
     ...DEFAULT_SUPPORT_RESISTANCE_FILTERS,
     ...filters,
-    pendingBreakoutsOnly: filters.pendingBreakoutsOnly ?? testingOnly ?? false,
+    breakFilter: breakFilter === 'all' || breakFilter === 'breakouts' || breakFilter === 'breakdowns' || breakFilter === 'either'
+      ? breakFilter : legacyBreakFilter,
   }
 }
 

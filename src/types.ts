@@ -73,6 +73,8 @@ export type SupportResistanceSide = 'any' | 'support' | 'resistance'
 
 export type SupportResistanceSort = 'symbol' | 'nearest' | 'support' | 'resistance'
 
+export type SupportResistanceBreakFilter = 'all' | 'breakouts' | 'breakdowns' | 'either'
+
 export interface SupportResistanceFilters {
   /** Which kind of level the distance and touches filters apply to. */
   side: SupportResistanceSide
@@ -80,6 +82,6 @@ export interface SupportResistanceFilters {
   maxDistancePercent: number | null
   trend: 'any' | 'uptrend' | 'downtrend' | 'sideways'
   minTouches: number
-  /** Apply level filters to pending breakouts instead of nearest support/resistance. */
-  pendingBreakoutsOnly: boolean
+  /** All nearest levels, upside resistance breaks, downside support breaks, or both breaks. */
+  breakFilter: SupportResistanceBreakFilter
 }

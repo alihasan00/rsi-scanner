@@ -13,7 +13,8 @@ export interface SupportResistanceLevel {
 }
 
 /** A crossed zone whose break has not been confirmed beyond the close buffer. */
-export interface PendingBreakout extends SupportResistanceLevel {
+export interface PendingLevelBreak extends SupportResistanceLevel {
+  /** Support crossed downward is a breakdown; resistance crossed upward is a breakout. */
   kind: 'support' | 'resistance'
 }
 
@@ -34,7 +35,7 @@ export interface SupportResistanceAnalysis {
   /** Nearest surviving resistance at or above the live price. */
   resistance: SupportResistanceLevel | null
   /** Nearest crossed surviving zone per side, separate from nearby levels. */
-  pendingBreakouts: readonly PendingBreakout[]
+  pendingBreaks: readonly PendingLevelBreak[]
   closedBarCount: number
 }
 
@@ -192,7 +193,7 @@ export function buildSupportResistanceStructure(
 
 /**
  * Picks support at or below the live price and resistance at or above it.
- * Crossed surviving zones are reported separately as pending breakouts: the
+ * Crossed surviving zones are reported separately as pending breaks: the
  * lowest support above price and the highest resistance below price. A recross
  * clears the pending status; only a closed close beyond the buffer retires a
  * zone. The live price never creates, retires, or changes the role of zones.
@@ -203,16 +204,16 @@ export function selectNearestLevels(
 ): SupportResistanceAnalysis {
   const { trend, closedBarCount } = structure
   if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
-    return { trend, support: null, resistance: null, pendingBreakouts: [], closedBarCount }
+    return { trend, support: null, resistance: null, pendingBreaks: [], closedBarCount }
   }
 
-  const pendingBreakouts: PendingBreakout[] = []
+  const pendingBreaks: PendingLevelBreak[] = []
   let support: SupportResistanceLevel | null = null
   for (const level of structure.supports) {
     if (level.price <= currentPrice) {
       support = level
     } else {
-      pendingBreakouts.push({ ...level, kind: 'support' })
+      pendingBreaks.push({ ...level, kind: 'support' })
       break
     }
   }
@@ -228,14 +229,14 @@ export function selectNearestLevels(
     }
   }
   if (crossedResistance) {
-    pendingBreakouts.push({ ...crossedResistance, kind: 'resistance' })
+    pendingBreaks.push({ ...crossedResistance, kind: 'resistance' })
   }
 
   return {
     trend,
     support: support ? { ...support } : null,
     resistance: resistance ? { ...resistance } : null,
-    pendingBreakouts,
+    pendingBreaks,
     closedBarCount,
   }
 }

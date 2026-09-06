@@ -52,7 +52,7 @@ function LevelRow({ kind, level, currentPrice, loading }: LevelRowProps) {
 
 function SupportResistanceCardImpl({ symbol, timeframe }: SupportResistanceCardProps) {
   const { ref, isNearViewport } = useNearViewport<HTMLElement>()
-  const { price, hasData, trend: liveTrend, support, resistance, pendingBreakouts } = useSupportResistanceData(symbol, isNearViewport)
+  const { price, hasData, trend: liveTrend, support, resistance, pendingBreaks } = useSupportResistanceData(symbol, isNearViewport)
   const hasPrice = Number.isFinite(price) && price > 0
   const loading = !hasData || !hasPrice
   const formattedPrice = formatQuotePrice(price)
@@ -90,7 +90,7 @@ function SupportResistanceCardImpl({ symbol, timeframe }: SupportResistanceCardP
         <LevelRow kind="resistance" level={resistance} currentPrice={price} loading={loading} />
         <LevelRow kind="support" level={support} currentPrice={price} loading={loading} />
       </div>
-      {!loading && <SupportResistanceBreakouts pendingBreakouts={pendingBreakouts} currentPrice={price} />}
+      {!loading && <SupportResistanceBreakouts pendingBreaks={pendingBreaks} currentPrice={price} />}
     </article>
   )
 }

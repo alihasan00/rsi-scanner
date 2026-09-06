@@ -64,7 +64,7 @@ describe('supportResistanceStore', () => {
       trend: 'unknown',
       support: { price: 90, touches: 1 },
       resistance: { price: 120, touches: 1 },
-      pendingBreakouts: [],
+      pendingBreaks: [],
       closedBarCount: 16,
       price: 100,
       hasData: true,
@@ -85,20 +85,20 @@ describe('supportResistanceStore', () => {
     expect(getSupportResistance('BTCUSDT')).toMatchObject({
       price: 89, closedBarCount: 16, support: null,
       resistance: { price: 120, touches: 1 },
-      pendingBreakouts: [{ kind: 'support', price: 90, touches: 1 }],
+      pendingBreaks: [{ kind: 'support', price: 90, touches: 1 }],
     })
 
     updateSupportResistance('BTCUSDT', snapshot(withPreview(bars, 121)))
     expect(getSupportResistance('BTCUSDT')).toMatchObject({
       price: 121, closedBarCount: 16,
       support: { price: 90, touches: 1 }, resistance: null,
-      pendingBreakouts: [{ kind: 'resistance', price: 120, touches: 1 }],
+      pendingBreaks: [{ kind: 'resistance', price: 120, touches: 1 }],
     })
 
     updateSupportResistance('BTCUSDT', snapshot(withPreview(bars, 100)))
     expect(getSupportResistance('BTCUSDT')).toMatchObject({
       price: 100, closedBarCount: 16,
-      support: { price: 90, touches: 1 }, resistance: { price: 120, touches: 1 }, pendingBreakouts: [],
+      support: { price: 90, touches: 1 }, resistance: { price: 120, touches: 1 }, pendingBreaks: [],
     })
   })
 
@@ -114,14 +114,14 @@ describe('supportResistanceStore', () => {
     expect(getSupportResistance('BTCUSDT')).toMatchObject({
       price: 89, closedBarCount: 30,
       support: { price: 80, touches: 1 }, resistance: { price: 110, touches: 1 },
-      pendingBreakouts: [{ kind: 'support', price: 90, touches: 1 }],
+      pendingBreaks: [{ kind: 'support', price: 90, touches: 1 }],
     })
 
     updateSupportResistance('BTCUSDT', snapshot(withPreview(bars, 111)))
     expect(getSupportResistance('BTCUSDT')).toMatchObject({
       price: 111, closedBarCount: 30,
       support: { price: 90, touches: 1 }, resistance: { price: 120, touches: 1 },
-      pendingBreakouts: [{ kind: 'resistance', price: 110, touches: 1 }],
+      pendingBreaks: [{ kind: 'resistance', price: 110, touches: 1 }],
     })
   })
 
@@ -133,13 +133,13 @@ describe('supportResistanceStore', () => {
     const preview = withPreview(bars, close)
     updateSupportResistance('BTCUSDT', snapshot(preview))
     expect(getSupportResistance('BTCUSDT')).toMatchObject({
-      support, resistance, pendingBreakouts: [{ kind, price, touches: 1 }], closedBarCount: 16,
+      support, resistance, pendingBreaks: [{ kind, price, touches: 1 }], closedBarCount: 16,
     })
 
     const closedBreak = preview.map((bar) => ({ ...bar, isClosed: true }))
     updateSupportResistance('BTCUSDT', snapshot(closedBreak))
     expect(getSupportResistance('BTCUSDT')).toMatchObject({
-      support, resistance, pendingBreakouts: [], closedBarCount: 17,
+      support, resistance, pendingBreaks: [], closedBarCount: 17,
     })
   })
 
@@ -147,12 +147,12 @@ describe('supportResistanceStore', () => {
     const bars = withPreview(seededBars(), 89.95).map((bar) => ({ ...bar, isClosed: true }))
     updateSupportResistance('BTCUSDT', snapshot(bars))
     expect(getSupportResistance('BTCUSDT')).toMatchObject({
-      support: null, pendingBreakouts: [{ kind: 'support', price: 90, touches: 1 }], closedBarCount: 17,
+      support: null, pendingBreaks: [{ kind: 'support', price: 90, touches: 1 }], closedBarCount: 17,
     })
 
     updateSupportResistance('BTCUSDT', snapshot(withPreview(bars, 90)))
     expect(getSupportResistance('BTCUSDT')).toMatchObject({
-      support: { price: 90, touches: 1 }, pendingBreakouts: [], closedBarCount: 17,
+      support: { price: 90, touches: 1 }, pendingBreaks: [], closedBarCount: 17,
     })
   })
 
