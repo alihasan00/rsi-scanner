@@ -1,0 +1,1395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binance RSI Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #181c24;
+            color: #e5e9f2;
+        }
+        .dashboard-header {
+            background: #232a36;
+            color: #e5e9f2;
+            box-shadow: 0 2px 8px rgba(27,42,111,0.08);
+            border-radius: 16px;
+            padding: 1.5rem 2rem;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .dashboard-title {
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: -1px;
+        }
+        .settings-btn {
+            background: #232a36;
+            color: #e5e9f2;
+            border: none;
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            font-size: 1.25rem;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(41,255,184,0.08);
+            transition: background 0.2s;
+        }
+        .settings-btn:hover {
+            background: #313a4a;
+        }
+        .grid-container {
+            display: grid;
+            gap: 12px;
+            padding: 1rem;
+            background: #181c24;
+            width: 100vw;
+            box-sizing: border-box;
+        }
+        .cell {
+            background: #232a36;
+            border-radius: 14px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+            transition: box-shadow 0.2s, transform 0.2s;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            border: 1px solid #232a36;
+            min-width: 0;
+            min-height: 0;
+        }
+        .cell:hover {
+            box-shadow: 0 4px 24px rgba(41,255,184,0.10);
+            transform: translateY(-2px) scale(1.02);
+            border-color: #29ffb8;
+        }
+        .tooltip {
+            position: absolute;
+            background: #232a36;
+            color: #e5e9f2;
+            border: 1.5px solid #313a4a;
+            border-radius: 8px;
+            padding: 8px 16px;
+            pointer-events: none;
+            z-index: 100;
+            font-size: 15px;
+            box-shadow: 0 2px 8px rgba(27,42,111,0.08);
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(24,28,36,0.92);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .modal-content {
+            background: #232a36;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.28);
+            padding: 0;
+            width: 95vw;
+            max-width: 900px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .modal-header {
+            background: #181c24;
+            color: #e5e9f2;
+            padding: 1.25rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .modal-toolbar {
+            background: #232a36;
+            padding: 0.75rem 2rem;
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            border-bottom: 1px solid #313a4a;
+        }
+        .tool-btn {
+            background: none;
+            border: none;
+            color: #e5e9f2;
+            font-size: 1.5rem;
+            border-radius: 6px;
+            padding: 0.5rem;
+            transition: background 0.2s, color 0.2s;
+        }
+        .tool-btn.active, .tool-btn:hover {
+            background: #313a4a;
+            color: #29ffb8;
+        }
+        .settings-panel {
+            display: none;
+            position: fixed;
+            top: 0;
+            right: 0;
+            background: #fff;
+            color: #1b2a6f;
+            padding: 2rem 1.5rem;
+            border-radius: 0 0 0 24px;
+            box-shadow: -4px 0 24px rgba(27,42,111,0.10);
+            z-index: 1100;
+            width: 340px;
+            max-width: 95vw;
+            max-height: 100vh;
+            overflow-y: auto;
+            animation: slideIn 0.3s;
+        }
+        @keyframes slideIn {
+            from { right: -400px; }
+            to { right: 0; }
+        }
+        .settings-panel label {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .settings-panel input[type="color"],
+        .settings-panel input[type="range"] {
+            width: 100%;
+            margin-bottom: 1.5rem;
+        }
+        .settings-panel input[type="checkbox"] {
+            margin-right: 0.5rem;
+        }
+        .settings-panel button {
+            background: #1b2a6f;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 0.5rem 1.5rem;
+            font-weight: 600;
+            margin-top: 1rem;
+            transition: background 0.2s;
+        }
+        .settings-panel button:hover {
+            background: #29ffb8;
+            color: #1b2a6f;
+        }
+        @media (max-width: 768px) {
+            .modal-content {
+                width: 99vw;
+                max-width: 99vw;
+                border-radius: 0;
+            }
+            .settings-panel {
+                width: 99vw;
+                border-radius: 0 0 0 0;
+            }
+            
+            /* Mobile-specific improvements */
+            .modal-toolbar {
+                padding: 1rem;
+                gap: 1rem;
+                flex-wrap: wrap;
+        }
+
+        .tool-btn {
+                font-size: 1.8rem;
+                padding: 0.75rem;
+                min-width: 48px;
+                min-height: 48px;
+            }
+            
+            .modal-header {
+                padding: 1rem;
+            }
+            
+            .modal-header h2 {
+                font-size: 1.25rem;
+            }
+            
+            /* Mobile controls */
+            header .flex {
+                gap: 0.5rem;
+            }
+            
+            header select,
+            header input[type="range"] {
+                font-size: 1rem;
+                padding: 0.5rem;
+            }
+            
+            /* Mobile grid adjustments */
+            .grid-container {
+                gap: 8px;
+                padding: 0.5rem;
+            }
+            
+            .cell {
+                padding: 0.5rem;
+                border-radius: 10px;
+            }
+            
+            /* Mobile tooltip */
+            .tooltip {
+                font-size: 14px;
+                padding: 6px 12px;
+            }
+        }
+        
+        /* Extra small screens */
+        @media (max-width: 480px) {
+            .modal-toolbar {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.75rem;
+            }
+            
+            .tool-btn {
+                font-size: 2rem;
+                padding: 1rem;
+            }
+            
+            header .flex {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            header .flex > * {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body class="p-4">
+    <header class="mb-6">
+        <div class="flex flex-wrap items-center gap-4">
+            <div class="bg-[#232a36] rounded-lg px-3 py-2 flex items-center shadow-sm border border-[#313a4a]">
+                <select id="timeframe" class="bg-transparent outline-none text-base font-semibold text-[#e5e9f2] pr-8 pl-2 py-1 rounded appearance-none border-none focus:ring-2 focus:ring-[#29ffb8] transition">
+                    <option value="1m">1m</option>
+                    <option value="3m">3m</option>
+                    <option value="5m">5m</option>
+                    <option value="15m" selected>15m</option>
+                    <option value="30m">30m</option>
+                    <option value="1h">1h</option>
+                    <option value="2h">2h</option>
+                    <option value="4h">4h</option>
+                    <option value="8h">8h</option>
+                    <option value="1d">1d</option>
+                    <option value="3d">3d</option>
+                    <option value="1w">1w</option>
+                </select>
+                <span class="ml-[-24px] pointer-events-none text-[#29ffb8]">▼</span>
+            </div>
+            <div class="bg-[#232a36] rounded-lg px-3 py-2 flex items-center gap-2 shadow-sm border border-[#313a4a]">
+                <span class="text-xs text-[#b0b8c9]">Size:</span>
+                <input type="range" id="cellSizeSlider" min="80" max="250" value="120" class="w-24 accent-[#29ffb8] h-2 rounded-lg outline-none transition">
+            </div>
+            <button id="settingsBtn" class="bg-[#232a36] rounded-lg p-2 flex items-center justify-center border border-[#313a4a] shadow-sm hover:bg-[#313a4a] transition">
+                <svg width="22" height="22" fill="none" stroke="#29ffb8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 5 15.4a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09c0 .66.39 1.26 1 1.51a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c.13.21.22.45.22.7V9a2 2 0 0 1 0 4v.09c0 .25-.09.49-.22.7z"/></svg>
+            </button>
+        </div>
+    </header>
+    
+    <main class="p-[15px]">
+        <div id="gridContainer" class="grid-container overflow-y-auto"></div>
+    </main>
+    
+    <div id="tooltip" class="tooltip" style="display: none;"></div>
+    
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle" class="text-xl font-bold"></h2>
+                <button id="closeModal" class="text-2xl hover:text-gray-300 transition-colors">&times;</button>
+            </div>
+            
+            <!-- Info Bar -->
+            <div class="flex flex-wrap gap-4 px-4 py-2 bg-[#181c24] border-b border-[#313a4a]">
+                <div id="priceDisplay" class="text-[#e5e9f2]">Price: <span id="modalPrice" class="font-mono text-[#29ffb8]"></span></div>
+                <div id="volumeDisplay" class="text-[#e5e9f2]">Volume: <span id="modalVolume" class="font-mono text-[#29ffb8]"></span></div>
+                <div id="rsiDisplay" class="text-[#e5e9f2]">RSI: <span id="modalRsi" class="font-mono text-[#29ffb8]"></span></div>
+            </div>
+
+            <!-- Drawing Tools Toolbar -->
+            <div class="modal-toolbar">
+                <!-- Tool Selection -->
+                <div class="flex items-center gap-2">
+                    <button class="tool-btn active" data-tool="brush" title="Brush Tool (B)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/>
+                            <line x1="16" y1="8" x2="2" y2="22"/>
+                            <line x1="17.5" y1="15" x2="9" y2="15"/>
+                    </svg>
+                </button>
+                    <button class="tool-btn" data-tool="trendline" title="Trendline Tool (T)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="20" x2="18" y2="10"/>
+                            <line x1="12" y1="20" x2="12" y2="4"/>
+                            <line x1="6" y1="20" x2="6" y2="14"/>
+                    </svg>
+                </button>
+                    <button class="tool-btn" data-tool="eraser" title="Eraser Tool (E)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M7 21h10"/>
+                            <path d="M12 21v-7"/>
+                            <path d="M3 12l2-2 7.5-7.5 5 5L5 17l-2-2z"/>
+                    </svg>
+                </button>
+                </div>
+
+                <!-- Tool Settings -->
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm text-[#e5e9f2]">Size:</label>
+                        <input type="range" id="toolSize" min="1" max="20" value="3" class="w-20">
+                        <span id="toolSizeValue" class="text-sm text-[#29ffb8]">3</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm text-[#e5e9f2]">Color:</label>
+                        <input type="color" id="drawingColor" value="#29ffb8" class="w-8 h-8 cursor-pointer rounded border border-[#313a4a]">
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex items-center gap-2 ml-auto">
+                    <button id="undoBtn" class="tool-btn" title="Undo (Ctrl+Z)" disabled>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 7v6h6"/>
+                            <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+                        </svg>
+                    </button>
+                    <button id="redoBtn" class="tool-btn" title="Redo (Ctrl+Y)" disabled>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 7v6h-6"/>
+                            <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3-2.7"/>
+                        </svg>
+                    </button>
+                    <button id="clearDrawing" class="px-3 py-1 bg-[#e75757] text-white rounded text-sm hover:bg-[#d14545] transition-colors" title="Clear All Drawings">
+                    Clear
+                </button>
+                    <button id="exportImage" class="px-3 py-1 bg-[#29ffb8] text-[#181c24] rounded text-sm hover:bg-[#6bff6b] transition-colors font-semibold" title="Export as Image">
+                        Export
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Chart Canvas -->
+            <div class="flex-1 p-4 bg-[#181c24]">
+                <canvas id="modalChart" class="w-full h-full rounded-lg border border-[#313a4a]" style="image-rendering: crisp-edges;"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div id="settingsPanel" class="settings-panel">
+        <h3 class="text-lg font-bold mb-4">Settings</h3>
+        
+        <div class="mb-4">
+            <label class="block mb-2">Background Color:</label>
+            <input type="color" id="bgColor" value="#000000" class="w-full">
+        </div>
+        
+        <div class="mb-4">
+            <label class="block mb-2">Text Color:</label>
+            <input type="color" id="textColor" value="#ffffff" class="w-full">
+        </div>
+        
+        <div class="mb-4">
+            <label class="block mb-2">Grid Cell Background:</label>
+            <input type="color" id="cellBgColor" value="#111111" class="w-full">
+        </div>
+        
+        <div class="mb-4">
+            <label class="block mb-2">RSI Line Color:</label>
+            <input type="color" id="rsiColor" value="#ffff00" class="w-full">
+        </div>
+        
+        <div class="mb-4">
+            <label class="block mb-2">SMA Line Color:</label>
+            <input type="color" id="smaColor" value="#0000ff" class="w-full">
+        </div>
+        
+        <div class="mb-4">
+            <label class="block mb-2">50 RSI Line Color:</label>
+            <input type="color" id="rsi50Color" value="#000000" class="w-full">
+        </div>
+        
+        <div class="mb-4">
+            <label class="block mb-2">Line Width: <span id="lineWidthValue">2</span></label>
+            <input type="range" id="lineWidth" min="1" max="10" value="2" class="w-full">
+        </div>
+        
+        <div class="mb-4">
+            <label class="inline-flex items-center">
+                <input type="checkbox" id="showPrice" class="mr-2" checked>
+                <span>Show Price</span>
+            </label>
+        </div>
+        
+        <div class="mb-4">
+            <label class="inline-flex items-center">
+                <input type="checkbox" id="showVolume" class="mr-2">
+                <span>Show Volume</span>
+            </label>
+        </div>
+        
+        <button id="closeSettings" class="bg-gray-200 px-4 py-2 rounded border border-black">Close</button>
+    </div>
+    
+    <script>
+        // Global variables
+        let symbols = [];
+        let cellSize = 100; // Default cell size percentage
+        let rsiData = {};
+        let priceData = {};
+        let volumeData = {};
+        let settings = {
+            bgColor: '#181c24',
+            textColor: '#e5e9f2',
+            cellBgColor: '#232a36',
+            rsiColor: '#29ffb8',
+            smaColor: '#6bff6b',
+            rsi50Color: '#313a4a',
+            lineWidth: 2,
+            showPrice: true,
+            showVolume: false
+        };
+        
+        // Drawing variables
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        let currentTool = 'brush';
+        let currentColor = '#29ffb8';
+        let toolSize = 3;
+        let drawingHistory = [];
+        let historyIndex = -1;
+        let tempCanvas = null;
+        let tempCtx = null;
+        let modalCanvas = null;
+        let modalCtx = null;
+        let currentSymbol = '';
+        
+        // --- Modal Drawing: Object-based approach ---
+        // Drawing objects: {type: 'brush'|'trendline', points: [...], color, size}
+        let drawingObjects = [];
+        let currentDrawing = null;
+        
+        // DOM elements
+        const gridContainer = document.getElementById('gridContainer');
+        const timeframeSelect = document.getElementById('timeframe');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const settingsPanel = document.getElementById('settingsPanel');
+        const closeSettings = document.getElementById('closeSettings');
+        const bgColorInput = document.getElementById('bgColor');
+        const textColorInput = document.getElementById('textColor');
+        const cellBgColorInput = document.getElementById('cellBgColor');
+        const rsiColorInput = document.getElementById('rsiColor');
+        const smaColorInput = document.getElementById('smaColor');
+        const rsi50ColorInput = document.getElementById('rsi50Color');
+        const lineWidthInput = document.getElementById('lineWidth');
+        const lineWidthValue = document.getElementById('lineWidthValue');
+        const showPriceCheckbox = document.getElementById('showPrice');
+        const showVolumeCheckbox = document.getElementById('showVolume');
+        const tooltip = document.getElementById('tooltip');
+        const modal = document.getElementById('modal');
+        const closeModal = document.getElementById('closeModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalPrice = document.getElementById('modalPrice');
+        const modalVolume = document.getElementById('modalVolume');
+        const priceDisplay = document.getElementById('priceDisplay');
+        const volumeDisplay = document.getElementById('volumeDisplay');
+        const modalChart = document.getElementById('modalChart');
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            // Mobile-specific improvements
+            if ('ontouchstart' in window) {
+                // Prevent zoom on double-tap
+                let lastTouchEnd = 0;
+                document.addEventListener('touchend', function (event) {
+                    const now = (new Date()).getTime();
+                    if (now - lastTouchEnd <= 300) {
+                        event.preventDefault();
+                    }
+                    lastTouchEnd = now;
+                }, false);
+                
+                // Prevent pull-to-refresh on mobile
+                document.body.style.overscrollBehavior = 'none';
+            }
+            
+            // Set up event listeners
+            timeframeSelect.addEventListener('change', fetchAllRSIData);
+            document.getElementById('cellSizeSlider').addEventListener('input', (e) => {
+                cellSize = parseInt(e.target.value);
+                updateCellSizes();
+            });
+            settingsBtn.addEventListener('click', toggleSettings);
+            closeSettings.addEventListener('click', toggleSettings);
+            rsiColorInput.addEventListener('input', updateSettings);
+            lineWidthInput.addEventListener('input', updateSettings);
+            showPriceCheckbox.addEventListener('change', updateSettings);
+            showVolumeCheckbox.addEventListener('change', updateSettings);
+            closeModal.addEventListener('click', () => modal.style.display = 'none');
+            
+            // Close modal when clicking outside
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+            
+            // Load symbols and initial data
+            loadSymbols();
+            
+            // Set up periodic refresh
+            setInterval(fetchAllRSIData, 10000);
+        });
+        
+        // Load top Binance Futures symbols (excluding stablecoins)
+        async function loadSymbols() {
+            try {
+                // In a real implementation, we would fetch the top 160 coins by market cap
+                // and filter out stablecoins. For this demo, we'll use a static list of
+                // popular Binance Futures symbols.
+                
+                // This is a sample list - in production you would fetch this from Binance API
+			symbols = [
+    'BTCUSDT','ETHUSDT','SOLUSDT','XRPUSDT','BNBUSDT','DOGEUSDT','ZECUSDT','BCHUSDT','SUIUSDT','PAXGUSDT',
+    'ENAUSDT','ADAUSDT','LINKUSDT','UNIUSDT','AVAXUSDT','WLFIUSDT','TRXUSDT','LTCUSDT','FLOWUSDT','NEARUSDT',
+    'PUMPUSDT','FILUSDT','TRUMPUSDT','AAVEUSDT','WIFUSDT','DOTUSDT','TAOUSDT','XPLUSDT','APTUSDT','TONUSDT',
+    'WLDUSDT','ARBUSDT','XLMUSDT','PENGUUSDT','FETUSDT','ICPUSDT','HBARUSDT','ETCUSDT','VIRTUALUSDT','XMRUSDT',
+    'CRVUSDT','ONDOUSDT','TIAUSDT','SEIUSDT','GIGGLEUSDT','ATOMUSDT','KITEUSDT','JASMYUSDT','BARDUSDT','LDOUSDT',
+    'INJUSDT','DASHUSDT','STRKUSDT','BROCCOLI714USDT','POLUSDT','ETHFIUSDT','RENDERUSDT','AVNTUSDT','PARTIUSDT','JUPUSDT',
+    'PENDLEUSDT','ACTUSDT','CHZUSDT','CAKEUSDT','ALTUSDT','EIGENUSDT','HUMAUSDT','GALAUSDT','KAITOUSDT','PNUTUSDT',
+    'VETUSDT','ALGOUSDT','ZROUSDT','SOLVUSDT','GRTUSDT','ENJUSDT','STORJUSDT','SNXUSDT','CFXUSDT','BATUSDT',
+    'KAVAUSDT','KSMUSDT','ONEUSDT','QTUMUSDT','RUNEUSDT','IOSTUSDT','SUSHIUSDT','ZILUSDT','ZRXUSDT','ARUSDT',
+    'CELOUSDT','COMPUSDT','DYDXUSDT','EGLDUSDT','ENSUSDT','IMXUSDT','FORMUSDT','PHBUSDT'
+];
+
+                
+                // Initialize data structures
+                symbols.forEach(symbol => {
+                    rsiData[symbol] = [];
+                    priceData[symbol] = 0;
+                    volumeData[symbol] = 0;
+                });
+                
+                // Create grid cells
+                createGrid();
+                
+                // Fetch initial data
+                fetchAllRSIData();
+            } catch (error) {
+                console.error('Error loading symbols:', error);
+            }
+        }
+        
+        // Update grid columns/rows and cell sizes based on slider
+        function updateCellSizes() {
+            const cells = document.querySelectorAll('.cell');
+            const slider = document.getElementById('cellSizeSlider');
+            const value = parseInt(slider.value);
+            // Default: 3 columns at smallest zoom
+            const minCellSize = 80;
+            const maxCellSize = 250;
+            const minColumns = 3;
+            // Rectangle: width = 1.5 * height
+            const cellHeightPx = value;
+            const cellWidthPx = Math.round(value * 1.5);
+            // Calculate available width
+            const containerWidth = gridContainer.clientWidth;
+            // Fixed gap
+            const gap = 12;
+            // Calculate columns that fit
+            let columns = Math.floor((containerWidth + gap) / (cellWidthPx + gap));
+            if (columns < minColumns) columns = minColumns;
+            // Responsive: recalc on resize
+            gridContainer.style.gridTemplateColumns = `repeat(${columns}, ${cellWidthPx}px)`;
+            // Update cell dimensions
+            cells.forEach(cell => {
+                cell.style.width = `${cellWidthPx}px`;
+                cell.style.height = `${cellHeightPx}px`;
+            });
+        }
+
+        // Create grid cells for all symbols
+        function createGrid() {
+            gridContainer.innerHTML = '';
+            
+            symbols.forEach(symbol => {
+                const cell = document.createElement('div');
+                cell.className = 'cell p-2 flex flex-col items-center cursor-pointer';
+                cell.style.width = `${cellSize * 1.5}px`;
+                cell.style.height = `${cellSize}px`;
+                cell.dataset.symbol = symbol;
+                
+                const canvas = document.createElement('canvas');
+                const pixelRatio = window.devicePixelRatio;
+                canvas.style.width = '100%';
+                canvas.style.height = '100%';
+                canvas.style.display = 'block';
+                canvas.width = cellSize * 4 * pixelRatio;
+                canvas.height = cellSize * pixelRatio;
+                canvas.style.imageRendering = 'crisp-edges';
+                canvas.dataset.symbol = symbol;
+                
+                cell.appendChild(canvas);
+                
+                // Event listeners
+                cell.addEventListener('mouseover', showTooltip);
+                cell.addEventListener('mouseout', hideTooltip);
+                cell.addEventListener('click', showModal);
+                
+                gridContainer.appendChild(cell);
+            });
+        }
+        
+        // Fetch RSI data for all symbols
+        async function fetchAllRSIData() {
+            const timeframe = timeframeSelect.value;
+            
+            try {
+                const promises = symbols.map(symbol => fetchRSIData(symbol, timeframe));
+                await Promise.all(promises);
+                
+                // Update all charts
+                updateAllCharts();
+            } catch (error) {
+                console.error('Error fetching RSI data:', error);
+            }
+        }
+        
+        // Fetch candlestick data and calculate RSI for a single symbol
+        async function fetchRSIData(symbol, timeframe, limit = 80) {
+            try {
+                // Fetch candlestick data from Binance API
+                const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${timeframe}&limit=${limit + 14}`;
+                const response = await fetch(url);
+                const klines = await response.json();
+                
+                if (!klines || klines.length === 0) {
+                    console.warn(`No data for ${symbol}`);
+                    return;
+                }
+                
+                // Extract closes, prices, and volumes
+                const closes = klines.map(k => parseFloat(k[4]));
+                priceData[symbol] = closes[closes.length - 1];
+                volumeData[symbol] = parseFloat(klines[klines.length - 1][5]);
+                
+                // Calculate RSI
+                const rsiValues = calculateRSI(closes, 14);
+                
+                // Store only the last 80 RSI values
+                rsiData[symbol] = rsiValues.slice(-80);
+            } catch (error) {
+                console.error(`Error fetching data for ${symbol}:`, error);
+            }
+        }
+        
+        // Calculate RSI using smoothed RMA logic
+        function calculateRSI(closes, length) {
+            if (closes.length < length + 1) return [];
+            
+            const gains = [];
+            const losses = [];
+            
+            // Calculate initial gains and losses
+            for (let i = 1; i < closes.length; i++) {
+                const change = closes[i] - closes[i - 1];
+                gains.push(Math.max(0, change));
+                losses.push(Math.max(0, -change));
+            }
+            
+            // Calculate initial average gain and loss
+            let avgGain = gains.slice(0, length).reduce((sum, val) => sum + val, 0) / length;
+            let avgLoss = losses.slice(0, length).reduce((sum, val) => sum + val, 0) / length;
+            
+            const rsiValues = [];
+            
+            // Calculate RMA and RSI for remaining periods
+            for (let i = length; i < gains.length; i++) {
+                // Recursive Moving Average (RMA) calculation
+                avgGain = ((avgGain * (length - 1)) + gains[i]) / length;
+                avgLoss = ((avgLoss * (length - 1)) + losses[i]) / length;
+                
+                // Calculate RSI
+                const rs = avgGain / avgLoss;
+                const rsi = 100 - (100 / (1 + rs));
+                rsiValues.push(rsi);
+            }
+            
+            return rsiValues;
+        }
+        
+        // Update all mini RSI charts
+        function updateAllCharts() {
+            symbols.forEach(symbol => {
+                const canvas = document.querySelector(`canvas[data-symbol="${symbol}"]`);
+                if (canvas) {
+                    drawMiniRSIChart(canvas, rsiData[symbol], symbol);
+                }
+            });
+        }
+        
+        // Draw mini RSI chart (crisp, solid color, dark theme)
+        function drawMiniRSIChart(canvas, data, symbol) {
+            const ctx = canvas.getContext('2d');
+            const pixelRatio = window.devicePixelRatio;
+            // Set canvas size to match display size for crispness
+            const width = canvas.offsetWidth;
+            const height = canvas.offsetHeight;
+            canvas.width = width * pixelRatio;
+            canvas.height = height * pixelRatio;
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.scale(pixelRatio, pixelRatio);
+            ctx.clearRect(0, 0, width, height);
+            if (!data || data.length === 0) return;
+            // Add right gap (e.g., 12% of width) for RSI line only
+            const rightGap = width * 0.12;
+            const chartWidth = width - rightGap;
+            // Dynamic scaling
+            const dataRange = Math.max(...data) - Math.min(...data);
+            const padding = Math.max(5, dataRange * 0.2);
+            let maxRSI = Math.max(...data) + padding;
+            let minRSI = Math.min(...data) - padding;
+            maxRSI = Math.min(Math.max(maxRSI, 70), 100);
+            minRSI = Math.max(Math.min(minRSI, 30), 0);
+            if (dataRange < 10) {
+                const midpoint = (Math.max(...data) + Math.min(...data)) / 2;
+                maxRSI = midpoint + 10;
+                minRSI = midpoint - 10;
+            }
+            const scaleY = height / (maxRSI - minRSI);
+            const stepX = chartWidth / (data.length - 1);
+            // Background
+            ctx.fillStyle = '#181c24';
+            ctx.fillRect(0, 0, width, height);
+            // RSI line (solid, professional color)
+            ctx.beginPath();
+            ctx.strokeStyle = '#29ffb8';
+            ctx.lineWidth = Math.max(2, settings.lineWidth) * pixelRatio / 2;
+            ctx.shadowBlur = 0;
+            const visibleData = data.slice(-80);
+            for (let i = 0; i < visibleData.length; i++) {
+                const x = i * stepX;
+                const y = height - ((visibleData[i] - minRSI) * scaleY);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            // 50 RSI line (draw all the way to the right edge)
+            const fiftyLineY = height - ((50 - minRSI) * scaleY);
+            ctx.beginPath();
+            ctx.strokeStyle = '#313a4a';
+            ctx.lineWidth = 1 * pixelRatio;
+            ctx.setLineDash([2 * pixelRatio, 2 * pixelRatio]);
+            ctx.moveTo(0, fiftyLineY);
+            ctx.lineTo(width, fiftyLineY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        
+        // Show tooltip on hover
+        function showTooltip(e) {
+            const symbol = e.currentTarget.dataset.symbol;
+            let tooltipContent = `<strong>${symbol}</strong>`;
+            
+            if (settings.showPrice) {
+                tooltipContent += `<br>Price: ${priceData[symbol].toFixed(4)}`;
+            }
+            
+            if (settings.showVolume) {
+                tooltipContent += `<br>Volume: ${volumeData[symbol].toFixed(2)}`;
+            }
+            
+            tooltip.innerHTML = tooltipContent;
+            tooltip.style.display = 'block';
+            
+            // Position tooltip near cursor
+            document.addEventListener('mousemove', positionTooltip);
+        }
+        
+        // Position tooltip to follow cursor
+        function positionTooltip(e) {
+            tooltip.style.left = (e.pageX + 10) + 'px';
+            tooltip.style.top = (e.pageY + 10) + 'px';
+        }
+        
+        // Hide tooltip
+        function hideTooltip() {
+            tooltip.style.display = 'none';
+            document.removeEventListener('mousemove', positionTooltip);
+        }
+        
+        // Show modal with enlarged chart and drawing tools
+        function showModal(e) {
+            const symbol = e.currentTarget.dataset.symbol;
+            currentSymbol = symbol;
+            
+            modalTitle.textContent = symbol;
+            modalPrice.textContent = priceData[symbol].toFixed(4);
+            modalVolume.textContent = volumeData[symbol].toFixed(2);
+
+            // Get current RSI value
+            const currentRsi = rsiData[symbol] ? rsiData[symbol][rsiData[symbol].length - 1] : 0;
+            document.getElementById('modalRsi').textContent = currentRsi.toFixed(2);
+            
+            // Always show price, volume and RSI in modal
+            priceDisplay.classList.remove('hidden');
+            volumeDisplay.classList.remove('hidden');
+            
+            // Setup drawing tools
+            setupDrawingTools();
+            
+            // Setup canvas
+            setupModalCanvas();
+            
+            // Draw enlarged chart with current RSI data (fix: always draw after setup)
+            setTimeout(() => {
+                if (rsiData[symbol] && rsiData[symbol].length > 0) {
+                    drawEnlargedRSIChart(modalChart, rsiData[symbol], symbol);
+                } else {
+                    console.warn('No RSI data for', symbol);
+                }
+            }, 0);
+            
+            modal.style.display = 'flex';
+        }
+        
+        // Setup drawing tools and event listeners
+        function setupDrawingTools() {
+            drawingObjects = [];
+            currentDrawing = null;
+            // Tool selection
+            const toolButtons = document.querySelectorAll('.tool-btn[data-tool]');
+            toolButtons.forEach(btn => {
+                btn.classList.remove('active'); // No tool selected by default
+                btn.addEventListener('click', () => {
+                    toolButtons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentTool = btn.dataset.tool;
+                });
+            });
+            // Tool size
+            const toolSizeSlider = document.getElementById('toolSize');
+            const toolSizeValue = document.getElementById('toolSizeValue');
+            toolSizeSlider.addEventListener('input', (e) => {
+                toolSize = parseInt(e.target.value);
+                toolSizeValue.textContent = toolSize;
+            });
+            // Color picker
+            const colorPicker = document.getElementById('drawingColor');
+            colorPicker.addEventListener('input', (e) => {
+                currentColor = e.target.value;
+            });
+            // Undo/Redo
+            document.getElementById('undoBtn').addEventListener('click', undo);
+            document.getElementById('redoBtn').addEventListener('click', redo);
+            // Clear
+            document.getElementById('clearDrawing').addEventListener('click', () => {
+                if (confirm('Are you sure you want to clear all drawings?')) {
+                    clearDrawings();
+                }
+            });
+            // Export
+            document.getElementById('exportImage').addEventListener('click', exportAsImage);
+            // Keyboard shortcuts
+            document.addEventListener('keydown', handleKeyboardShortcuts);
+            // No tool selected by default
+            currentTool = null;
+        }
+        
+        // Setup modal canvas for drawing
+        function setupModalCanvas() {
+            modalCanvas = document.getElementById('modalChart');
+            modalCtx = modalCanvas.getContext('2d');
+            
+            // Set canvas size
+            const container = modalCanvas.parentElement;
+            const width = container.clientWidth - 32; // Account for padding
+            const height = container.clientHeight - 32;
+            
+            modalCanvas.width = width * window.devicePixelRatio;
+            modalCanvas.height = height * window.devicePixelRatio;
+            modalCanvas.style.width = `${width}px`;
+            modalCanvas.style.height = `${height}px`;
+            
+            // Scale context
+            modalCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            
+            // Setup drawing event listeners
+            modalCanvas.addEventListener('mousedown', startDrawing);
+            modalCanvas.addEventListener('mousemove', draw);
+            modalCanvas.addEventListener('mouseup', stopDrawing);
+            modalCanvas.addEventListener('mouseout', stopDrawing);
+            
+            // Touch events for mobile
+            modalCanvas.addEventListener('touchstart', handleTouch);
+            modalCanvas.addEventListener('touchmove', handleTouch);
+            modalCanvas.addEventListener('touchend', stopDrawing);
+            
+            // Clear drawing history
+            drawingHistory = [];
+            historyIndex = -1;
+            updateUndoRedoButtons();
+        }
+        
+        // Handle touch events
+        function handleTouch(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = modalCanvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            
+            if (e.type === 'touchstart') {
+                startDrawing({ clientX: touch.clientX, clientY: touch.clientY });
+            } else if (e.type === 'touchmove') {
+                if (currentTool === 'eraser') {
+                    eraseObjectAt(x, y);
+                    // Do NOT set isDrawing = false here; allow continuous erasing
+                } else {
+                    draw({ clientX: touch.clientX, clientY: touch.clientY });
+                }
+            }
+        }
+        
+        // Start drawing
+            function startDrawing(e) {
+                isDrawing = true;
+            const rect = modalCanvas.getBoundingClientRect();
+            lastX = e.clientX - rect.left;
+            lastY = e.clientY - rect.top;
+            if (currentTool === 'brush') {
+                currentDrawing = {type: 'brush', points: [[lastX, lastY]], color: currentColor, size: toolSize};
+            } else if (currentTool === 'trendline') {
+                currentDrawing = {type: 'trendline', points: [[lastX, lastY]], color: currentColor, size: toolSize};
+            } else if (currentTool === 'eraser') {
+                eraseObjectAt(lastX, lastY);
+                // Do NOT set isDrawing = false here; allow continuous erasing
+            }
+        }
+        // Also handle eraser on mousemove/touchmove for drag-to-erase
+            function draw(e) {
+                if (!isDrawing) return;
+            const rect = modalCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+                if (currentTool === 'brush') {
+                currentDrawing.points.push([x, y]);
+                redrawChartAndDrawings();
+                drawObject(currentDrawing);
+                } else if (currentTool === 'trendline') {
+                if (currentDrawing.points.length === 1) {
+                    currentDrawing.points[1] = [x, y];
+                } else {
+                    currentDrawing.points[1] = [x, y];
+                }
+                redrawChartAndDrawings();
+                drawObject(currentDrawing);
+            } else if (currentTool === 'eraser') {
+                eraseObjectAt(x, y);
+                // Do NOT set isDrawing = false here; allow continuous erasing
+            }
+                lastX = x;
+                lastY = y;
+            }
+            
+        // Stop drawing
+            function stopDrawing() {
+            if (isDrawing && currentDrawing) {
+                drawingObjects.push(currentDrawing);
+                saveDrawingState();
+                currentDrawing = null;
+            }
+                isDrawing = false;
+        }
+        
+        // Save current drawing state for undo/redo
+        function saveDrawingState() {
+            // Remove any states after current index
+            drawingHistory = drawingHistory.slice(0, historyIndex + 1);
+            
+            // Save current canvas state
+            const imageData = modalCtx.getImageData(0, 0, modalCanvas.width, modalCanvas.height);
+            drawingHistory.push(imageData);
+            historyIndex++;
+            
+            updateUndoRedoButtons();
+        }
+        
+        // Undo last drawing action
+        function undo() {
+            if (historyIndex > 0) {
+                historyIndex--;
+                restoreDrawingState();
+            }
+        }
+        
+        // Redo last undone action
+        function redo() {
+            if (historyIndex < drawingHistory.length - 1) {
+                historyIndex++;
+                restoreDrawingState();
+            }
+        }
+        
+        // Restore drawing state
+        function restoreDrawingState() {
+            if (drawingHistory[historyIndex]) {
+                modalCtx.putImageData(drawingHistory[historyIndex], 0, 0);
+            } else {
+                // If no history, redraw chart
+                redrawChartAndDrawings();
+            }
+            updateUndoRedoButtons();
+        }
+        
+        // Update undo/redo button states
+        function updateUndoRedoButtons() {
+            document.getElementById('undoBtn').disabled = historyIndex <= 0;
+            document.getElementById('redoBtn').disabled = historyIndex >= drawingHistory.length - 1;
+        }
+        
+        // Clear all drawings
+        function clearDrawings() {
+            drawingHistory = [];
+            historyIndex = -1;
+            redrawChartAndDrawings();
+            updateUndoRedoButtons();
+        }
+        
+        // Redraw chart and all drawing objects
+        function redrawChartAndDrawings() {
+            if (rsiData[currentSymbol] && rsiData[currentSymbol].length > 0) {
+                drawEnlargedRSIChart(modalChart, rsiData[currentSymbol], currentSymbol);
+            }
+            for (const obj of drawingObjects) {
+                drawObject(obj);
+            }
+            if (currentDrawing) {
+                drawObject(currentDrawing);
+            }
+        }
+        
+        // Export chart as image
+        function exportAsImage() {
+            const link = document.createElement('a');
+            link.download = `${currentSymbol}_RSI_Chart.png`;
+            link.href = modalCanvas.toDataURL();
+            link.click();
+        }
+        
+        // Handle keyboard shortcuts
+        function handleKeyboardShortcuts(e) {
+            if (modal.style.display === 'flex') {
+                if (e.ctrlKey || e.metaKey) {
+                    switch (e.key) {
+                        case 'z':
+                            e.preventDefault();
+                            undo();
+                            break;
+                        case 'y':
+                            e.preventDefault();
+                            redo();
+                            break;
+                    }
+                } else {
+                    switch (e.key.toLowerCase()) {
+                        case 'b':
+                            setActiveTool('brush');
+                            break;
+                        case 't':
+                            setActiveTool('trendline');
+                            break;
+                        case 'e':
+                            setActiveTool('eraser');
+                            break;
+                    }
+                }
+            }
+        }
+        
+        // Set active tool
+        function setActiveTool(tool) {
+            currentTool = tool;
+            const toolButtons = document.querySelectorAll('.tool-btn[data-tool]');
+            toolButtons.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tool === tool);
+            });
+        }
+        
+        // Draw enlarged RSI chart for modal (crisp, solid color, dark theme)
+        function drawEnlargedRSIChart(canvas, data, symbol) {
+            const ctx = canvas.getContext('2d');
+            const pixelRatio = window.devicePixelRatio;
+            // Set canvas dimensions
+            const width = canvas.offsetWidth;
+            const height = canvas.offsetHeight;
+            canvas.width = width * pixelRatio;
+            canvas.height = height * pixelRatio;
+            canvas.style.width = `${width}px`;
+            canvas.style.height = `${height}px`;
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.scale(pixelRatio, pixelRatio);
+            ctx.clearRect(0, 0, width, height);
+            if (!data || data.length === 0) return;
+            // Chart area and scale area
+            const scaleWidth = 60;
+            const chartMargin = 16;
+            const chartLeft = chartMargin;
+            const chartRight = width - scaleWidth - chartMargin;
+            const chartTop = chartMargin;
+            const chartBottom = height - chartMargin;
+            const chartWidth = chartRight - chartLeft;
+            const chartHeight = chartBottom - chartTop;
+            // Background
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, width, height);
+            // Dynamic scaling
+            const dataRange = Math.max(...data) - Math.min(...data);
+            let maxRSI = Math.max(...data) + 10;
+            let minRSI = Math.min(...data) - 10;
+            maxRSI = Math.min(Math.max(maxRSI, 70), 100);
+            minRSI = Math.max(Math.min(minRSI, 30), 0);
+            if (dataRange < 10) {
+                const midpoint = (Math.max(...data) + Math.min(...data)) / 2;
+                maxRSI = midpoint + 10;
+                minRSI = midpoint - 10;
+            }
+            const scaleY = chartHeight / (maxRSI - minRSI);
+            const stepX = chartWidth / (data.length - 1);
+            // Draw horizontal grid lines and scale
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 1;
+            ctx.font = '13px Inter, Arial, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#fff';
+            for (let v = Math.ceil(minRSI / 10) * 10; v <= maxRSI; v += 10) {
+                const y = chartBottom - (v - minRSI) * scaleY;
+            ctx.beginPath();
+                ctx.moveTo(chartLeft, y);
+                ctx.lineTo(chartRight, y);
+                ctx.strokeStyle = v === 50 ? '#aaa' : '#222';
+                ctx.globalAlpha = v === 50 ? 1 : 0.5;
+                ctx.stroke();
+                ctx.globalAlpha = 1;
+                // Draw scale text
+                ctx.fillStyle = '#fff';
+                ctx.textAlign = 'right';
+                ctx.fillText(v.toFixed(0), width - chartMargin - 8, y);
+            }
+            // Draw 50 line (thicker)
+            const y50 = chartBottom - (50 - minRSI) * scaleY;
+            ctx.beginPath();
+            ctx.moveTo(chartLeft, y50);
+            ctx.lineTo(chartRight, y50);
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.7;
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            // Draw RSI line (yellow)
+            ctx.beginPath();
+            ctx.strokeStyle = '#ffe600';
+            ctx.lineWidth = 2.2;
+            ctx.lineJoin = 'round';
+            const visibleData = data.slice(-80);
+            for (let i = 0; i < visibleData.length; i++) {
+                const x = chartLeft + i * stepX;
+                const y = chartBottom - (visibleData[i] - minRSI) * scaleY;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            // Draw SMA line (blue)
+            const smaLength = 14;
+            if (visibleData.length > smaLength) {
+                const smaValues = [];
+                for (let i = smaLength - 1; i < visibleData.length; i++) {
+                    const sum = visibleData.slice(i - smaLength + 1, i + 1).reduce((a, b) => a + b, 0);
+                    smaValues.push(sum / smaLength);
+                }
+                ctx.beginPath();
+                ctx.strokeStyle = '#4ec3fa';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([5, 3]);
+                for (let i = 0; i < smaValues.length; i++) {
+                    const x = chartLeft + (i + smaLength - 1) * stepX;
+                    const y = chartBottom - (smaValues[i] - minRSI) * scaleY;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+        
+        // Draw an individual object (brush or trendline)
+        function drawObject(obj) {
+            if (obj.type === 'brush') {
+                modalCtx.beginPath();
+                modalCtx.strokeStyle = obj.color;
+                modalCtx.lineWidth = obj.size;
+                modalCtx.lineCap = 'round';
+                modalCtx.lineJoin = 'round';
+                for (let i = 0; i < obj.points.length; i++) {
+                    const [x, y] = obj.points[i];
+                    if (i === 0) modalCtx.moveTo(x, y);
+                    else modalCtx.lineTo(x, y);
+                }
+                modalCtx.stroke();
+            } else if (obj.type === 'trendline' && obj.points.length === 2) {
+                modalCtx.beginPath();
+                modalCtx.strokeStyle = obj.color;
+                modalCtx.lineWidth = obj.size;
+                modalCtx.setLineDash([5, 3]);
+                modalCtx.moveTo(obj.points[0][0], obj.points[0][1]);
+                modalCtx.lineTo(obj.points[1][0], obj.points[1][1]);
+                modalCtx.stroke();
+                modalCtx.setLineDash([]);
+            }
+        }
+        
+        // Toggle settings panel
+        function toggleSettings() {
+            settingsPanel.style.display = settingsPanel.style.display === 'block' ? 'none' : 'block';
+        }
+        
+        // Update settings from form inputs
+        function updateSettings() {
+            settings.bgColor = bgColorInput.value;
+            settings.textColor = textColorInput.value;
+            settings.cellBgColor = cellBgColorInput.value;
+            settings.rsiColor = rsiColorInput.value;
+            settings.smaColor = smaColorInput.value;
+            settings.rsi50Color = rsi50ColorInput.value;
+            settings.lineWidth = parseInt(lineWidthInput.value);
+            settings.showPrice = showPriceCheckbox.checked;
+            settings.showVolume = showVolumeCheckbox.checked;
+            
+            lineWidthValue.textContent = settings.lineWidth;
+            
+            // Apply color changes to the page
+            document.body.style.backgroundColor = settings.bgColor;
+            document.body.style.color = settings.textColor;
+            
+            // Update all grid cells
+            document.querySelectorAll('.cell').forEach(cell => {
+                cell.style.backgroundColor = settings.cellBgColor;
+            });
+            
+            // Redraw all charts with new settings
+            updateAllCharts();
+            
+            // Redraw modal chart if open
+            if (modal.style.display === 'flex') {
+                const symbol = modalTitle.textContent;
+                drawEnlargedRSIChart(modalChart, rsiData[symbol], symbol);
+            }
+        }
+        
+        // Handle window resize with observer for better performance
+        const resizeObserver = new ResizeObserver(() => {
+            updateCellSizes();
+            updateAllCharts();
+            
+            // Redraw modal chart if open
+            if (modal.style.display === 'flex') {
+                const symbol = modalTitle.textContent;
+                drawEnlargedRSIChart(modalChart, rsiData[symbol], symbol);
+            }
+        });
+        
+        resizeObserver.observe(gridContainer);
+
+        // Erase object at (x, y)
+        function eraseObjectAt(x, y) {
+            console.log('Eraser clicked at:', x, y, 'Total objects:', drawingObjects.length);
+            
+            // Find the topmost object under the cursor
+            for (let i = drawingObjects.length - 1; i >= 0; i--) {
+                const obj = drawingObjects[i];
+                console.log('Checking object:', obj.type, obj.points);
+                
+                if (obj.type === 'brush') {
+                    // Check if any point in the brush stroke is close to cursor
+                    for (const [px, py] of obj.points) {
+                        const distance = Math.sqrt((px - x) ** 2 + (py - y) ** 2);
+                        console.log('Brush point distance:', distance, 'threshold:', obj.size * 3);
+                        if (distance < obj.size * 3) {
+                            console.log('Erasing brush object at index:', i);
+                            drawingObjects.splice(i, 1);
+                            redrawChartAndDrawings();
+                            saveDrawingState();
+                            return true;
+                        }
+                    }
+                } else if (obj.type === 'trendline' && obj.points.length === 2) {
+                    // Distance from point to line segment
+                    const [x1, y1] = obj.points[0];
+                    const [x2, y2] = obj.points[1];
+                    const dist = pointToSegmentDistance(x, y, x1, y1, x2, y2);
+                    console.log('Trendline distance:', dist, 'threshold:', obj.size * 3);
+                    if (dist < obj.size * 3) {
+                        console.log('Erasing trendline object at index:', i);
+                        drawingObjects.splice(i, 1);
+                        redrawChartAndDrawings();
+                        saveDrawingState();
+                        return true;
+                    }
+                }
+            }
+            console.log('No object found to erase');
+            return false;
+        }
+        
+        // Helper: distance from point to segment
+        function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
+            const A = px - x1;
+            const B = py - y1;
+            const C = x2 - x1;
+            const D = y2 - y1;
+            
+            const dot = A * C + B * D;
+            const lenSq = C * C + D * D;
+            let param = -1;
+            
+            if (lenSq !== 0) param = dot / lenSq;
+            
+            let xx, yy;
+            
+            if (param < 0) {
+                xx = x1;
+                yy = y1;
+            } else if (param > 1) {
+                xx = x2;
+                yy = y2;
+            } else {
+                xx = x1 + param * C;
+                yy = y1 + param * D;
+            }
+            
+            const dx = px - xx;
+            const dy = py - yy;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+    </script>
+</body>
+</html>
