@@ -1,0 +1,56 @@
+.rsi-cell {
+  position: relative;
+  content-visibility: auto;
+  contain: layout paint style;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rsi-cell:hover,
+.rsi-cell:focus-visible {
+  transform: translateY(-2px) scale(1.02);
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(41, 255, 184, 0.14);
+  outline: none;
+}
+
+.rsi-cell__canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.rsi-cell__label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 6px 8px;
+  pointer-events: none;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rsi-cell__symbol {
+  color: var(--text-secondary);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+.rsi-cell__value {
+  color: var(--text-primary);
+  font-family: 'SFMono-Regular', ui-monospace, Consolas, monospace;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+.rsi-cell__value.is-high {
+  color: var(--danger);
+}
+
+.rsi-cell__value.is-low {
+  color: var(--accent);
+}

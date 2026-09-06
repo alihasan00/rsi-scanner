@@ -1,0 +1,9 @@
+.rsi-grid {
+  display: grid;
+  justify-content: center;
+  align-content: start;
+  padding: 0 16px 16px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}

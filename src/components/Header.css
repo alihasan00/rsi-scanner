@@ -1,0 +1,38 @@
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 16px;
+  padding: 14px 20px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  flex-shrink: 0;
+}
+
+.app-header__title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.app-header__size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-header__size-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 640px) {
+  .app-header {
+    margin: 8px;
+    padding: 12px;
+  }
+}
