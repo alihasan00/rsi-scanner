@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Slider, Space } from 'antd'
+import { Button, Checkbox, Slider, Space, Tooltip } from 'antd'
 import { SettingOutlined } from '@ant-design/icons'
 import { useShallow } from 'zustand/react/shallow'
 import { useScannerStore } from '../store/scannerStore'
@@ -7,10 +7,12 @@ import { TimeframePicker } from './TimeframePicker'
 import './Header.css'
 
 export function Header() {
-  const { cellSize, setCellSize, openSettings } = useScannerStore(useShallow((state) => ({
+  const { cellSize, setCellSize, openSettings, showDivergences, updateSettings } = useScannerStore(useShallow((state) => ({
     cellSize: state.cellSize,
     setCellSize: state.setCellSize,
     openSettings: state.openSettings,
+    showDivergences: state.settings.showDivergences,
+    updateSettings: state.updateSettings,
   })))
   const [draftCellSize, setDraftCellSize] = useState(cellSize)
 
@@ -19,6 +21,14 @@ export function Header() {
       <div className="app-header__title">RSI Scanner</div>
       <Space size="middle" wrap>
         <TimeframePicker />
+        <Tooltip title="Show RSI divergences between confirmed RSI pivots. Hidden divergences can be included in Settings.">
+          <Checkbox
+            checked={showDivergences}
+            onChange={(event) => updateSettings({ showDivergences: event.target.checked })}
+          >
+            Divergences
+          </Checkbox>
+        </Tooltip>
         <div className="app-header__size">
           <span className="app-header__size-label">Size</span>
           <Slider

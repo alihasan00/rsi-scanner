@@ -9,6 +9,11 @@ export const DEFAULT_SETTINGS: ChartSettings = {
   lineWidth: 2,
   showPrice: true,
   showVolume: false,
+  showDivergences: false,
+  showHiddenDivergences: false,
+  requireBodyAgreement: true,
+  requireSameRsiCycle: true,
+  divergenceInvalidationAnchor: 'second',
 }
 
 export const DEFAULT_STARRED_TIMEFRAMES: Timeframe[] = ['15m', '1h', '4h', '1d']
@@ -59,6 +64,15 @@ export const useScannerStore = create<ScannerState>()(
       partialize: ({ timeframe, cellSize, starredTimeframes, settings }) => (
         { timeframe, cellSize, starredTimeframes, settings }
       ),
+      // Keep defaults for preferences added after a user's settings were saved.
+      merge: (persisted, current) => {
+        const saved = persisted as Partial<ScannerState> | undefined
+        return {
+          ...current,
+          ...saved,
+          settings: { ...DEFAULT_SETTINGS, ...saved?.settings },
+        }
+      },
     },
   ),
 )

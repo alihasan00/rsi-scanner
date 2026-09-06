@@ -37,7 +37,9 @@ export function seedRsiState(closes: number[], length = RSI_LENGTH): RsiState | 
 
   let avgGain = average(gains.slice(0, length))
   let avgLoss = average(losses.slice(0, length))
-  const series: number[] = []
+  // The average of the first `length` changes already yields the first RSI,
+  // aligned with closes[length]. Subsequent closes apply Wilder smoothing.
+  const series: number[] = [rsiFromAverages(avgGain, avgLoss)]
 
   for (let i = length; i < gains.length; i++) {
     avgGain = (avgGain * (length - 1) + gains[i]) / length

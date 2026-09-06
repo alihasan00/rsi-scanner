@@ -1,3 +1,6 @@
+import type { Candle } from '../types'
+import { isValidCandle } from './rsiHistory'
+
 // Combined kline stream manager. Binance limits how many streams a single
 // connection may carry, so symbols are sharded across a few sockets.
 
@@ -5,19 +8,35 @@ const WS_BASE = 'wss://stream.binance.com:9443/stream'
 const CHUNK_SIZE = 50
 const RECONNECT_DELAY_MS = 3000
 
-export interface KlineTick {
+export interface KlineTick extends Candle {
   symbol: string
-  close: number
-  volume: number
   isFinal: boolean
 }
 
 export type KlineListener = (tick: KlineTick) => void
 
-interface RawKlineMessage {
-  data?: {
-    k?: { s: string; c: string; v: string; x: boolean }
+export function parseKlineTick(raw: unknown): KlineTick | null {
+  if (!raw || typeof raw !== 'object' || !('data' in raw)) return null
+  const data = raw.data
+  if (!data || typeof data !== 'object' || !('k' in data)) return null
+  const k = data.k
+  if (!k || typeof k !== 'object') return null
+  if (!('s' in k) || typeof k.s !== 'string' || !k.s
+    || !('x' in k) || typeof k.x !== 'boolean'
+    || !('t' in k) || !('T' in k) || !('o' in k) || !('h' in k)
+    || !('l' in k) || !('c' in k) || !('v' in k)) return null
+  const tick: KlineTick = {
+    symbol: k.s.toUpperCase(),
+    openTime: Number(k.t),
+    closeTime: Number(k.T),
+    open: Number(k.o),
+    high: Number(k.h),
+    low: Number(k.l),
+    close: Number(k.c),
+    volume: Number(k.v),
+    isFinal: k.x,
   }
+  return isValidCandle(tick) ? tick : null
 }
 
 export class KlineStreamManager {
@@ -57,20 +76,14 @@ export class KlineStreamManager {
     socket.addEventListener('message', (event) => {
       if (this.closed || !this.sockets.has(socket)) return
 
-      let payload: RawKlineMessage
+      let payload: unknown
       try {
         payload = JSON.parse(event.data as string)
       } catch {
         return
       }
-      const k = payload.data?.k
-      if (!k) return
-      this.listener({
-        symbol: k.s.toUpperCase(),
-        close: Number.parseFloat(k.c),
-        volume: Number.parseFloat(k.v),
-        isFinal: k.x,
-      })
+      const tick = parseKlineTick(payload)
+      if (tick) this.listener(tick)
     })
 
     socket.addEventListener('close', () => {

@@ -16,7 +16,7 @@ describe('dataStore', () => {
     let ethNotifications = 0
     const unsubscribeBtc = subscribeSymbol('BTCUSDT', () => { btcNotifications += 1 })
     const unsubscribeEth = subscribeSymbol('ETHUSDT', () => { ethNotifications += 1 })
-    const snapshot = { price: 101, volume: 12, series: [45, 51] }
+    const snapshot = { price: 101, volume: 12, series: [45, 51], bars: [] }
 
     setSymbolSnapshot('BTCUSDT', snapshot)
 
@@ -29,7 +29,7 @@ describe('dataStore', () => {
   })
 
   test('notifies subscribers when reset removes their snapshots', () => {
-    const snapshot = { price: 101, volume: 12, series: [45, 51] }
+    const snapshot = { price: 101, volume: 12, series: [45, 51], bars: [] }
     setSymbolSnapshot('BTCUSDT', snapshot)
     let notifications = 0
     const unsubscribe = subscribeSymbol('BTCUSDT', () => { notifications += 1 })
@@ -37,7 +37,7 @@ describe('dataStore', () => {
     resetSymbolData()
 
     expect(notifications).toBe(1)
-    expect(getSymbolSnapshot('BTCUSDT')).toEqual({ price: 0, volume: 0, series: [] })
+    expect(getSymbolSnapshot('BTCUSDT')).toEqual({ price: 0, volume: 0, series: [], bars: [] })
 
     unsubscribe()
   })
@@ -47,7 +47,7 @@ describe('dataStore', () => {
     const unsubscribe = subscribeSymbol('BTCUSDT', () => { notifications += 1 })
     unsubscribe()
 
-    setSymbolSnapshot('BTCUSDT', { price: 102, volume: 3, series: [60] })
+    setSymbolSnapshot('BTCUSDT', { price: 102, volume: 3, series: [60], bars: [] })
 
     expect(notifications).toBe(0)
   })
