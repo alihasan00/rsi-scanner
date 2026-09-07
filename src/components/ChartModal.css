@@ -1,8 +1,9 @@
 .chart-modal__title {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 8px 12px;
+  padding: 2px 32px 10px 0;
 }
 
 .chart-modal__symbol {
@@ -10,65 +11,39 @@
   font-weight: 700;
 }
 
-.chart-modal__stats {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  font-weight: 400;
+.chart-modal__timeframe.ant-tag,
+.chart-modal__live.ant-tag {
+  margin-inline-end: 0;
 }
 
-.chart-modal__stats strong {
-  color: var(--text-primary);
+.chart-modal__timeframe.ant-tag {
+  color: var(--text-secondary);
+  background: var(--color-surface);
+  border-color: var(--color-hairline);
+}
+
+.chart-modal__price {
   font-family: 'SFMono-Regular', ui-monospace, Consolas, monospace;
+  font-size: 0.95rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
-.chart-modal__toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  padding-bottom: 16px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--panel-border);
-}
-
-.chart-modal__toolbar-label {
-  font-size: 0.8rem;
+.chart-modal__price small {
   color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 400;
 }
 
 .chart-modal__chart-area {
   position: relative;
   width: 100%;
-  height: min(60vh, 480px);
+  height: min(72vh, 720px);
+  min-height: 420px;
+  border: 1px solid var(--color-hairline);
+  background: var(--color-surface);
   border-radius: 10px;
   overflow: hidden;
-}
-
-.chart-modal__time-range {
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-bottom: 10px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.chart-modal__time-range time {
-  white-space: nowrap;
-}
-
-.chart-modal__divergence-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-  color: var(--text-secondary);
-  font-size: 11px;
 }
 
 .chart-modal__base-canvas {
@@ -79,145 +54,27 @@
   display: block;
 }
 
-.drawing-canvas {
+.chart-modal__empty {
   position: absolute;
   inset: 0;
+  display: grid;
+  place-items: center;
 }
-
-.divergence-details {
-  margin-top: 18px;
-  font-size: 12px;
-}
-
-.divergence-details__heading,
-.divergence-details__legend {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-}
-
-.divergence-details__heading {
-  justify-content: space-between;
-}
-
-.divergence-details__counts {
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
-.divergence-details__rules {
-  padding: 9px 12px;
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-}
-
-.divergence-details__rules summary {
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.divergence-details__rules .divergence-details__note:last-child {
-  margin-bottom: 0;
-}
-
-.divergence-details__note,
-.divergence-details__empty,
-.divergence-details__legend {
-  color: var(--text-secondary);
-}
-
-.divergence-details__note {
-  margin: 8px 0 12px;
-  line-height: 1.6;
-}
-
-.divergence-details__empty {
-  padding: 16px;
-  border: 1px dashed var(--panel-border);
-  border-radius: 8px;
-  text-align: center;
-}
-
-.divergence-details__scroll {
-  max-height: 280px;
-  overflow: auto;
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-}
-
-.divergence-details__table {
-  width: 100%;
-  text-align: left;
-  border-collapse: collapse;
-  white-space: nowrap;
-}
-
-.divergence-details__table th,
-.divergence-details__table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--panel-border);
-  vertical-align: top;
-}
-
-.divergence-details__table .divergence-details__outcome {
-  min-width: 220px;
-  max-width: 280px;
-  white-space: normal;
-}
-
-.divergence-details__state {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.divergence-details__state.is-forming { color: #e7c56b; }
-.divergence-details__state.is-confirmed { color: #77bdff; }
-.divergence-details__state.is-completed { color: #29ffb8; }
-.divergence-details__state.is-harmonised { color: #ff6b81; }
-.divergence-details__state.is-expired,
-.divergence-details__state.is-unconfirmed,
-.divergence-details__state.is-interrupted { color: var(--text-secondary); }
-
-.divergence-details__table thead {
-  position: sticky;
-  top: 0;
-  background: var(--panel-bg);
-}
-
-.divergence-details__table tbody th {
-  font-weight: 500;
-}
-
-.divergence-details__table small {
-  display: block;
-  margin-top: 4px;
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-.divergence-details .is-bullish { color: #29ffb8; }
-.divergence-details .is-bearish { color: #ff6b81; }
 
 @media (max-width: 640px) {
-  .chart-modal__toolbar {
-    flex-direction: column;
-    align-items: stretch;
+  .chart-modal .ant-modal-container {
+    padding: 16px 12px;
   }
-}
 
-.divergence-backtest {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid var(--panel-border);
-  font-size: 12px;
-}
+  .chart-modal__title {
+    gap: 6px 8px;
+  }
 
-.divergence-backtest__table td strong {
-  color: var(--text-primary);
-}
+  .chart-modal__symbol {
+    font-size: 1rem;
+  }
 
-.divergence-backtest__warnings {
-  margin: 0;
-  padding-left: 18px;
+  .chart-modal__price {
+    font-size: 0.85rem;
+  }
 }

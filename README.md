@@ -1,9 +1,16 @@
-# Market Scanners
+# Market Screener
 
-A Vite + React + TypeScript app with separate **RSI** and **Support & Resistance**
-tabs. It seeds Binance spot candles from REST and keeps each symbol current with
-combined kline WebSocket streams. The RSI view, ported from `RSI Scanner.html`,
-renders compact canvas charts plus an annotatable detail view.
+A Vite + React + TypeScript app with one **Screener** workspace for Binance Spot
+USDT pairs. Each card puts a price and RSI chart above the pair's details, with
+just two indicators: **RSI divergences** and **Tug of War**. Binance REST seeds
+the candle history and combined kline WebSocket streams keep it current. Open
+any card for aligned price, Heikin-Ashi, and RSI charts.
+The interface uses Ant Design components with the supplied dark purple theme.
+
+This repository contains the frontend only. The standalone Rust data tool lives
+in the separate sibling project `../cli` and fetches and analyzes market
+data from the command line for AI-assisted analysis. Both projects build and run
+independently.
 
 ## Development
 
@@ -20,103 +27,86 @@ bun run lint
 bun run build
 ```
 
-## Support & Resistance
+## Screener
 
-Select **Support & Resistance** to see every symbol's current price in USDT,
-trend, nearest support, and nearest resistance, each with its percentage
-distance from the live price. Toggle between **Cards** and **List**; the list
-view is a compact table whose Pair, Support, and Resistance headers also set the
-sort order. Search filters by symbol, and the timeframe picker applies to both
-scanners. Switching tabs reuses the existing feed; the tab, view, sort, and
-filters are saved across reloads.
+The single **Screener** workspace shows a card for each watchlist pair. Each card
+has raw price candlesticks and aligned RSI(14) above the pair name, current quote,
+candle change, and both indicator states. The final hollow candle is still
+forming; its price and RSI are provisional. The percentage change is from the
+latest candle's open to its current close on the selected timeframe, **not a
+24-hour change**. Closed-candle times are shown in UTC.
 
-Filters narrow the market to pairs that are interacting with a level:
+- **Search:** type a pair such as `BTC` or `BTC/USDT`; press `/` to focus search
+  when no input or dialog is active.
+- **Indicators:** choose all indicators, RSI divergences, or Tug of War setups.
+  Overview counters show pairs tracked and the two indicator counts. There is no
+  separate confirmation view or control; confirmation remains a signal state.
+- **Direction:** choose bullish or bearish within the selected indicator.
+  Undecided Tug of War sequences appear under any direction. Tug of War follows
+  the current candle's provisional control; a possible resolution can match its
+  direction before close and is clearly labeled as live.
+- **Favorites:** star cards and switch to **Starred** for a focused collection.
+- **Sorting:** use watchlist order, active signals, candle change, RSI ascending
+  or descending, or pair name.
+- **Layout and timeframe:** choose comfortable or compact cards and a common
+  candle timeframe. Favorites, card density, timeframe preferences, and
+  indicator settings are saved across reloads.
 
-- **Side:** apply the level conditions to support, resistance, or either.
-- **Within:** keep pairs whose chosen level is within 0.25% to 5% of price.
-- **Trend:** uptrend, downtrend, or sideways.
-- **Touches:** require a zone built from two or three or more confirmed swings.
-- **Break direction:** choose **All levels**, **Pending breakouts only** (price
-  above resistance), **Pending breakdowns only** (price below support), or
-  **Both pending directions**. Pending breaks await a candle close more than
-  0.1% beyond the crossed level. Side, distance, and touches then apply to that
-  same pending break. Changing direction resets Side to **Either level**.
-- **Sort:** list order, nearest level, closest support, or closest resistance.
+Loading cards show **Waiting for market data**. Failed requests show **Data
+unavailable · retrying** and retry automatically while available pairs keep
+updating. A pair without an update for over 60 seconds shows **Updates delayed**.
+Pairs without loaded candles cannot satisfy signal or direction filters. Empty
+searches and filters have a reset action.
 
-All level conditions must hold on the same level, so "within 0.5%" with
-"2+ touches" means one zone that is both close and well tested. Normally these
-conditions use the nearest support/resistance; pending-direction filters use
-only the matching crossed zones displayed separately. Sorting always uses the
-nearest support/resistance columns. Pairs still loading are hidden while any
-filter is active, because they cannot be
-evaluated. Market-wide updates for filtering and sorting are throttled to a few
-per second; individual cards still update on their own ticks.
+Click a chart or **View chart** to open the shared detail view. A compact header
+shows the pair, timeframe, and current raw market price. Raw price, Heikin-Ashi,
+and RSI charts share one timeline. Heikin-Ashi prices are labeled as averaged,
+and the open candle updates live. Support/resistance, market-analysis, and
+order-flow views are no longer part of the interface.
 
-The detector uses the latest 300 closed candles from the most recent continuous
-history segment. A price swing low or high must be strictly lower or higher than
-the three candles on each side, so a swing becomes available only after its
-third right-hand candle closes. RSI values do not enter this calculation.
+### Tug of War
 
-- **Zones:** confirmed swings within 0.1% of a surviving level merge into one
-  zone whose price is the mean of its swings. Touches count the merged swings.
-- **Retirement:** a closed candle's close more than 0.1% beyond a zone retires
-  it. Wicks, equal closes, and closes inside that buffer keep the zone.
-- **Support:** the highest surviving zone from swing lows at or below the live
-  price.
-- **Resistance:** the lowest surviving zone from swing highs at or above the
-  live price.
-- **Pending breaks:** price above resistance appears under **Breakout awaiting
-  confirmation**; price below support appears under **Breakdown awaiting
-  confirmation**, each showing price, distance, and touches. The closest
-  crossed support above price and closest crossed resistance below price are
-  shown in separate directional groups. They never replace the nearest
-  support/resistance. A candle close more than 0.1% beyond the zone confirms
-  the break and retires it; a close
-  inside that buffer remains pending. Returning to the original side clears
-  the pending break and makes the level eligible again. Exact touches are
-  eligible support/resistance, without a pending break.
-- **Trend:** the latest two confirmed highs and latest two confirmed lows must
-  both rise for an uptrend or both fall for a downtrend. Mixed or equal swings
-  show sideways; insufficient swings show unknown.
+The browser independently derives Heikin-Ashi candles and keeps the closed
+history separate from the current candle's live projection. It uses the same default screening rules as the sibling Rust CLI: **20 warmup
+candles**, a **0.05 minimum wick ratio**, **2 minimum Tug of War candles**, and a
+**0.30 minimum body ratio**. These are fixed defaults in
+`src/lib/tugOfWar.ts`.
 
-Only closed candles form, confirm, or retire zones. Broken zones do not
-automatically switch roles. Missing levels show a dash instead of extrapolating
-beyond the available history. Invalid bars and gaps prevent comparisons with
-older segments.
+Both qualifying wicks indicate indecision. A sufficient sequence followed by
+accepted directional control can confirm a continuation or reversal; without a
+prior trend it is labeled a resolution. Warmup and pending sequences are shown
+separately from confirmations. The card's primary control includes the current
+candle and is marked **LIVE**. Its Heikin-Ashi open comes from the last closed HA
+candle, while high/low/close update with the forming raw candle. Two-sided wicks
+add the live candle to the projected TOW count, displayed as closed plus live.
+A directional live candle may project a continuation or reversal, but it never
+creates a confirmed signal.
 
-For example, with resistance zones at 100 and 110 and live price at 105,
-resistance shows 110 and the crossed 100 zone appears separately as a pending
-breakout. If there is no resistance at or above price, resistance shows a dash
-while the pending breakout remains visible. In list view, the shared column is
-**Awaiting confirmation**, and every group is labeled **Breakout** or
-**Breakdown**. Saved **Testing only** and former combined **Pending breakouts
-only** preferences retain their selected side: Support becomes breakdowns,
-Resistance becomes breakouts, and Either level becomes both pending directions.
+A confirmed decision is retained as current only on the latest closed candle.
+Missing candles restart the Heikin-Ashi sequence and its warmup. Live updates
+cannot alter the closed state; preview calculations reuse it rather than
+replaying the history on every tick. Quoted market prices come from raw candles;
+the separately labeled Heikin-Ashi chart shows synthetic averaged prices.
 
-Levels are computed for every symbol in `src/store/supportResistanceStore.ts`
-as candles are published, not inside the visible cards. The closed-bar structure
-is rebuilt only when a candle closes; live ticks just reselect the nearest zone
-against the new price. This keeps a market-wide proximity ranking possible.
+The frontend builds and runs independently of the Rust CLI. It does not start,
+call, or depend on the CLI for either indicator.
 
 ## RSI divergences
 
-Check **Divergences** in the header to enable detection, lifecycle tracking, and
-chart overlays. It is off by default, and the preference is saved. **Settings →
-Include hidden divergences** adds hidden patterns. Two separately switchable
-**Lecture filters** are on by default: wick/body agreement and one RSI 50 cycle.
-The **RSI invalidation anchor** chooses which pivot's RSI kills a regular setup.
-Disabling the feature stops divergence calculation and removes its overlays
-without restarting the market feed.
+RSI divergence detection, lifecycle tracking, and chart overlays are always
+enabled. **Settings → Include hidden divergences** adds hidden patterns. Two
+separately switchable **Lecture filters** are on by default: wick/body agreement
+and one RSI 50 cycle. The **RSI invalidation anchor** chooses which pivot's RSI
+kills a regular setup. These settings apply to every card and detail chart;
+equivalent flags configure the backtest CLI.
 
 ### What a card shows
 
-Cards show only **live** setups: `Bull · forming` means the second pivot closed
-on the latest candle and the next candle decides; `Bull · confirmed` with `3/14`
-means the confirmation candle closed and 3 of the 14 allowed candles have
-elapsed. Resolved setups leave the card. Open a card for aligned price candles
-and RSI, overlay lines for live or all retained setups, and a log of every
-setup detected in retained history with its outcome. The log doubles as a
-forward test: reload or change a filter and it is rebuilt from the same rules.
+Cards show only **live** setups: a bullish pattern labeled `Forming` means the
+second pivot closed on the latest candle and the next candle decides;
+`Confirmed · 3/14` means the confirmation candle closed and 3 of the 14 allowed
+candles have elapsed. Resolved setups leave the card. Open a card for aligned
+price, Heikin-Ashi, and RSI charts with live divergence overlays on price and RSI.
 
 ### Setup rules
 
@@ -170,11 +160,10 @@ invalidates, completes, or expires a setup.
 
 ### Backtest
 
-Open a chart and use **Historical replay** to fetch closed candles from Binance,
-add a 250-candle RSI warmup, and run the exact same engine over 1,000 to 30,000
-candles. The panel reports detected, confirmed, RSI 50 hits, harmonised, expired,
-and hit rate overall and per pattern, and exports CSV or JSON. The CLI does the
-same for many symbols:
+Use the backtest CLI to fetch closed candles from Binance, add a 250-candle RSI
+warmup, and replay the same engine across one or more symbols. It reports
+detected, confirmed, RSI 50 hits, harmonised, expired, and hit rate overall and
+per pattern, with optional CSV and JSON exports:
 
 ```bash
 bun run backtest:divergence -- --timeframe 4h --candles 3000
@@ -195,7 +184,7 @@ are not modelled, and overlapping setups are not independent trades.
   350-candle REST recovery window starts a fresh history for the affected symbol.
 - The newest REST candle stays provisional until an exchange final update or a
   later REST candle proves it closed; confirmation does not rely on the computer's
-  clock. Up to 3,000 closed candles per symbol are retained for the outcome log.
+  clock. Up to 3,000 closed candles per symbol are retained for lifecycle tracking.
 
 ### Lecture transcript verification
 
@@ -239,31 +228,40 @@ plus candle/RSI alignment and seed-to-stream handling.
 
 ## Architecture
 
-- `src/store/scannerStore.ts` uses Zustand for shared UI state and persisted display preferences. Components subscribe through narrow selectors so unrelated changes do not fan out across the grid.
-- `src/store/dataStore.ts` is intentionally a per-symbol external store. Market ticks notify only the matching card instead of running every grid selector on every update.
-- `src/hooks/useRsiFeed.ts` owns REST/WebSocket lifecycle state, including cancellation when the timeframe changes.
-- `src/lib/rsi.ts` contains the framework-independent RSI implementation.
-- `src/lib/supportResistance.ts` detects confirmed price swings, merges them
-  into zones, retires broken zones, and calculates trend. Structure building is
-  separate from nearest-level selection so ticks stay cheap.
-- `src/store/supportResistanceStore.ts` derives per-symbol levels from published
-  market snapshots and caches the closed-bar structure between ticks.
-- `src/lib/supportResistanceFilters.ts` holds the pure filter and sort rules;
-  `useSupportResistanceRows` feeds them a throttled market-wide snapshot.
+- `src/store/scannerStore.ts` uses Zustand for shared UI state, favorites, and
+  persisted display preferences.
+- `src/store/dataStore.ts` holds per-symbol market snapshots;
+  `src/store/feedStatusStore.ts` tracks loading, request errors, and update times.
+- `src/hooks/useRsiFeed.ts` owns REST/WebSocket lifecycle state, including
+  cancellation when the timeframe changes and automatic recovery.
+- `src/components/ScreenerGrid.tsx` renders the unified overview, filters, and
+  card grid; `src/components/ScreenerCard.tsx` presents each pair and its two
+  indicators.
+- `src/hooks/useScreenerRows.ts` batches watchlist updates twice per second.
+  `src/lib/screener.ts` caches closed-candle indicator results and contains the
+  pure filtering, sorting, and candle-change rules.
+- `src/components/ScreenerChart.tsx` and `src/lib/drawScreenerChart.ts` draw price
+  candles and aligned RSI with divergence overlays. Offscreen cards defer
+  drawing until they approach the viewport.
+- `src/lib/tugOfWar.ts` derives closed Heikin-Ashi candles, tracks pending
+  sequences and latest-candle confirmations, and projects current-candle control
+  without mutating closed analysis. It provides separate live and closed status labels.
 - `src/lib/symbols.ts` lists Binance Spot USDT pairs. `bun run check:symbols`
   reports pairs that are halted, delisted, or duplicated.
-- `SupportResistanceGrid` and `SupportResistanceCard` render the separate price
-  scanner with symbol search and per-symbol store subscriptions.
+- `src/lib/rsi.ts` contains the framework-independent RSI implementation.
 - `src/lib/rsiHistory.ts` aligns OHLC and RSI, separates live previews from closed
   candles, and recovers stream gaps without recalculating established history.
 - `src/lib/divergence.ts` contains the pure pivot-pair detector and shared validation.
 - `src/lib/divergenceLifecycle.ts` is the closed-candle state machine: provisional
   second pivot, next-candle confirmation, anchor invalidation, RSI 50 target, and
-  14-candle expiry. Cards, the detail log, and the backtest all run this one engine.
+  14-candle expiry. Cards, detail charts, and the backtest all run this one engine.
 - `src/lib/binanceHistory.ts` pages closed candles backwards from the exchange clock.
 - `src/lib/divergenceBacktest.ts` replays history through the engine and summarises
   outcomes; `scripts/backtest-divergence.ts` is its CLI.
 - `src/hooks/useDivergences.ts` runs the engine over each symbol's retained candles.
-- `ChartModal` and its Konva drawing dependencies are loaded only when a chart is opened.
+- `ChartModal` is loaded only when a chart is opened; `src/lib/drawRsiChart.ts`
+  renders its aligned raw price, Heikin-Ashi, and RSI panels.
 
-The original standalone HTML file remains in the repository as a behavior reference.
+Legacy support/resistance and market-analysis helpers remain in the source tree,
+but their views are not mounted in the screener. The original standalone HTML
+file remains in the repository as a behavior reference.

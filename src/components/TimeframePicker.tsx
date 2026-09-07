@@ -29,6 +29,7 @@ export function TimeframePicker() {
           size="small"
           type={tf === timeframe ? 'primary' : 'default'}
           className="timeframe-picker__chip"
+          aria-pressed={tf === timeframe}
           onClick={() => setTimeframe(tf)}
         >
           {tf}
@@ -45,8 +46,9 @@ export function TimeframePicker() {
               const isStarred = starredTimeframes.includes(tf)
               return (
                 <li key={tf} className={`timeframe-menu__row ${tf === timeframe ? 'is-active' : ''}`}>
-                  <button
-                    type="button"
+                  <Button
+                    type="text"
+                    size="small"
                     className="timeframe-menu__star"
                     aria-label={isStarred ? `Unstar ${tf}` : `Star ${tf}`}
                     aria-pressed={isStarred}
@@ -56,25 +58,27 @@ export function TimeframePicker() {
                     }}
                   >
                     {isStarred ? <StarFilled /> : <StarOutlined />}
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    type="text"
+                    size="small"
                     className="timeframe-menu__label"
+                    aria-pressed={tf === timeframe}
                     onClick={() => {
                       setTimeframe(tf)
                       setMenuOpen(false)
                     }}
                   >
                     {tf}
-                  </button>
+                  </Button>
                 </li>
               )
             })}
           </ul>
         )}
       >
-        <Button size="small" className="timeframe-picker__trigger">
-          {timeframe}
+        <Button size="small" className="timeframe-picker__trigger" aria-label="Choose timeframe" aria-expanded={menuOpen}>
+          {starredInOrder.includes(timeframe) ? 'More' : timeframe}
           <DownOutlined style={{ fontSize: 10 }} />
         </Button>
       </Dropdown>

@@ -5,8 +5,6 @@ export type Timeframe =
 
 export type DrawingTool = 'brush' | 'trendline' | 'eraser' | null
 
-export type ScannerTab = 'rsi' | 'support-resistance'
-
 export interface Point {
   x: number
   y: number

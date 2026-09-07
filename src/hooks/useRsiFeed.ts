@@ -6,7 +6,7 @@ import { recoverRsiHistory, snapshotFromRsiHistory, updateRsiHistory } from '../
 import type { RsiHistory } from '../lib/rsiHistory'
 import { SYMBOLS } from '../lib/symbols'
 import { resetSymbolData, setSymbolSnapshot } from '../store/dataStore'
-import { resetSupportResistance, updateSupportResistance } from '../store/supportResistanceStore'
+import { resetFeedStatus, setFeedStatus } from '../store/feedStatusStore'
 import { useScannerStore } from '../store/scannerStore'
 
 const RESEED_RETRY_MS = 5000
@@ -16,7 +16,7 @@ const MAX_BUFFERED_CANDLES = 200
 function publishHistory(symbol: string, history: RsiHistory): void {
   const snapshot = snapshotFromRsiHistory(history)
   setSymbolSnapshot(symbol, snapshot)
-  updateSupportResistance(symbol, snapshot)
+  setFeedStatus(symbol, { state: 'ready', updatedAt: Date.now(), error: null })
 }
 
 /**
@@ -87,6 +87,10 @@ export function useRsiFeed(): void {
       } catch (error) {
         if (!controller.signal.aborted) {
           console.error(`RSI seed failed for ${symbol}`, error)
+          setFeedStatus(symbol, {
+            state: 'error', updatedAt: null,
+            error: error instanceof Error ? error.message : 'Market data unavailable',
+          })
           needsRetry = true
         }
       } finally {
@@ -115,7 +119,7 @@ export function useRsiFeed(): void {
     })
 
     resetSymbolData()
-    resetSupportResistance()
+    resetFeedStatus()
     manager.connect(SYMBOLS, timeframe)
     for (const symbol of SYMBOLS) void seedSymbol(symbol)
 

@@ -1,77 +1,32 @@
-.app-header {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin: 16px;
-  padding: 14px 20px 0;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: 14px;
-  flex-shrink: 0;
+.app-header { display: flex; align-items: center; gap: 52px; min-height: 76px; padding: 0 36px; background: var(--color-page); border-bottom: 1px solid var(--color-hairline); flex-shrink: 0; }
+.app-header__brand { display: flex; align-items: center; gap: 12px; font-size: 24px; font-weight: 700; letter-spacing: -1px; }
+.app-header__brand-dot { color: var(--accent); }
+.app-header__mark { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; gap: 4px; transform: rotate(14deg); }
+.app-header__mark i { display: block; width: 5px; height: 15px; background: var(--accent); border-radius: 2px; }
+.app-header__mark i:nth-child(2) { height: 26px; }
+.app-header__mark i:nth-child(3) { height: 20px; }
+.app-header__nav { align-self: stretch; display: flex; }
+.app-header__nav .ant-tabs { min-width: 106px; }
+.app-header__nav .ant-tabs-nav { height: 100%; margin: 0; }
+.app-header__nav .ant-tabs-nav::before { border: 0; }
+.app-header__nav .ant-tabs-tab { padding: 0 4px; font-size: 13px; font-weight: 600; }
+.app-header__nav .ant-tabs-content-holder { display: none; }
+.app-header__actions { margin-left: auto; display: flex; gap: 22px; align-items: center; }
+.app-header__venue { color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
+.app-header__venue > span:first-child { margin-right: 7px; color: var(--color-muted); }
+.app-header__quote { color: var(--text-muted); margin-left: 5px; }
+.app-header__settings.ant-btn { background: var(--color-dark-cta); color: var(--color-ink); box-shadow: none; border-color: var(--color-hairline); font-size: 12px; height: 36px; padding-inline: 14px; }
+.app-header__settings.ant-btn:hover { background: var(--color-brand-hover); color: var(--color-ink); border-color: var(--color-brand-hover); }
+@media (max-width: 800px) {
+  .app-header { gap: 28px; padding: 0 22px; min-height: 68px; }
+  .app-header__actions { gap: 14px; }
+  .app-header__quote { display: none; }
 }
-
-.app-header__main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.app-header__title {
-  margin: 0;
-  font-size: 1.35rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--text-primary);
-}
-
-.scanner-tabs {
-  display: flex;
-  gap: 24px;
-}
-
-.scanner-tabs__tab {
-  border: 0;
-  border-bottom: 2px solid transparent;
-  padding: 0 0 12px;
-  background: none;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.scanner-tabs__tab:hover {
-  color: var(--text-primary);
-}
-
-.scanner-tabs__tab[aria-selected='true'] {
-  border-bottom-color: var(--accent);
-  color: var(--accent);
-}
-
-.scanner-tabs__tab:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 4px;
-  border-radius: 2px;
-}
-
-.app-header__size {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.app-header__size-label {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-}
-
-@media (max-width: 640px) {
-  .app-header {
-    margin: 8px;
-    padding: 12px 12px 0;
-  }
+@media (max-width: 560px) {
+  .app-header { gap: 22px; padding: 0 16px; min-height: 62px; }
+  .app-header__brand { gap: 8px; font-size: 21px; }
+  .app-header__mark { width: 23px; }
+  .app-header__venue, .app-header__settings.ant-btn > span:not(.ant-btn-icon) { display: none; }
+  .app-header__nav .ant-tabs { min-width: 89px; }
+  .app-header__nav .ant-tabs-tab { font-size: 12px; }
 }

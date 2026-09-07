@@ -1,7 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Header } from './components/Header'
-import { RsiGrid } from './components/RsiGrid'
-import { SupportResistanceGrid } from './components/SupportResistanceGrid'
+import { ScreenerGrid } from './components/ScreenerGrid'
 import { useRsiFeed } from './hooks/useRsiFeed'
 import { useScannerStore } from './store/scannerStore'
 
@@ -13,7 +12,6 @@ const SettingsDrawer = lazy(() => import('./components/SettingsDrawer').then(
 ))
 
 function App() {
-  const scannerTab = useScannerStore((state) => state.scannerTab)
   const selectedSymbol = useScannerStore((state) => state.selectedSymbol)
   const settingsOpen = useScannerStore((state) => state.settingsOpen)
 
@@ -22,14 +20,8 @@ function App() {
   return (
     <div className="app-shell">
       <Header />
-      <main
-        className="scanner-panel"
-        id={`${scannerTab}-panel`}
-        role="tabpanel"
-        aria-labelledby={`${scannerTab}-tab`}
-        tabIndex={0}
-      >
-        {scannerTab === 'rsi' ? <RsiGrid /> : <SupportResistanceGrid />}
+      <main className="scanner-panel" id="screener-panel">
+        <ScreenerGrid />
       </main>
       {selectedSymbol && (
         <Suspense fallback={null}>

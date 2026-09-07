@@ -1,17 +1,19 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { resetSymbolData } from './dataStore'
+import { resetFeedStatus } from './feedStatusStore'
 import type {
-  ChartSettings, ScannerTab, SupportResistanceFilters, SupportResistanceSort, SupportResistanceView, Timeframe,
+  ChartSettings, SupportResistanceFilters, SupportResistanceSort, SupportResistanceView, Timeframe,
 } from '../types'
 
 export const DEFAULT_SETTINGS: ChartSettings = {
-  rsiColor: '#29ffb8',
-  smaColor: '#4ec3fa',
-  midlineColor: '#39435a',
+  rsiColor: '#8B46F2',
+  smaColor: '#8B46F280',
+  midlineColor: '#333333',
   lineWidth: 2,
   showPrice: true,
   showVolume: false,
-  showDivergences: false,
+  showDivergences: true,
   showHiddenDivergences: false,
   requireBodyAgreement: true,
   requireSameRsiCycle: true,
@@ -46,7 +48,8 @@ export function restoreSupportResistanceFilters(
 }
 
 interface ScannerState {
-  scannerTab: ScannerTab
+  starredSymbols: string[]
+  cardDensity: 'comfortable' | 'compact'
   timeframe: Timeframe
   cellSize: number
   starredTimeframes: Timeframe[]
@@ -56,7 +59,8 @@ interface ScannerState {
   supportResistanceView: SupportResistanceView
   supportResistanceSort: SupportResistanceSort
   supportResistanceFilters: SupportResistanceFilters
-  setScannerTab: (scannerTab: ScannerTab) => void
+  toggleStarredSymbol: (symbol: string) => void
+  setCardDensity: (density: 'comfortable' | 'compact') => void
   setSupportResistanceView: (view: SupportResistanceView) => void
   setSupportResistanceSort: (sort: SupportResistanceSort) => void
   updateSupportResistanceFilters: (filters: Partial<SupportResistanceFilters>) => void
@@ -73,10 +77,20 @@ interface ScannerState {
 
 const SORT_KEYS: readonly SupportResistanceSort[] = ['symbol', 'nearest', 'support', 'resistance']
 
+function restoreChartSettings(saved?: Partial<ChartSettings>): ChartSettings {
+  const settings = { ...DEFAULT_SETTINGS, ...saved, showDivergences: true }
+  // Update the previous theme defaults while keeping explicitly chosen colors.
+  if (typeof settings.rsiColor !== 'string' || ['#29ffb8', '#78cfbe', '#6b21d3'].includes(settings.rsiColor.toLowerCase())) settings.rsiColor = DEFAULT_SETTINGS.rsiColor
+  if (typeof settings.smaColor !== 'string' || ['#4ec3fa', '#6b21d380'].includes(settings.smaColor.toLowerCase())) settings.smaColor = DEFAULT_SETTINGS.smaColor
+  if (typeof settings.midlineColor !== 'string' || ['#39435a', '#e5e5e5'].includes(settings.midlineColor.toLowerCase())) settings.midlineColor = DEFAULT_SETTINGS.midlineColor
+  return settings
+}
+
 export const useScannerStore = create<ScannerState>()(
   persist(
-    (set) => ({
-      scannerTab: 'rsi',
+    (set, get) => ({
+      starredSymbols: [],
+      cardDensity: 'comfortable',
       timeframe: '15m',
       cellSize: 120,
       starredTimeframes: DEFAULT_STARRED_TIMEFRAMES,
@@ -86,14 +100,26 @@ export const useScannerStore = create<ScannerState>()(
       supportResistanceView: 'cards',
       supportResistanceSort: 'symbol',
       supportResistanceFilters: DEFAULT_SUPPORT_RESISTANCE_FILTERS,
-      setScannerTab: (scannerTab) => set({ scannerTab, selectedSymbol: null, settingsOpen: false }),
+      toggleStarredSymbol: (symbol) => set((state) => ({
+        starredSymbols: state.starredSymbols.includes(symbol)
+          ? state.starredSymbols.filter((item) => item !== symbol)
+          : [...state.starredSymbols, symbol],
+      })),
+      setCardDensity: (cardDensity) => set({ cardDensity }),
       setSupportResistanceView: (supportResistanceView) => set({ supportResistanceView }),
       setSupportResistanceSort: (supportResistanceSort) => set({ supportResistanceSort }),
       updateSupportResistanceFilters: (filters) => set((state) => ({
         supportResistanceFilters: { ...state.supportResistanceFilters, ...filters },
       })),
       resetSupportResistanceFilters: () => set({ supportResistanceFilters: DEFAULT_SUPPORT_RESISTANCE_FILTERS }),
-      setTimeframe: (timeframe) => set({ timeframe }),
+      setTimeframe: (timeframe) => {
+        if (get().timeframe === timeframe) return
+        // Clear synchronously so the new timeframe never labels the old candles
+        // during the market-wide subscription's throttle window.
+        resetSymbolData()
+        resetFeedStatus()
+        set({ timeframe })
+      },
       setCellSize: (cellSize) => set({ cellSize }),
       toggleStarredTimeframe: (timeframe) => set((state) => ({
         starredTimeframes: state.starredTimeframes.includes(timeframe)
@@ -111,10 +137,10 @@ export const useScannerStore = create<ScannerState>()(
     {
       name: 'rsi-scanner-preferences',
       partialize: ({
-        scannerTab, timeframe, cellSize, starredTimeframes, settings,
+        starredSymbols, cardDensity, timeframe, cellSize, starredTimeframes, settings,
         supportResistanceView, supportResistanceSort, supportResistanceFilters,
       }) => ({
-        scannerTab, timeframe, cellSize, starredTimeframes, settings,
+        starredSymbols, cardDensity, timeframe, cellSize, starredTimeframes, settings,
         supportResistanceView, supportResistanceSort, supportResistanceFilters,
       }),
       // Keep defaults for preferences added after a user's settings were saved.
@@ -123,8 +149,10 @@ export const useScannerStore = create<ScannerState>()(
         return {
           ...current,
           ...saved,
-          scannerTab: saved?.scannerTab === 'support-resistance' ? 'support-resistance' : 'rsi',
-          settings: { ...DEFAULT_SETTINGS, ...saved?.settings },
+          starredSymbols: Array.isArray(saved?.starredSymbols)
+            ? saved.starredSymbols.filter((symbol): symbol is string => typeof symbol === 'string') : [],
+          cardDensity: saved?.cardDensity === 'compact' ? 'compact' : 'comfortable',
+          settings: restoreChartSettings(saved?.settings),
           supportResistanceView: saved?.supportResistanceView === 'list' ? 'list' : 'cards',
           supportResistanceSort: SORT_KEYS.find((key) => key === saved?.supportResistanceSort) ?? 'symbol',
           supportResistanceFilters: restoreSupportResistanceFilters(saved?.supportResistanceFilters),

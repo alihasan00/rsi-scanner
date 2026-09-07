@@ -5,14 +5,35 @@
   flex-wrap: wrap;
 }
 
-.timeframe-picker__chip {
-  min-width: 44px;
+.timeframe-picker__chip.ant-btn {
+  min-width: 36px;
+  height: 32px;
+  padding-inline: 10px;
+  font-size: 11px;
+  box-shadow: none;
+  background: var(--color-surface);
+  color: var(--color-secondary);
+  border-color: var(--color-hairline);
+}
+
+.timeframe-picker__chip.ant-btn[aria-pressed='true'] {
+  background: var(--color-brand-light);
+  border-color: var(--color-brand-light);
+  color: var(--color-brand);
+  font-weight: 600;
+}
+
+.timeframe-picker__chip.ant-btn:hover {
+  color: var(--color-brand-hover);
+  border-color: var(--color-brand);
 }
 
 .timeframe-picker__trigger {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  height: 32px;
+  font-size: 11px;
 }
 
 .timeframe-menu {
@@ -22,10 +43,10 @@
   width: 160px;
   max-height: 320px;
   overflow-y: auto;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
+  background: var(--color-card-elevated);
+  border: 1px solid var(--color-hairline);
   border-radius: 10px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-hover);
 }
 
 .timeframe-menu__row {
@@ -36,7 +57,7 @@
 }
 
 .timeframe-menu__row.is-active {
-  background: rgba(41, 255, 184, 0.1);
+  background: var(--color-brand-light);
 }
 
 .timeframe-menu__star,
@@ -46,7 +67,7 @@
   cursor: pointer;
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 13px;
 }
 
 .timeframe-menu__star {
@@ -60,18 +81,20 @@
   font-size: 0.85rem;
 }
 
-.timeframe-menu__star:hover {
-  background: var(--panel-border);
-  color: var(--accent);
+.timeframe-menu__star.ant-btn:hover {
+  background: var(--color-brand-light);
+  color: var(--color-brand-hover);
 }
 
 .timeframe-menu__star[aria-pressed='true'] {
   color: var(--accent);
 }
 
-.timeframe-menu__label {
+.timeframe-menu__label.ant-btn {
   flex: 1;
+  justify-content: flex-start;
   text-align: left;
+  height: 34px;
   padding: 6px 8px;
   border-radius: 6px;
   color: var(--text-primary);
@@ -82,6 +105,7 @@
   font-weight: 600;
 }
 
-.timeframe-menu__label:hover {
-  background: var(--panel-border);
+.timeframe-menu__label.ant-btn:hover {
+  background: var(--color-brand-light);
+  color: var(--color-brand-hover);
 }

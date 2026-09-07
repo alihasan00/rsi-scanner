@@ -1,0 +1,46 @@
+.screener-chart {
+  position: relative;
+  height: 200px;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  background: #1A1A1A;
+}
+
+.screener-chart__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.screener-chart--empty {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 38px,
+    #333333 38px,
+    #333333 39px
+  );
+}
+
+.screener-chart__empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  color: #888888;
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+}
+
+.screener-chart__empty-mark {
+  width: 24px;
+  height: 3px;
+  border-radius: 3px;
+  background: #8B46F2;
+  box-shadow: -11px 7px 0 -0.5px #333333, 11px -7px 0 -0.5px #333333;
+}

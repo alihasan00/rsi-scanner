@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Checkbox, ColorPicker, Divider, Drawer, Select, Slider, Space, Switch, Typography } from 'antd'
+import { Checkbox, ColorPicker, Divider, Drawer, Select, Slider, Space, Typography } from 'antd'
 import { useShallow } from 'zustand/react/shallow'
 import { useScannerStore } from '../store/scannerStore'
 
-const { Text } = Typography
+const { Text, Paragraph } = Typography
 
 export function SettingsDrawer() {
   const { settings, closeSettings, updateSettings } = useScannerStore(useShallow((state) => ({
@@ -14,12 +14,16 @@ export function SettingsDrawer() {
   const [draftLineWidth, setDraftLineWidth] = useState(settings.lineWidth)
 
   return (
-    <Drawer title="Display Settings" open onClose={closeSettings} size={320}>
+    <Drawer title="Screener settings" open onClose={closeSettings} size={360}>
       <Space orientation="vertical" size="large" style={{ width: '100%' }}>
+        <Paragraph type="secondary" style={{ margin: 0, fontSize: 13 }}>
+          Adjust the chart and divergence rules for your screener.
+        </Paragraph>
         <div>
-          <Text strong>RSI Line Color</Text>
+          <Text strong>RSI line color</Text>
           <div style={{ marginTop: 8 }}>
             <ColorPicker
+              showText
               value={settings.rsiColor}
               onChangeComplete={(c) => updateSettings({ rsiColor: c.toHexString() })}
             />
@@ -27,9 +31,10 @@ export function SettingsDrawer() {
         </div>
 
         <div>
-          <Text strong>SMA Line Color</Text>
+          <Text strong>RSI average line color</Text>
           <div style={{ marginTop: 8 }}>
             <ColorPicker
+              showText
               value={settings.smaColor}
               onChangeComplete={(c) => updateSettings({ smaColor: c.toHexString() })}
             />
@@ -37,9 +42,10 @@ export function SettingsDrawer() {
         </div>
 
         <div>
-          <Text strong>Midline Color</Text>
+          <Text strong>Midline color</Text>
           <div style={{ marginTop: 8 }}>
             <ColorPicker
+              showText
               value={settings.midlineColor}
               onChangeComplete={(c) => updateSettings({ midlineColor: c.toHexString() })}
             />
@@ -47,7 +53,7 @@ export function SettingsDrawer() {
         </div>
 
         <div>
-          <Text strong>Line Width: {draftLineWidth}</Text>
+          <Text strong>Line width: {draftLineWidth}</Text>
           <Slider
             min={1}
             max={10}
@@ -57,29 +63,12 @@ export function SettingsDrawer() {
           />
         </div>
 
-        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-          <Text>Show price in tooltip</Text>
-          <Switch checked={settings.showPrice} onChange={(checked) => updateSettings({ showPrice: checked })} />
-        </Space>
-
-        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-          <Text>Show volume in tooltip</Text>
-          <Switch checked={settings.showVolume} onChange={(checked) => updateSettings({ showVolume: checked })} />
-        </Space>
-
         <div>
           <Divider />
           <Space orientation="vertical" size="small">
             <Text strong>RSI divergences</Text>
             <Checkbox
-              checked={settings.showDivergences}
-              onChange={(event) => updateSettings({ showDivergences: event.target.checked })}
-            >
-              Enable divergences
-            </Checkbox>
-            <Checkbox
               checked={settings.showHiddenDivergences}
-              disabled={!settings.showDivergences}
               onChange={(event) => updateSettings({ showHiddenDivergences: event.target.checked })}
             >
               Include hidden divergences
@@ -92,7 +81,6 @@ export function SettingsDrawer() {
             <Select
               aria-label="RSI invalidation anchor"
               value={settings.divergenceInvalidationAnchor}
-              disabled={!settings.showDivergences}
               style={{ width: '100%' }}
               options={[
                 { value: 'second', label: 'Second pivot (default)' },
@@ -108,7 +96,6 @@ export function SettingsDrawer() {
             <Text strong style={{ marginTop: 8 }}>Lecture filters</Text>
             <Checkbox
               checked={settings.requireBodyAgreement}
-              disabled={!settings.showDivergences}
               onChange={(event) => updateSettings({ requireBodyAgreement: event.target.checked })}
             >
               Require wick and body agreement
@@ -119,7 +106,6 @@ export function SettingsDrawer() {
             </Text>
             <Checkbox
               checked={settings.requireSameRsiCycle}
-              disabled={!settings.showDivergences}
               onChange={(event) => updateSettings({ requireSameRsiCycle: event.target.checked })}
             >
               Keep pivots in one RSI 50 cycle
@@ -146,6 +132,18 @@ export function SettingsDrawer() {
               and a historical replay using these settings.
             </Text>
           </Space>
+        </div>
+        <div>
+          <Divider />
+          <Text strong>Tug of War</Text>
+          <Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0, fontSize: 12, lineHeight: 1.7 }}>
+            Heikin-Ashi wicks show bullish control, bearish control, or an undecided
+            tug of war. Confirmation requires at least 2 tug-of-war candles,
+            followed by a directional close with a body of at least 30% of its range.
+            Wicks shorter than 5% of the range are ignored; the first 20 closed
+            candles warm up the calculation. The current candle shows a live
+            preview; confirmations use closed candles.
+          </Paragraph>
         </div>
       </Space>
     </Drawer>
