@@ -7,6 +7,7 @@ import { useDivergences } from '../hooks/useDivergences'
 import { drawMiniRsiChart } from '../lib/drawRsiChart'
 import { DIVERGENCE_LABELS, divergenceStatus, formatSignalTime, liveDivergenceLabel } from '../lib/divergencePresentation'
 import { isLiveDivergence } from '../lib/divergenceLifecycle'
+import { formatQuotePrice } from '../lib/priceFormatting'
 import { useScannerStore } from '../store/scannerStore'
 import './RsiCell.css'
 
@@ -59,7 +60,7 @@ function RsiCellImpl({ symbol, width, height }: RsiCellProps) {
     <div className="rsi-cell__tooltip-content">
       <strong>{symbol}</strong>
       {rsi !== null && <div>RSI: {rsi.toFixed(2)}</div>}
-      {showPrice && <div>Price: {price.toFixed(4)}</div>}
+      {showPrice && <div>Price: {formatQuotePrice(price)}</div>}
       {showVolume && <div>Volume: {volume.toFixed(2)}</div>}
       {showDivergences && (liveDivergences.length ? (
         <>

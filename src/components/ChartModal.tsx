@@ -18,6 +18,7 @@ import { useDrawingTools } from '../hooks/useDrawingTools'
 import { drawDetailRsiChart } from '../lib/drawRsiChart'
 import { formatSignalTime } from '../lib/divergencePresentation'
 import { isLiveDivergence } from '../lib/divergenceLifecycle'
+import { formatQuotePrice } from '../lib/priceFormatting'
 import { useScannerStore } from '../store/scannerStore'
 import { DrawingCanvas } from './DrawingCanvas'
 import { DivergenceDetails } from './DivergenceDetails'
@@ -115,7 +116,7 @@ export function ChartModal() {
         <div className="chart-modal__title">
           <span className="chart-modal__symbol">{symbol} · {timeframe}</span>
           <Space size="middle" className="chart-modal__stats">
-            <span>Price: <strong>{price.toFixed(4)}</strong></span>
+            <span>Price: <strong>{formatQuotePrice(price)}</strong></span>
             <span>Volume: <strong>{volume.toFixed(2)}</strong></span>
             <span>RSI: <strong>{currentRsi !== null ? currentRsi.toFixed(2) : '—'}</strong></span>
           </Space>

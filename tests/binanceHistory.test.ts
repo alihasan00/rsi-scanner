@@ -34,6 +34,17 @@ function mockBinance(totalCandles: number, serverTime: number, failOnPage: numbe
 }
 
 describe('fetchClosedCandleHistory', () => {
+  test('fetches history for Chinese Binance symbols without changing the encoded identity', async () => {
+    const symbol = '币安人生USDT'
+    const { fetcher, calls } = mockBinance(50, 50 * HOUR)
+    const history = await fetchClosedCandleHistory({ symbol, timeframe: '1h', count: 5 }, fetcher)
+
+    expect(history.symbol).toBe(symbol)
+    expect(history.complete).toBe(true)
+    expect(history.candles).toHaveLength(5)
+    expect(calls.find((url) => url.pathname.endsWith('/klines'))?.searchParams.get('symbol')).toBe(symbol)
+  })
+
   test('pages backwards from the exchange clock and drops the in-progress candle', async () => {
     // Server time sits inside candle 2500, so candle 2500 must not be treated as closed.
     const serverTime = 2500 * HOUR + 1234
@@ -94,7 +105,9 @@ describe('fetchClosedCandleHistory', () => {
   })
 
   test('rejects malformed identities, counts, and mismatched intervals', async () => {
-    expect(() => validateHistoryIdentity('btc-usdt', '1h')).toThrow(TypeError)
+    for (const symbol of ['btc-usdt', 'btcusdt', 'BTCUSDT&limit=1', 'BTC/USDT', '币安人生USDT?x=1']) {
+      expect(() => validateHistoryIdentity(symbol, '1h')).toThrow(TypeError)
+    }
     expect(() => validateHistoryIdentity('BTCUSDT', '7h' as '1h')).toThrow(TypeError)
     await expect(fetchClosedCandleHistory({ symbol: 'BTCUSDT', timeframe: '1h', count: 0 }, mockBinance(10, HOUR).fetcher))
       .rejects.toThrow(RangeError)

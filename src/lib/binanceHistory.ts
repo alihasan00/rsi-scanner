@@ -40,7 +40,7 @@ export interface ClosedCandleHistory {
 }
 
 export function validateHistoryIdentity(symbol: string, timeframe: Timeframe): void {
-  if (!/^[A-Z0-9]{2,30}$/.test(symbol)) {
+  if (!/^[A-Z0-9\p{Script=Han}]{2,30}$/u.test(symbol)) {
     throw new TypeError('Symbol must be an uppercase Binance pair such as BTCUSDT')
   }
   if (!Object.hasOwn(TIMEFRAME_MILLISECONDS, timeframe)) {

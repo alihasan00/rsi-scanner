@@ -1,9 +1,9 @@
-// Popular Binance Spot USDT pairs (stablecoins excluded). Run `bun run check:symbols`
-// to verify every pair is still TRADING on spot before adding or after delistings.
+// Binance USDT spot symbols (fiat stablecoins excluded; gold tokens retained).
+// Run `bun run check:symbols` to verify every pair is still TRADING on spot.
 export const SYMBOLS: readonly string[] = [
   'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT', 'DOGEUSDT', 'ZECUSDT', 'BCHUSDT', 'SUIUSDT', 'PAXGUSDT',
   'ENAUSDT', 'ADAUSDT', 'LINKUSDT', 'UNIUSDT', 'AVAXUSDT', 'WLFIUSDT', 'TRXUSDT', 'LTCUSDT', 'FLOWUSDT', 'NEARUSDT',
-  'PUMPUSDT', 'FILUSDT', 'TRUMPUSDT', 'AAVEUSDT', 'WIFUSDT', 'DOTUSDT', 'TAOUSDT', 'XPLUSDT', 'APTUSDT',
+  'PUMPUSDT', 'FILUSDT', 'TRUMPUSDT', 'AAVEUSDT', 'WIFUSDT', 'DOTUSDT', 'TAOUSDT', 'XPLUSDT', 'APTUSDT', 'GRAMUSDT',
   'WLDUSDT', 'ARBUSDT', 'XLMUSDT', 'PENGUUSDT', 'FETUSDT', 'ICPUSDT', 'HBARUSDT', 'ETCUSDT', 'VIRTUALUSDT',
   'CRVUSDT', 'ONDOUSDT', 'TIAUSDT', 'SEIUSDT', 'GIGGLEUSDT', 'ATOMUSDT', 'KITEUSDT', 'JASMYUSDT', 'BARDUSDT', 'LDOUSDT',
   'INJUSDT', 'DASHUSDT', 'STRKUSDT', 'BROCCOLI714USDT', 'POLUSDT', 'ETHFIUSDT', 'RENDERUSDT', 'AVNTUSDT', 'PARTIUSDT', 'JUPUSDT',
@@ -11,4 +11,7 @@ export const SYMBOLS: readonly string[] = [
   'VETUSDT', 'ALGOUSDT', 'ZROUSDT', 'SOLVUSDT', 'GRTUSDT', 'ENJUSDT', 'SNXUSDT', 'CFXUSDT', 'BATUSDT',
   'KAVAUSDT', 'KSMUSDT', 'ONEUSDT', 'QTUMUSDT', 'RUNEUSDT', 'IOSTUSDT', 'SUSHIUSDT', 'ZILUSDT', 'ZRXUSDT', 'ARUSDT',
   'CELOUSDT', 'COMPUSDT', 'DYDXUSDT', 'EGLDUSDT', 'ENSUSDT', 'IMXUSDT', 'FORMUSDT',
+  // Additional top coins with active Binance spot pairs, verified 2026-09-07.
+  'SHIBUSDT', 'XAUTUSDT', 'ASTERUSDT', 'SKYUSDT', 'PEPEUSDT', 'MORPHOUSDT', 'JSTUSDT', 'QNTUSDT', 'NEXOUSDT', 'AEROUSDT',
+  '币安人生USDT', 'STXUSDT', 'PYTHUSDT', 'NIGHTUSDT', 'FFUSDT',
 ]
