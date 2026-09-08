@@ -228,7 +228,7 @@ describe('tugOfWarPresentation', () => {
     expect(weak.control).toBe('bullish')
     expect(weak.trend).toBeNull()
     expect(tugOfWarPresentation(weak)).toEqual({
-      label: 'No clear control', tone: 'neutral', detail: 'Latest candle lacks a strong enough body',
+      label: 'Sideways', tone: 'sideways', detail: 'Latest candle lacks a strong enough body',
     })
   })
 })
@@ -337,7 +337,7 @@ describe('previewTugOfWar', () => {
     expect(preview.trend).toBe('bullish')
     expect(preview.possibleResolution).toBeNull()
     expect(liveTugOfWarPresentation(preview)).toEqual({
-      label: 'No clear control', tone: 'neutral',
+      label: 'Sideways', tone: 'sideways',
       detail: 'Live candle · still forming · 2 TOW candles awaiting control · body is not strong enough',
     })
   })

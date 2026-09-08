@@ -75,7 +75,7 @@ export interface TugOfWarPreview {
 
 export interface TugOfWarPresentation {
   label: string
-  tone: TugOfWarDirection | 'neutral' | 'pending'
+  tone: TugOfWarDirection | 'sideways' | 'neutral' | 'pending'
   detail: string
 }
 
@@ -290,7 +290,7 @@ export function liveTugOfWarPresentation(preview: TugOfWarPreview): TugOfWarPres
   }
   if (control === 'neutral' || !preview.isBodyQualified) {
     details.push(control === 'neutral' ? 'no directional wick evidence' : 'body is not strong enough')
-    return { label: 'No clear control', tone: 'neutral', detail: details.join(' · ') }
+    return { label: 'Sideways', tone: 'sideways', detail: details.join(' · ') }
   }
   return {
     label: `${control === 'bullish' ? 'Bullish' : 'Bearish'} control`,
@@ -333,8 +333,8 @@ export function tugOfWarPresentation(analysis: TugOfWarAnalysis): TugOfWarPresen
   const weak = latest && latest.body < TUG_OF_WAR_SETTINGS.minBodyRatio * (latest.high - latest.low)
   if (analysis.control === 'neutral' || weak) {
     return {
-      label: 'No clear control',
-      tone: 'neutral',
+      label: 'Sideways',
+      tone: 'sideways',
       detail: weak ? 'Latest candle lacks a strong enough body' : 'No directional wick evidence',
     }
   }

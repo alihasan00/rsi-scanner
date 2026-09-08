@@ -48,16 +48,41 @@
   font-weight: 400;
 }
 
-.screener-card .screener-card__interval.ant-tag {
+.screener-card .screener-card__signal.ant-tag {
   flex-shrink: 0;
   margin: 0;
   padding: 1px 7px;
   border: 0;
   border-radius: 5px;
-  background: var(--color-brand-light);
-  color: var(--color-brand-hover);
+  background: var(--color-card-elevated);
+  color: var(--color-ink-secondary);
   font-size: 11px;
   font-weight: 600;
+}
+
+.screener-card .screener-card__signal--bullish.ant-tag {
+  background: color-mix(in srgb, var(--color-brand-success) 14%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-brand-success) 75%, white);
+}
+
+.screener-card .screener-card__signal--bearish.ant-tag {
+  background: color-mix(in srgb, var(--color-brand-danger) 14%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-brand-danger) 65%, white);
+}
+
+.screener-card .screener-card__signal--sideways.ant-tag {
+  background: var(--color-brand-light);
+  color: var(--color-brand-hover);
+}
+
+.screener-card .screener-card__signal--pending.ant-tag {
+  background: color-mix(in srgb, var(--color-brand-warning) 14%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-brand-warning) 75%, white);
+}
+
+.screener-card__signal:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 3px;
 }
 
 .screener-card__warning {

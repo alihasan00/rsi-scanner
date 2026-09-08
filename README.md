@@ -30,12 +30,22 @@ bun run build
 ## Screener
 
 The single **Screener** workspace shows a card for each watchlist pair. Each card
-has a compact pair heading with the timeframe and favorite button, followed by
-raw price candlesticks and aligned RSI(14). Quotes, percentage changes, indicator
+has a compact pair heading with a Tug of War/trend chip and favorite button,
+followed by raw price candlesticks and aligned RSI(14). Quotes, percentage changes, indicator
 breakdowns, and status footers are omitted from cards. The final hollow candle
 is still forming; its price and RSI are provisional. Chart times are shown in
 UTC. The candle-change sort uses the latest candle's open to its current close
 on the selected timeframe, **not a 24-hour change**.
+
+The heading chip follows the current candle: **Tug of war** for indecision,
+**Bullish trend** or **Bearish trend** for directional control, and **Sideways**
+when the candle has no directional wick evidence or its body is too weak for
+directional control. Sideways has its own purple chip and horizontal icon;
+waiting and closed-history warmup retain their neutral labels. Hover or focus
+the chip for the underlying control, pending sequence or confirmation details,
+and whether the reading is from a live, still-forming candle. The timeframe
+remains selectable in the screener toolbar and is not repeated in each card
+heading.
 
 - **Search:** type a pair such as `BTC` or `BTC/USDT`; press `/` to focus search
   when no input or dialog is active.
