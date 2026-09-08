@@ -31,8 +31,9 @@ bun run build
 
 The single **Screener** workspace shows a card for each watchlist pair. Each card
 has a compact pair heading with a Tug of War/trend chip and favorite button,
-followed by raw price candlesticks and aligned RSI(14). Quotes, percentage changes, indicator
-breakdowns, and status footers are omitted from cards. The final hollow candle
+followed by equally tall raw price candlestick and RSI(14) panels on a shared
+timeline. Quotes, percentage changes, indicator breakdowns, and status footers
+are omitted from cards. The final hollow candle
 is still forming; its price and RSI are provisional. Chart times are shown in
 UTC. The candle-change sort uses the latest candle's open to its current close
 on the selected timeframe, **not a 24-hour change**.

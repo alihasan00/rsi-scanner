@@ -132,9 +132,11 @@ export function drawScreenerChart(canvas: HTMLCanvasElement, data: ScreenerChart
   const right = width - axisWidth - 8
   const plotWidth = right - left
   const priceTop = 10
-  const priceBottom = Math.round(height * 0.5)
-  const rsiTop = Math.round(height * 0.61)
   const rsiBottom = height - 30
+  const panelGap = 24
+  const panelHeight = (rsiBottom - priceTop - panelGap) / 2
+  const priceBottom = priceTop + panelHeight
+  const rsiTop = priceBottom + panelGap
   const priceToY = (value: number) => priceBottom - (value - minPrice) / priceRange * (priceBottom - priceTop)
   const rsiToY = (value: number) => rsiBottom - value / 100 * (rsiBottom - rsiTop)
 
