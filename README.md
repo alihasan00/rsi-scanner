@@ -1,8 +1,8 @@
 # Market Screener
 
 A Vite + React + TypeScript app with one **Screener** workspace for Binance Spot
-USDT pairs. Each card puts a price and RSI chart above the pair's details, with
-just two indicators: **RSI divergences** and **Tug of War**. Binance REST seeds
+USDT pairs. Each card keeps just a pair heading and a price and RSI chart.
+Filters cover **RSI divergences** and **Tug of War**. Binance REST seeds
 the candle history and combined kline WebSocket streams keep it current. Open
 any card for aligned price, Heikin-Ashi, and RSI charts.
 The interface uses Ant Design components with the supplied dark purple theme.
@@ -30,11 +30,12 @@ bun run build
 ## Screener
 
 The single **Screener** workspace shows a card for each watchlist pair. Each card
-has raw price candlesticks and aligned RSI(14) above the pair name, current quote,
-candle change, and both indicator states. The final hollow candle is still
-forming; its price and RSI are provisional. The percentage change is from the
-latest candle's open to its current close on the selected timeframe, **not a
-24-hour change**. Closed-candle times are shown in UTC.
+has a compact pair heading with the timeframe and favorite button, followed by
+raw price candlesticks and aligned RSI(14). Quotes, percentage changes, indicator
+breakdowns, and status footers are omitted from cards. The final hollow candle
+is still forming; its price and RSI are provisional. Chart times are shown in
+UTC. The candle-change sort uses the latest candle's open to its current close
+on the selected timeframe, **not a 24-hour change**.
 
 - **Search:** type a pair such as `BTC` or `BTC/USDT`; press `/` to focus search
   when no input or dialog is active.
@@ -44,7 +45,7 @@ latest candle's open to its current close on the selected timeframe, **not a
 - **Direction:** choose bullish or bearish within the selected indicator.
   Undecided Tug of War sequences appear under any direction. Tug of War follows
   the current candle's provisional control; a possible resolution can match its
-  direction before close and is clearly labeled as live.
+  direction before close. These live readings remain provisional until close.
 - **Favorites:** star cards and switch to **Starred** for a focused collection.
 - **Sorting:** use watchlist order, active signals, candle change, RSI ascending
   or descending, or pair name.
@@ -52,13 +53,14 @@ latest candle's open to its current close on the selected timeframe, **not a
   candle timeframe. Favorites, card density, timeframe preferences, and
   indicator settings are saved across reloads.
 
-Loading cards show **Waiting for market data**. Failed requests show **Data
-unavailable · retrying** and retry automatically while available pairs keep
-updating. A pair without an update for over 60 seconds shows **Updates delayed**.
+Loading cards show **Waiting for market data**. Failed requests retry
+automatically while available pairs keep updating. A small warning icon in the
+card heading exposes **Data unavailable · retrying** or **Updates delayed**
+(after 60 seconds without an update) through an accessible label and tooltip.
 Pairs without loaded candles cannot satisfy signal or direction filters. Empty
 searches and filters have a reset action.
 
-Click a chart or **View chart** to open the shared detail view. A compact header
+Click a chart to open the shared detail view. A compact header
 shows the pair, timeframe, and current raw market price. Raw price, Heikin-Ashi,
 and RSI charts share one timeline. Heikin-Ashi prices are labeled as averaged,
 and the open candle updates live. Support/resistance, market-analysis, and
@@ -74,11 +76,11 @@ candles**, a **0.05 minimum wick ratio**, **2 minimum Tug of War candles**, and 
 
 Both qualifying wicks indicate indecision. A sufficient sequence followed by
 accepted directional control can confirm a continuation or reversal; without a
-prior trend it is labeled a resolution. Warmup and pending sequences are shown
-separately from confirmations. The card's primary control includes the current
-candle and is marked **LIVE**. Its Heikin-Ashi open comes from the last closed HA
+prior trend it is classified as a resolution. Warmup and pending sequences are
+tracked separately from confirmations. Screening includes the current candle's
+live control. Its Heikin-Ashi open comes from the last closed HA
 candle, while high/low/close update with the forming raw candle. Two-sided wicks
-add the live candle to the projected TOW count, displayed as closed plus live.
+add the live candle to the projected TOW count.
 A directional live candle may project a continuation or reversal, but it never
 creates a confirmed signal.
 
@@ -102,11 +104,11 @@ equivalent flags configure the backtest CLI.
 
 ### What a card shows
 
-Cards show only **live** setups: a bullish pattern labeled `Forming` means the
-second pivot closed on the latest candle and the next candle decides;
-`Confirmed · 3/14` means the confirmation candle closed and 3 of the 14 allowed
-candles have elapsed. Resolved setups leave the card. Open a card for aligned
-price, Heikin-Ashi, and RSI charts with live divergence overlays on price and RSI.
+Card charts overlay only **live** setups: a forming pattern means the second
+pivot closed on the latest candle and the next candle decides; a confirmed
+pattern means the confirmation candle has closed. Resolved setups leave the
+chart. Open a card for aligned price, Heikin-Ashi, and RSI charts with live
+divergence overlays on price and RSI.
 
 ### Setup rules
 
@@ -235,8 +237,8 @@ plus candle/RSI alignment and seed-to-stream handling.
 - `src/hooks/useRsiFeed.ts` owns REST/WebSocket lifecycle state, including
   cancellation when the timeframe changes and automatic recovery.
 - `src/components/ScreenerGrid.tsx` renders the unified overview, filters, and
-  card grid; `src/components/ScreenerCard.tsx` presents each pair and its two
-  indicators.
+  card grid; `src/components/ScreenerCard.tsx` presents each pair's compact
+  heading and price/RSI chart.
 - `src/hooks/useScreenerRows.ts` batches watchlist updates twice per second.
   `src/lib/screener.ts` caches closed-candle indicator results and contains the
   pure filtering, sorting, and candle-change rules.
