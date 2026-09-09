@@ -3,7 +3,6 @@ import { useShallow } from 'zustand/react/shallow'
 import { SYMBOLS } from '../lib/symbols'
 import { getScreenerAnalysis } from '../lib/screener'
 import type { ScreenerRow } from '../lib/screener'
-import { previewTugOfWar } from '../lib/tugOfWar'
 import { getSymbolSnapshot, subscribeAllSymbols, getSymbolStoreVersion } from '../store/dataStore'
 import { getFeedStatus, getFeedStatusVersion, subscribeAllFeedStatuses } from '../store/feedStatusStore'
 import { useScannerStore } from '../store/scannerStore'
@@ -35,7 +34,7 @@ export function useScreenerRows() {
     const feed = getFeedStatus(symbol)
     const cached = rowCache.get(symbol)
     if (cached?.snapshot === snapshot && cached.analysis === analysis && cached.feed === feed) return cached
-    const row = { symbol, snapshot, analysis, feed, preview: previewTugOfWar(snapshot.bars, analysis.tugOfWar) }
+    const row = { symbol, snapshot, analysis, feed }
     rowCache.set(symbol, row)
     return row
   }), [settings, currentVersion]) // eslint-disable-line react-hooks/exhaustive-deps

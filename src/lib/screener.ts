@@ -1,16 +1,15 @@
 import type { ChartSettings, RsiBar, SymbolSnapshot } from '../types'
 import { findRsiDivergenceSetups, isLiveDivergence } from './divergenceLifecycle'
 import type { DivergenceSetup } from './divergenceLifecycle'
-import { analyzeTugOfWar, TUG_OF_WAR_SETTINGS } from './tugOfWar'
-import type { TugOfWarAnalysis, TugOfWarPreview } from './tugOfWar'
 import type { FeedStatus } from '../store/feedStatusStore'
 
-export type SignalFilter = 'all' | 'divergence' | 'tug-of-war' | 'confirmed'
-export type DirectionFilter = 'all' | 'bullish' | 'bearish'
+export type SignalFilter = 'all' | 'divergence' | 'confirmed'
+export type DivergenceRecency = 1 | 3 | 5 | 'any'
+export const DEFAULT_DIVERGENCE_RECENCY: DivergenceRecency = 3
 export type ScreenerSort = 'watchlist' | 'signals' | 'change' | 'rsi-low' | 'rsi-high' | 'symbol'
 export type ScreenerSettings = Pick<ChartSettings, 'showHiddenDivergences' | 'requireBodyAgreement' | 'requireSameRsiCycle' | 'divergenceInvalidationAnchor'>
-export interface ScreenerAnalysis { divergences: DivergenceSetup[]; tugOfWar: TugOfWarAnalysis }
-export interface ScreenerRow { symbol: string; snapshot: SymbolSnapshot; analysis: ScreenerAnalysis; feed: FeedStatus; preview?: TugOfWarPreview | null }
+export interface ScreenerAnalysis { divergences: DivergenceSetup[] }
+export interface ScreenerRow { symbol: string; snapshot: SymbolSnapshot; analysis: ScreenerAnalysis; feed: FeedStatus }
 interface CacheEntry { closed: readonly RsiBar[]; settingsKey: string; analysis: ScreenerAnalysis }
 const analysisCache = new Map<string, CacheEntry>()
 
@@ -28,7 +27,6 @@ export function getScreenerAnalysis(symbol: string, bars: readonly RsiBar[], set
       requireSameRsiCycle: settings.requireSameRsiCycle,
       invalidationAnchor: settings.divergenceInvalidationAnchor,
     }).filter(isLiveDivergence),
-    tugOfWar: analyzeTugOfWar(bars),
   }
   analysisCache.set(symbol, { closed, settingsKey, analysis })
   return analysis
@@ -38,55 +36,41 @@ export function candleChange(snapshot: SymbolSnapshot): number | null {
   return candle && candle.open > 0 ? (candle.close - candle.open) / candle.open * 100 : null
 }
 export function hasConfirmedSignal(analysis: ScreenerAnalysis): boolean {
-  return analysis.divergences.some((signal) => signal.state === 'confirmed') || analysis.tugOfWar.confirmation !== null
+  return analysis.divergences.some((signal) => signal.state === 'confirmed')
 }
-export function isPendingTugOfWar(tow: Pick<TugOfWarAnalysis, 'isWarmup' | 'pendingTowCandles'>): boolean {
-  return !tow.isWarmup && tow.pendingTowCandles > 0
-}
-/** Live setups project the current candle; closed confirmations remain separate. */
-export function isTugOfWarSetup(row: ScreenerRow): boolean {
-  return row.preview
-    ? isPendingTugOfWar(row.preview) || row.preview.possibleResolution !== null
-    : isPendingTugOfWar(row.analysis.tugOfWar) || row.analysis.tugOfWar.confirmation !== null
+/** Recency starts at price confirmation, never at either historical pivot. */
+export function filterDivergenceSetups(
+  signals: readonly DivergenceSetup[],
+  recency: DivergenceRecency,
+): DivergenceSetup[] {
+  return signals.filter((signal) => isLiveDivergence(signal)
+    && (signal.state === 'forming' || recency === 'any' || signal.barsElapsed < recency))
 }
 export interface ScreenerFilters {
-  search: string; signal: SignalFilter; direction: DirectionFilter
+  search: string; signal: SignalFilter
   starredOnly: boolean; starredSymbols: readonly string[]; sort: ScreenerSort
+  divergenceRecency?: DivergenceRecency
 }
-/** Direction applies to the selected indicator, so unrelated signals cannot satisfy a filter. */
+/** Signal filtering and ranking describe live RSI setups within the selected age window. */
 export function filterScreenerRows(rows: readonly ScreenerRow[], filters: ScreenerFilters): ScreenerRow[] {
   const query = filters.search.trim().toUpperCase().replace(/[\s/-]/g, '')
+  const recency = filters.signal === 'all' ? 'any' : filters.divergenceRecency ?? DEFAULT_DIVERGENCE_RECENCY
+  const selectedDivergences = (analysis: ScreenerAnalysis) => {
+    const signals = filterDivergenceSetups(analysis.divergences, recency)
+    return filters.signal === 'confirmed' ? signals.filter((signal) => signal.state === 'confirmed') : signals
+  }
   const filtered = rows.filter((row) => {
-    const { symbol, snapshot, analysis, preview } = row
+    const { symbol, snapshot, analysis } = row
     if (query && !symbol.includes(query)) return false
     if (filters.starredOnly && !filters.starredSymbols.includes(symbol)) return false
-    if (filters.signal === 'all' && filters.direction === 'all') return true
+    if (filters.signal === 'all') return true
     if (!snapshot.bars.length) return false
-    const divergences = analysis.divergences.filter((signal) => filters.signal !== 'confirmed' || signal.state === 'confirmed')
-    const tow = analysis.tugOfWar
-    const latestHa = tow.heikinAshi.at(-1)
-    const weakBody = !!latestHa && latestHa.body < TUG_OF_WAR_SETTINGS.minBodyRatio * (latestHa.high - latestHa.low)
-    const effectiveTow = preview ?? tow
-    const towDirection = preview
-      ? preview.isWarmup || preview.pendingTowCandles > 0 || !preview.isBodyQualified ? null
-        : preview.control === 'bullish' || preview.control === 'bearish' ? preview.control : null
-      : tow.isWarmup || tow.pendingTowCandles > 0 || weakBody ? null
-        : tow.confirmation?.direction ?? (tow.control === tow.trend ? tow.trend : null)
-    const divergenceMatch = divergences.some((signal) => filters.direction === 'all' || signal.kind.endsWith(filters.direction))
-    const towMatch = !effectiveTow.isWarmup && (filters.direction === 'all' || towDirection === filters.direction)
-    if (filters.signal === 'divergence') return divergenceMatch
-    if (filters.signal === 'tug-of-war') {
-      return isTugOfWarSetup(row) && (filters.direction === 'all' || towDirection === filters.direction)
-    }
-    if (filters.signal === 'confirmed') return divergenceMatch || (tow.confirmation !== null
-      && (filters.direction === 'all' || tow.confirmation.direction === filters.direction))
-    return divergenceMatch || towMatch
+    return selectedDivergences(analysis).length > 0
   })
   const score = (row: ScreenerRow) => {
-    const rsiConfirmed = row.analysis.divergences.some((setup) => setup.state === 'confirmed')
-    const towResolution = row.preview ? row.preview.possibleResolution !== null : row.analysis.tugOfWar.confirmation !== null
-    return (rsiConfirmed || towResolution ? 4 : 0)
-      + (row.analysis.divergences.length ? 2 : 0) + (isTugOfWarSetup(row) ? 1 : 0)
+    const divergences = selectedDivergences(row.analysis)
+    const rsiConfirmed = divergences.some((setup) => setup.state === 'confirmed')
+    return (rsiConfirmed ? 4 : 0) + (divergences.length ? 2 : 0)
   }
   const rsi = (row: ScreenerRow) => row.snapshot.series.at(-1)
   return filtered.sort((a, b) => {

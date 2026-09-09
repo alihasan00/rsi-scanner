@@ -146,10 +146,10 @@ The supported changes are optional wick/body agreement and same-RSI50-cycle filt
 
 ## Implemented in the scanner
 
-The **Divergences** master checkbox remains off by default. Under **Settings**,
-**Require wick and body agreement** and **Keep pivots in one RSI 50 cycle** are
-enabled by default and can each be disabled for comparison. The **RSI
-invalidation anchor** defaults to the second pivot. All choices persist.
+RSI divergence detection and live chart overlays are always enabled. Under
+**Settings**, **Require wick and body agreement** and **Keep pivots in one RSI
+50 cycle** are enabled by default and can each be disabled for comparison. The
+**RSI invalidation anchor** defaults to the second pivot. All choices persist.
 
 The lifecycle described above is now automated in `src/lib/divergenceLifecycle.ts`
 with these explicit conventions, each chosen where the transcript was silent:
@@ -168,3 +168,25 @@ with these explicit conventions, each chosen where the transcript was silent:
   from backtest hit rates, since it was never an actionable trade.
 
 Trend context, confluence, and the "not near 50" margin remain manual.
+
+### Screener recency preference
+
+The **Indicator → RSI divergences** menu contains nested choices for the latest
+**1**, **3** (default), or **5 closed candles**, or **Any age**. Selecting RSI
+divergences uses the current choice and opens those options in the same menu.
+Confirmed setup age is the number of closed candles since its
+price-confirmation candle. Age 0 means it confirmed on the latest close; latest
+3 includes ages 0, 1, and 2. It does not measure time since the first pivot or
+use the detector's pivot-confirmation timestamp.
+
+A forming setup whose second pivot is the latest closed candle also matches
+and is labeled **Awaiting confirmation**. Filtered cards display the matching
+setup's state and age. The open candle does not advance age. **Any age** still
+excludes completed, invalidated, expired, and other resolved setups.
+
+This is a screener preference, not a lecture rule or a proven trading threshold.
+It changes only which cards match the RSI divergence filter. **All indicators**
+keeps active divergences of any age. Bullish and bearish setups are included
+together. Active-signal ranking uses RSI divergence setups only; Tug of War has no screener filter, counter, or
+card badge. Chart overlays, lifecycle decisions, and backtest results retain
+their existing behavior, and Heikin-Ashi remains available in the detail chart.

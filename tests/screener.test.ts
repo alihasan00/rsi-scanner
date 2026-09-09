@@ -3,15 +3,14 @@ import type { RsiBar, SymbolSnapshot } from '../src/types'
 import type { DivergenceSetup } from '../src/lib/divergenceLifecycle'
 import {
   candleChange,
+  DEFAULT_DIVERGENCE_RECENCY,
+  filterDivergenceSetups,
   filterScreenerRows,
   getScreenerAnalysis,
   hasConfirmedSignal,
-  isPendingTugOfWar,
-  isTugOfWarSetup,
 } from '../src/lib/screener'
 import type { ScreenerAnalysis, ScreenerFilters, ScreenerRow, ScreenerSettings } from '../src/lib/screener'
 import { analyzeTugOfWar, previewTugOfWar } from '../src/lib/tugOfWar'
-import type { TugOfWarAnalysis } from '../src/lib/tugOfWar'
 
 const SETTINGS: ScreenerSettings = {
   showHiddenDivergences: false,
@@ -64,35 +63,28 @@ function signal(kind: DivergenceSetup['kind'], state: DivergenceSetup['state'] =
   }
 }
 
-function analysis(divergences: DivergenceSetup[] = [], tugOfWar = analyzeTugOfWar(neutralHistory())): ScreenerAnalysis {
-  return { divergences, tugOfWar }
+function confirmedSignal(barsElapsed: number, kind: DivergenceSetup['kind'] = 'regular-bullish'): DivergenceSetup {
+  return { ...signal(kind, 'confirmed'), id: `${kind}-${barsElapsed}`, barsElapsed }
+}
+
+function analysis(divergences: DivergenceSetup[] = []): ScreenerAnalysis {
+  return { divergences }
 }
 
 function row(symbol: string, indicators = analysis(), bars = neutralHistory()): ScreenerRow {
   return { symbol, analysis: indicators, snapshot: snapshot(bars), feed: { state: 'ready', updatedAt: bars.at(-1)?.closeTime ?? null, error: null } }
 }
 
-function liveRow(symbol: string, bars: RsiBar[]): ScreenerRow {
-  const indicators = getScreenerAnalysis(symbol, bars, SETTINGS)
-  return {
-    ...row(symbol, indicators, bars),
-    preview: previewTugOfWar(bars, indicators.tugOfWar),
-  }
+function analyzedRow(symbol: string, bars: RsiBar[]): ScreenerRow {
+  return row(symbol, getScreenerAnalysis(symbol, bars, SETTINGS), bars)
 }
 
 function filters(patch: Partial<ScreenerFilters> = {}): ScreenerFilters {
-  return { search: '', signal: 'all', direction: 'all', starredOnly: false, starredSymbols: [], sort: 'watchlist', ...patch }
+  return { search: '', signal: 'all', starredOnly: false, starredSymbols: [], sort: 'watchlist', ...patch }
 }
 
 function symbols(rows: readonly ScreenerRow[], options: Partial<ScreenerFilters> = {}): string[] {
   return filterScreenerRows(rows, filters(options)).map((item) => item.symbol)
-}
-
-function confirmedTow(direction: 'bullish' | 'bearish' = 'bullish'): TugOfWarAnalysis {
-  const resolution = direction === 'bullish'
-    ? { open: 115, high: 150, low: 115, close: 145 }
-    : { open: 85, high: 85, low: 50, close: 55 }
-  return analyzeTugOfWar([...pendingTowHistory(), bar(23, resolution)])
 }
 
 describe('screener analysis cache', () => {
@@ -168,67 +160,174 @@ describe('screener analysis cache', () => {
   })
 })
 
-describe('screener signal filters', () => {
-  test('confirmed includes confirmed divergences and latest TOW resolutions, excluding forming and pending', () => {
+describe('divergence recency', () => {
+  test('defaults to confirmations on the latest three closes, including ages zero through two', () => {
+    expect(DEFAULT_DIVERGENCE_RECENCY).toBe(3)
+    const rows = [0, 1, 2, 3].map((age) => row(`AGE-${age}`, analysis([confirmedSignal(age)])))
+    for (const selected of ['divergence', 'confirmed'] as const) {
+      expect(symbols(rows, { signal: selected })).toEqual(['AGE-0', 'AGE-1', 'AGE-2'])
+    }
+  })
+
+  test.each([
+    { recency: 1 as const, ages: [0] },
+    { recency: 3 as const, ages: [0, 1, 2] },
+    { recency: 5 as const, ages: [0, 1, 2, 3, 4] },
+    { recency: 'any' as const, ages: [0, 1, 2, 3, 4, 5, 13] },
+  ])('selects the requested $recency confirmation window without altering signals', ({ recency, ages }) => {
+    const signals = [0, 1, 2, 3, 4, 5, 13].map((age) => confirmedSignal(age))
+    const before = structuredClone(signals)
+    signals.forEach(Object.freeze)
+    Object.freeze(signals)
+    const selected = filterDivergenceSetups(signals, recency)
+    expect(selected.map((setup) => setup.barsElapsed)).toEqual(ages)
+    expect(selected).not.toBe(signals)
+    expect(selected.every((setup) => signals.includes(setup))).toBe(true)
+    expect(signals).toEqual(before)
+  })
+
+  test('includes forming setups but never restores a resolved outcome, even with any age selected', () => {
+    const forming = signal('regular-bullish')
+    const confirmed = confirmedSignal(0)
+    const resolved = (['completed', 'harmonised', 'expired', 'unconfirmed', 'interrupted'] as const)
+      .map((state) => signal('regular-bullish', state))
+    for (const recency of [1, 3, 5, 'any'] as const) {
+      expect(filterDivergenceSetups([forming, confirmed, ...resolved], recency)).toEqual([forming, confirmed])
+    }
+    const rows = [row('FORMING', analysis([forming])), row('RESOLVED', analysis(resolved))]
+    expect(symbols(rows, { signal: 'divergence', divergenceRecency: 'any' })).toEqual(['FORMING'])
+    expect(symbols(rows, { signal: 'confirmed', divergenceRecency: 'any' })).toEqual([])
+  })
+
+  test('admits fresh bullish and bearish confirmations while excluding older setups of either kind', () => {
+    const oldBull = confirmedSignal(3)
+    const freshBull = confirmedSignal(0)
+    const oldBear = confirmedSignal(3, 'regular-bearish')
+    const freshBear = confirmedSignal(0, 'regular-bearish')
+    expect(filterDivergenceSetups([oldBull, freshBear, oldBear, freshBull], 3)).toEqual([freshBear, freshBull])
     const rows = [
-      row('FORMING', analysis([signal('regular-bullish')])),
-      row('DIVERGENCE', analysis([signal('regular-bearish', 'confirmed')])),
-      row('PENDING', analysis([], analyzeTugOfWar(pendingTowHistory()))),
-      row('RESOLVED', analysis([], confirmedTow())),
+      row('FRESH-BULL', analysis([freshBull])),
+      row('OLD-BULL', analysis([oldBull])),
+      row('FRESH-BEAR', analysis([freshBear])),
+      row('OLD-BEAR', analysis([oldBear])),
+      row('MIXED', analysis([oldBull, freshBear])),
+    ]
+    for (const selected of ['divergence', 'confirmed'] as const) {
+      expect(symbols(rows, { signal: selected })).toEqual(['FRESH-BULL', 'FRESH-BEAR', 'MIXED'])
+      expect(symbols(rows, { signal: selected, divergenceRecency: 5 })).toEqual(rows.map((item) => item.symbol))
+    }
+  })
+
+  test('a newly confirmed setup remains fresh when its first pivot is ten days older', () => {
+    const original = bullishDivergence()
+    const fourHours = 4 * 60 * 60_000
+    const bars = [
+      ...original.slice(0, 10),
+      ...Array.from({ length: 55 }, (_, index) => bar(index, { rsi: 40, open: 110, close: 109, low: 105, high: 115 })),
+      original[10],
+      bar(0, { rsi: 35, open: 95, close: 97, low: 94, high: 115 }),
+    ].map((item, index) => ({ ...item, openTime: index * fourHours, closeTime: (index + 1) * fourHours - 1 }))
+    const current = getScreenerAnalysis('OLD-PIVOT-NEW-CONFIRMATION', bars, SETTINGS)
+    expect(current.divergences).toHaveLength(1)
+    const setup = current.divergences[0]
+    expect(setup.end.time - setup.start.time).toBe(10 * 24 * 60 * 60_000)
+    expect(setup.confirmedAt).toBe(bars.at(-1)!.closeTime)
+    expect(setup.barsElapsed).toBe(0)
+    expect(filterDivergenceSetups(current.divergences, 1)).toEqual([setup])
+    expect(symbols([row('FRESH', current, bars)], { signal: 'confirmed', divergenceRecency: 1 })).toEqual(['FRESH'])
+  })
+
+  test('live previews keep age two visible until the third post-confirmation candle closes', () => {
+    const history = [
+      ...bullishDivergence(),
+      bar(11, { rsi: 35, open: 95, close: 97, low: 94, high: 115 }),
+      bar(12, { rsi: 40 }),
+      bar(13, { rsi: 40 }),
+    ]
+    const current = getScreenerAnalysis('RECENCY-CLOSED-CLOCK', history, SETTINGS)
+    const before = structuredClone(current)
+    expect(current.divergences[0].barsElapsed).toBe(2)
+    const preview = bar(14, { rsi: 40, isClosed: false })
+    for (const rsi of [0, 40, 50]) {
+      const bars = [...history, { ...preview, rsi }]
+      const live = getScreenerAnalysis('RECENCY-CLOSED-CLOCK', bars, SETTINGS)
+      expect(live).toBe(current)
+      expect(symbols([row('LIVE', live, bars)], { signal: 'divergence' })).toEqual(['LIVE'])
+    }
+    const bars = [...history, { ...preview, isClosed: true }]
+    const next = getScreenerAnalysis('RECENCY-CLOSED-CLOCK', bars, SETTINGS)
+    expect(next.divergences[0]).toMatchObject({ state: 'confirmed', barsElapsed: 3 })
+    expect(symbols([row('NEXT', next, bars)], { signal: 'divergence' })).toEqual([])
+    expect(symbols([row('NEXT', next, bars)], { signal: 'divergence', divergenceRecency: 'any' })).toEqual(['NEXT'])
+    expect(next.divergences).toHaveLength(1)
+    expect(current).toEqual(before)
+  })
+
+  test('recency leaves all-pair browsing and its signal sorting unchanged', () => {
+    const rows = [
+      row('OLD-DIVERGENCE', analysis([confirmedSignal(13)])),
       row('QUIET'),
     ]
-    expect(symbols(rows, { signal: 'confirmed' })).toEqual(['DIVERGENCE', 'RESOLVED'])
-    expect(symbols(rows, { signal: 'divergence' })).toEqual(['FORMING', 'DIVERGENCE'])
-    expect(symbols(rows, { signal: 'tug-of-war' })).toEqual(['PENDING', 'RESOLVED'])
-  })
-
-  test('direction must match the selected indicator on the same row', () => {
-    const mixed = row('MIXED', analysis([signal('regular-bearish', 'confirmed')], confirmedTow('bullish')))
-    expect(symbols([mixed], { signal: 'divergence', direction: 'bullish' })).toEqual([])
-    expect(symbols([mixed], { signal: 'divergence', direction: 'bearish' })).toEqual(['MIXED'])
-    expect(symbols([mixed], { signal: 'tug-of-war', direction: 'bullish' })).toEqual(['MIXED'])
-    expect(symbols([mixed], { signal: 'tug-of-war', direction: 'bearish' })).toEqual([])
-
-    const unconfirmedBull = row('FORMING-BULL', analysis([signal('regular-bullish')], confirmedTow('bearish')))
-    expect(symbols([unconfirmedBull], { signal: 'confirmed', direction: 'bullish' })).toEqual([])
-    expect(symbols([unconfirmedBull], { signal: 'confirmed', direction: 'bearish' })).toEqual(['FORMING-BULL'])
-  })
-
-  test('pending TOW never borrows the remembered direction', () => {
-    const tow = analyzeTugOfWar(pendingTowHistory())
-    expect(tow.trend).toBe('bullish')
-    expect(isPendingTugOfWar(tow)).toBe(true)
-    const pending = row('PENDING', analysis([], tow))
-    expect(symbols([pending], { signal: 'tug-of-war' })).toEqual(['PENDING'])
-    expect(symbols([pending], { direction: 'bullish' })).toEqual([])
-    expect(symbols([pending], { signal: 'tug-of-war', direction: 'bullish' })).toEqual([])
-  })
-
-  test('a weak directional candle does not match remembered control as current direction', () => {
-    const history = [
-      ...neutralHistory().slice(0, 20),
-      bar(20, { open: 100, high: 140, low: 100, close: 135 }),
-      bar(21, { open: 109.375, high: 110.375, low: 109.375, close: 109.375 }),
-    ]
-    const tow = analyzeTugOfWar(history)
-    expect(tow.control).toBe('bullish')
-    expect(tow.trend).toBe('bullish')
-    expect(tow.pendingTowCandles).toBe(0)
-    expect(symbols([row('WEAK', analysis([], tow), history)], { direction: 'bullish' })).toEqual([])
-  })
-
-  test('empty and warming-up symbols remain browseable but cannot claim TOW signals', () => {
-    const warmingBars = [bar(0, { high: 110, low: 90 })]
-    const warming = analyzeTugOfWar(warmingBars)
-    expect(warming.pendingTowCandles).toBe(1)
-    expect(isPendingTugOfWar(warming)).toBe(false)
-    const rows = [row('EMPTY', analysis([], analyzeTugOfWar([])), []), row('WARMUP', analysis([], warming), warmingBars)]
-    expect(symbols(rows)).toEqual(['EMPTY', 'WARMUP'])
-    for (const signalFilter of ['divergence', 'confirmed', 'tug-of-war'] as const) {
-      expect(symbols(rows, { signal: signalFilter })).toEqual([])
+    for (const recency of [1, 3, 5, 'any'] as const) {
+      expect(symbols(rows, { divergenceRecency: recency })).toEqual(['OLD-DIVERGENCE', 'QUIET'])
+      expect(symbols(rows, { divergenceRecency: recency, sort: 'signals' })).toEqual(['OLD-DIVERGENCE', 'QUIET'])
+      expect(symbols(rows, { signal: 'confirmed', divergenceRecency: recency })).toEqual(
+        recency === 'any' ? ['OLD-DIVERGENCE'] : [],
+      )
     }
-    expect(symbols(rows, { direction: 'bullish' })).toEqual([])
-    expect(symbols(rows, { direction: 'bearish' })).toEqual([])
+  })
+
+  test('signal sorting includes both directions and scores only divergences within the selected age window', () => {
+    const forming = signal('regular-bullish')
+    const rows = [
+      row('FORMING', analysis([forming])),
+      row('OLD-PLUS-FORMING', analysis([confirmedSignal(4), forming])),
+      row('BEAR-PLUS-FORMING', analysis([confirmedSignal(0, 'regular-bearish'), forming])),
+      row('FRESH-CONFIRMED', analysis([confirmedSignal(0)])),
+    ]
+    expect(symbols(rows, { signal: 'divergence', sort: 'signals' })).toEqual([
+      'BEAR-PLUS-FORMING', 'FRESH-CONFIRMED', 'FORMING', 'OLD-PLUS-FORMING',
+    ])
+    expect(symbols(rows, { signal: 'divergence', sort: 'signals', divergenceRecency: 5 })).toEqual([
+      'OLD-PLUS-FORMING', 'BEAR-PLUS-FORMING', 'FRESH-CONFIRMED', 'FORMING',
+    ])
+    expect(symbols(rows, { signal: 'confirmed', sort: 'signals' })).toEqual(['BEAR-PLUS-FORMING', 'FRESH-CONFIRMED'])
+    expect(symbols(rows, { signal: 'confirmed', sort: 'signals', divergenceRecency: 5 })).toEqual([
+      'OLD-PLUS-FORMING', 'BEAR-PLUS-FORMING', 'FRESH-CONFIRMED',
+    ])
+  })
+})
+
+describe('screener signal filters', () => {
+  test('confirmed includes only confirmed RSI divergences, excluding forming and quiet rows', () => {
+    const rows = [
+      row('FORMING', analysis([signal('regular-bullish')])),
+      row('CONFIRMED', analysis([signal('regular-bearish', 'confirmed')])),
+      row('QUIET'),
+    ]
+    expect(symbols(rows, { signal: 'confirmed' })).toEqual(['CONFIRMED'])
+    expect(symbols(rows, { signal: 'divergence' })).toEqual(['FORMING', 'CONFIRMED'])
+  })
+
+  test.each(['regular-bullish', 'regular-bearish', 'hidden-bullish', 'hidden-bearish'] as const)(
+    '%s setups qualify by confirmation state without a direction choice', (kind) => {
+      const rows = [
+        row('FORMING', analysis([signal(kind)])),
+        row('CONFIRMED', analysis([confirmedSignal(0, kind)])),
+        row('COMPLETED', analysis([signal(kind, 'completed')])),
+      ]
+      expect(symbols(rows, { signal: 'divergence' })).toEqual(['FORMING', 'CONFIRMED'])
+      expect(symbols(rows, { signal: 'confirmed' })).toEqual(['CONFIRMED'])
+    },
+  )
+
+  test('empty and short-history symbols remain browseable without claiming RSI signals', () => {
+    const shortBars = [bar(0, { high: 110, low: 90 })]
+    const rows = [analyzedRow('EMPTY', []), analyzedRow('SHORT', shortBars)]
+    expect(symbols(rows)).toEqual(['EMPTY', 'SHORT'])
+    for (const selected of ['divergence', 'confirmed'] as const) {
+      expect(symbols(rows, { signal: selected })).toEqual([])
+    }
   })
 
   test('normalizes pair search and combines it with starred and signal filters', () => {
@@ -241,163 +340,56 @@ describe('screener signal filters', () => {
   })
 })
 
-describe('screener live Tug of War', () => {
-  test('current bearish control replaces previous closed bullish control in direction filters', () => {
-    const history = pendingTowHistory().slice(0, 21)
-    const falling = bar(21, { open: 110, high: 110.5, low: 60, close: 62, isClosed: false })
-    const current = liveRow('LIVE-BEARISH', [...history, falling])
-
-    expect(current.analysis.tugOfWar.control).toBe('bullish')
-    expect(current.preview?.control).toBe('bearish')
-    expect(current.preview?.isBodyQualified).toBe(true)
-    expect(symbols([current], { direction: 'bearish' })).toEqual(['LIVE-BEARISH'])
-    expect(symbols([current], { direction: 'bullish' })).toEqual([])
+describe('screener price context stays separate from RSI signals', () => {
+  test.each(['bullish', 'bearish'] as const)('a %s TOW confirmation cannot match RSI filters or boost signal rank', (direction) => {
+    const resolution = direction === 'bullish'
+      ? { open: 115, high: 150, low: 115, close: 145 }
+      : { open: 85, high: 85, low: 50, close: 55 }
+    const bars = [...pendingTowHistory(), bar(23, resolution)]
+    // This remains a real TOW confirmation in the independent chart indicator.
+    expect(analyzeTugOfWar(bars).confirmation?.direction).toBe(direction)
+    const current = analyzedRow(`PRICE-ONLY-${direction}`, bars)
+    expect(current.analysis).toEqual({ divergences: [] })
     expect(hasConfirmedSignal(current.analysis)).toBe(false)
-  })
-
-  test('a currently undecided candle is a TOW setup without borrowing closed bullish direction', () => {
-    const history = pendingTowHistory().slice(0, 21)
-    const undecided = bar(21, { open: 110, high: 110.5, low: 107, close: 110, isClosed: false })
-    const current = liveRow('LIVE-PENDING', [...history, undecided])
-
-    expect(current.analysis.tugOfWar.control).toBe('bullish')
-    expect(current.analysis.tugOfWar.pendingTowCandles).toBe(0)
-    expect(current.preview?.control).toBe('tugOfWar')
-    expect(current.preview?.pendingTowCandles).toBe(1)
-    expect(current.preview?.trend).toBe('bullish')
-    expect(isTugOfWarSetup(current)).toBe(true)
-    expect(symbols([current], { signal: 'tug-of-war' })).toEqual(['LIVE-PENDING'])
-    for (const direction of ['bullish', 'bearish'] as const) {
-      expect(symbols([current], { direction })).toEqual([])
-      expect(symbols([current], { signal: 'tug-of-war', direction })).toEqual([])
+    expect(symbols([current])).toEqual([current.symbol])
+    for (const selected of ['divergence', 'confirmed'] as const) {
+      expect(symbols([current], { signal: selected })).toEqual([])
     }
-  })
-
-  test('weak current control keeps a pending sequence out of both direction filters', () => {
-    const history = pendingTowHistory()
-    const closed = analyzeTugOfWar(history)
-    const previous = closed.heikinAshi.at(-1)!
-    const open = (previous.open + previous.close) / 2
-    const weak = bar(23, { open, high: open + 1, low: open, close: open, isClosed: false })
-    const current = liveRow('LIVE-WEAK', [...history, weak])
-
-    expect(current.preview?.control).toBe('bullish')
-    expect(current.preview?.isBodyQualified).toBe(false)
-    expect(current.preview?.pendingTowCandles).toBe(2)
-    expect(isTugOfWarSetup(current)).toBe(true)
-    expect(symbols([current], { signal: 'tug-of-war' })).toEqual(['LIVE-WEAK'])
-    expect(symbols([current], { direction: 'bullish' })).toEqual([])
-    expect(symbols([current], { direction: 'bearish' })).toEqual([])
-  })
-
-  test('TOW setup filters include a possible resolution but exclude ordinary live directional control', () => {
-    const resolution = liveRow('LIVE-REVERSAL', [
-      ...pendingTowHistory(),
-      bar(23, { open: 85, high: 85, low: 50, close: 55, isClosed: false }),
-    ])
-    const ordinary = liveRow('LIVE-ORDINARY', [
-      ...pendingTowHistory().slice(0, 21),
-      bar(21, { open: 110, high: 110.5, low: 60, close: 62, isClosed: false }),
-    ])
-
-    expect(resolution.preview?.possibleResolution).toEqual({ direction: 'bearish', kind: 'reversal', towCandleCount: 2 })
-    expect(ordinary.preview?.control).toBe('bearish')
-    expect(ordinary.preview?.possibleResolution).toBeNull()
-    expect(ordinary.preview?.pendingTowCandles).toBe(0)
-    expect(isTugOfWarSetup(resolution)).toBe(true)
-    expect(isTugOfWarSetup(ordinary)).toBe(false)
-    const rows = [ordinary, resolution]
-    expect(symbols(rows, { direction: 'bearish' })).toEqual(['LIVE-ORDINARY', 'LIVE-REVERSAL'])
-    expect(symbols(rows, { signal: 'tug-of-war' })).toEqual(['LIVE-REVERSAL'])
-    expect(symbols(rows, { signal: 'tug-of-war', direction: 'bearish' })).toEqual(['LIVE-REVERSAL'])
-    expect(symbols(rows, { signal: 'tug-of-war', direction: 'bullish' })).toEqual([])
-    expect(symbols(rows, { signal: 'confirmed' })).toEqual([])
-  })
-
-  test('successive live ticks change filtering while reusing and preserving closed signal analysis', () => {
-    const history = pendingTowHistory().slice(0, 21)
-    const initial = getScreenerAnalysis('LIVE-CACHE', history, SETTINGS)
-    const before = structuredClone(initial)
-    const early = bar(21, { open: 110, high: 110.5, low: 107, close: 110, isClosed: false })
-    const falling = { ...early, low: 60, close: 62 }
-    const undecided = liveRow('LIVE-CACHE', [...history, early])
-    const bearish = liveRow('LIVE-CACHE', [...history, falling])
-
-    expect(undecided.analysis).toBe(initial)
-    expect(bearish.analysis).toBe(initial)
-    expect(undecided.preview?.control).toBe('tugOfWar')
-    expect(bearish.preview?.control).toBe('bearish')
-    expect(bearish.preview).not.toBe(undecided.preview)
-    expect(symbols([undecided], { signal: 'tug-of-war' })).toEqual(['LIVE-CACHE'])
-    expect(symbols([bearish], { signal: 'tug-of-war' })).toEqual([])
-    expect(symbols([undecided], { direction: 'bearish' })).toEqual([])
-    expect(symbols([bearish], { direction: 'bearish' })).toEqual(['LIVE-CACHE'])
-    expect(initial).toEqual(before)
-    expect(initial.tugOfWar.control).toBe('bullish')
-    expect(initial.tugOfWar.lastClosedTime).toBe(history.at(-1)?.closeTime)
-
-    const closed = liveRow('LIVE-CACHE', [...history, { ...falling, isClosed: true }])
-    expect(closed.analysis).not.toBe(initial)
-    expect(closed.analysis.tugOfWar.control).toBe('bearish')
-    expect(closed.analysis.tugOfWar.lastClosedTime).toBe(falling.closeTime)
-    expect(closed.preview).toBeNull()
-    expect(symbols([closed], { direction: 'bearish' })).toEqual(['LIVE-CACHE'])
-    expect(initial).toEqual(before)
-  })
-
-  test('closed confirmation direction stays independent of bearish or pending live previews', () => {
-    const history = [
-      ...pendingTowHistory(),
-      bar(23, { open: 115, high: 150, low: 115, close: 145 }),
-    ]
-    const bearish = liveRow('CLOSED-BULL-LIVE-BEAR', [
-      ...history, bar(24, { open: 120, high: 120.5, low: 60, close: 62, isClosed: false }),
-    ])
-    const pending = liveRow('CLOSED-BULL-LIVE-PENDING', [
-      ...history, bar(24, { open: 123, high: 140, low: 110, close: 125, isClosed: false }),
-    ])
-
-    expect(bearish.preview?.control).toBe('bearish')
-    expect(pending.preview?.control).toBe('tugOfWar')
-    for (const current of [bearish, pending]) {
-      expect(current.analysis.tugOfWar.confirmation?.direction).toBe('bullish')
-      expect(symbols([current], { signal: 'confirmed', direction: 'bullish' })).toEqual([current.symbol])
-      expect(symbols([current], { signal: 'confirmed', direction: 'bearish' })).toEqual([])
-    }
-    expect(symbols([bearish, pending], { direction: 'bearish' })).toEqual(['CLOSED-BULL-LIVE-BEAR'])
-  })
-
-  test('active sorting promotes current pending and possible resolutions without boosting stale closed states', () => {
-    const history = pendingTowHistory()
     const quiet = row('QUIET')
-    const oldPending = liveRow('OLD-PENDING', [
-      ...history.slice(0, 22),
-      bar(22, { open: 115, high: 150, low: 115, close: 145, isClosed: false }),
-    ])
-    const oldDecision = liveRow('OLD-DECISION', [
-      ...history,
-      bar(23, { open: 115, high: 150, low: 115, close: 145 }),
-      bar(24, { open: 120, high: 120.5, low: 60, close: 62, isClosed: false }),
-    ])
-    const pending = liveRow('NEW-PENDING', [
-      ...history.slice(0, 21),
-      bar(21, { open: 110, high: 110.5, low: 107, close: 110, isClosed: false }),
-    ])
-    const resolution = liveRow('NEW-RESOLUTION', [
-      ...history,
-      bar(23, { open: 85, high: 85, low: 50, close: 55, isClosed: false }),
-    ])
+    const forming = row('FORMING', analysis([signal('regular-bullish')]))
+    expect(symbols([quiet, current, forming], { sort: 'signals' })).toEqual(['FORMING', 'QUIET', current.symbol])
+  })
 
-    expect(oldPending.analysis.tugOfWar.pendingTowCandles).toBe(1)
-    expect(oldDecision.analysis.tugOfWar.confirmation?.direction).toBe('bullish')
-    expect(isTugOfWarSetup(oldPending)).toBe(false)
-    expect(isTugOfWarSetup(oldDecision)).toBe(false)
-    expect(pending.analysis.tugOfWar.pendingTowCandles).toBe(0)
-    expect(pending.preview?.pendingTowCandles).toBe(1)
-    expect(resolution.preview?.possibleResolution?.direction).toBe('bearish')
-    expect(symbols([quiet, oldPending, oldDecision, pending, resolution], { sort: 'signals' })).toEqual([
-      'NEW-RESOLUTION', 'NEW-PENDING', 'QUIET', 'OLD-PENDING', 'OLD-DECISION',
-    ])
+  test('opposing live price resolutions leave closed RSI analysis and signal filtering unchanged', () => {
+    const history = pendingTowHistory()
+    const initial = getScreenerAnalysis('PRICE-ONLY-LIVE', history, SETTINGS)
+    const before = structuredClone(initial)
+    for (const direction of ['bullish', 'bearish'] as const) {
+      const resolution = direction === 'bullish'
+        ? { open: 115, high: 150, low: 115, close: 145 }
+        : { open: 85, high: 85, low: 50, close: 55 }
+      const bars = [...history, bar(23, { ...resolution, isClosed: false })]
+      expect(previewTugOfWar(bars)?.possibleResolution?.direction).toBe(direction)
+      const current = analyzedRow('PRICE-ONLY-LIVE', bars)
+      expect(current.analysis).toBe(initial)
+      expect(current.analysis.divergences).toEqual([])
+      expect(hasConfirmedSignal(current.analysis)).toBe(false)
+      expect(symbols([current], { signal: 'divergence' })).toEqual([])
+      expect(symbols([current], { signal: 'confirmed' })).toEqual([])
+      expect(symbols([row('QUIET'), current], { sort: 'signals' })).toEqual(['QUIET', 'PRICE-ONLY-LIVE'])
+    }
+    expect(initial).toEqual(before)
+  })
+
+  test('all-pair signal ranking gives bullish and bearish confirmations equal priority over forming setups', () => {
+    const forming = signal('regular-bullish')
+    const rows = [
+      row('FORMING', analysis([forming])),
+      row('MIXED', analysis([forming, confirmedSignal(0, 'regular-bearish')])),
+      row('CONFIRMED', analysis([confirmedSignal(13)])),
+    ]
+    expect(symbols(rows, { sort: 'signals' })).toEqual(['MIXED', 'CONFIRMED', 'FORMING'])
+    expect(symbols([rows[0], rows[2], rows[1]], { sort: 'signals' })).toEqual(['CONFIRMED', 'MIXED', 'FORMING'])
   })
 })
 
@@ -415,7 +407,7 @@ describe('screener sorting and price change', () => {
     noRsi.snapshot = { ...noRsi.snapshot, series: [] }
     const rows = [
       noRsi,
-      row('EMPTY', analysis([], analyzeTugOfWar([])), []),
+      row('EMPTY', analysis(), []),
       row('HIGH', analysis(), [bar(0, { rsi: 80 })]),
       row('LOW', analysis(), [bar(0, { rsi: 20 })]),
       row('LOW-TIE', analysis(), [bar(0, { rsi: 20 })]),
@@ -424,15 +416,14 @@ describe('screener sorting and price change', () => {
     expect(symbols(rows, { sort: 'rsi-high' })).toEqual(['HIGH', 'LOW', 'LOW-TIE', 'NO-RSI', 'EMPTY'])
   })
 
-  test('ranks confirmations ahead of forming divergences and pending TOW, with loading rows last', () => {
+  test('ranks confirmations ahead of forming divergences, with loading rows last', () => {
     const rows = [
-      row('EMPTY', analysis([], analyzeTugOfWar([])), []),
+      row('EMPTY', analysis(), []),
       row('QUIET'),
-      row('TOW', analysis([], analyzeTugOfWar(pendingTowHistory()))),
       row('FORMING', analysis([signal('regular-bullish')])),
-      row('CONFIRMED', analysis([], confirmedTow())),
+      row('CONFIRMED', analysis([confirmedSignal(0)])),
     ]
-    expect(symbols(rows, { sort: 'signals' })).toEqual(['CONFIRMED', 'FORMING', 'TOW', 'QUIET', 'EMPTY'])
+    expect(symbols(rows, { sort: 'signals' })).toEqual(['CONFIRMED', 'FORMING', 'QUIET', 'EMPTY'])
   })
 
   test('change uses the latest selected-timeframe candle, including its live preview', () => {
@@ -448,7 +439,7 @@ describe('screener sorting and price change', () => {
 
     const positive = row('UP', analysis(), [bar(0, { open: 100, close: 110, high: 110 })])
     const negative = row('DOWN', analysis(), [bar(0, { open: 100, close: 90, low: 90 })])
-    const missing = row('EMPTY', analysis([], analyzeTugOfWar([])), [])
+    const missing = row('EMPTY', analysis(), [])
     expect(symbols([negative, missing, positive], { sort: 'change' })).toEqual(['UP', 'DOWN', 'EMPTY'])
   })
 })

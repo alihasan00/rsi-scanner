@@ -1,26 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Badge, Button, Card, Empty, Input, Segmented, Select, Statistic, Tag, Tooltip } from 'antd'
+import { Alert, Badge, Button, Card, Cascader, Empty, Input, Segmented, Select, Statistic, Tag, Tooltip } from 'antd'
 import type { InputRef } from 'antd'
-import { AppstoreOutlined, BarsOutlined, SearchOutlined, StarOutlined, SwapOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { AppstoreOutlined, BarsOutlined, SearchOutlined, StarOutlined, SwapOutlined } from '@ant-design/icons'
 import { useShallow } from 'zustand/react/shallow'
 import { useScreenerRows } from '../hooks/useScreenerRows'
-import { candleChange, filterScreenerRows, isTugOfWarSetup } from '../lib/screener'
-import type { DirectionFilter, ScreenerSort, SignalFilter } from '../lib/screener'
+import { candleChange, DEFAULT_DIVERGENCE_RECENCY, filterDivergenceSetups, filterScreenerRows } from '../lib/screener'
+import type { DivergenceRecency, ScreenerSort, SignalFilter } from '../lib/screener'
 import { useScannerStore } from '../store/scannerStore'
 import { TimeframePicker } from './TimeframePicker'
 import { ScreenerCard } from './ScreenerCard'
 import './ScreenerGrid.css'
 
 const DELAYED_AFTER_MS = 60_000
-const SIGNAL_OPTIONS = [
-  { value: 'all', label: 'All indicators' },
-  { value: 'divergence', label: 'RSI divergences' },
-  { value: 'tug-of-war', label: 'Tug of War setups' },
+interface IndicatorOption {
+  value: SignalFilter | DivergenceRecency
+  label: string
+  children?: IndicatorOption[]
+}
+const DIVERGENCE_RECENCY_OPTIONS: IndicatorOption[] = [
+  { value: 1, label: 'Latest closed candle' },
+  { value: 3, label: 'Latest 3 closed candles' },
+  { value: 5, label: 'Latest 5 closed candles' },
+  { value: 'any', label: 'Any age' },
 ]
-const DIRECTION_OPTIONS = [
-  { value: 'all', label: 'Any direction' },
-  { value: 'bullish', label: 'Bullish' },
-  { value: 'bearish', label: 'Bearish' },
+const SIGNAL_OPTIONS: IndicatorOption[] = [
+  { value: 'all', label: 'All indicators' },
+  { value: 'divergence', label: 'RSI divergences', children: DIVERGENCE_RECENCY_OPTIONS },
 ]
 const SORT_OPTIONS = [
   { value: 'watchlist', label: 'Watchlist order' },
@@ -41,7 +46,7 @@ export function ScreenerGrid() {
   const rows = useScreenerRows()
   const [search, setSearch] = useState('')
   const [signal, setSignal] = useState<SignalFilter>('all')
-  const [direction, setDirection] = useState<DirectionFilter>('all')
+  const [divergenceRecency, setDivergenceRecency] = useState<DivergenceRecency>(DEFAULT_DIVERGENCE_RECENCY)
   const [starredOnly, setStarredOnly] = useState(false)
   const [sort, setSort] = useState<ScreenerSort>('watchlist')
   const [now, setNow] = useState(() => Date.now())
@@ -67,17 +72,20 @@ export function ScreenerGrid() {
   useEffect(() => { scrollRef.current?.scrollTo({ top: 0 }) }, [timeframe])
 
   const visibleRows = useMemo(() => filterScreenerRows(rows, {
-    search, signal, direction, starredOnly, starredSymbols, sort,
-  }), [rows, search, signal, direction, starredOnly, starredSymbols, sort])
+    search, signal, divergenceRecency, starredOnly, starredSymbols, sort,
+  }), [rows, search, signal, divergenceRecency, starredOnly, starredSymbols, sort])
+  const usesDivergenceRecency = signal === 'divergence' || signal === 'confirmed'
+  const recencyLabel = DIVERGENCE_RECENCY_OPTIONS.find((option) => option.value === divergenceRecency)!.label
   const loadedRows = rows.filter((row) => row.snapshot.bars.length > 0)
-  const divergenceCount = loadedRows.filter((row) => row.analysis.divergences.length > 0).length
-  const towCount = loadedRows.filter(isTugOfWarSetup).length
+  const divergenceCount = loadedRows.filter((row) => filterDivergenceSetups(
+    row.analysis.divergences, usesDivergenceRecency ? divergenceRecency : 'any',
+  ).length > 0).length
   const failedCount = rows.filter((row) => row.feed.state === 'error').length
   const delayed = loadedRows.filter((row) => row.feed.updatedAt !== null && now - row.feed.updatedAt > DELAYED_AFTER_MS).length
   const advancing = loadedRows.filter((row) => (candleChange(row.snapshot) ?? 0) > 0).length
   const declining = loadedRows.filter((row) => (candleChange(row.snapshot) ?? 0) < 0).length
-  const hasFilters = !!search || signal !== 'all' || direction !== 'all' || starredOnly
-  const clearFilters = () => { setSearch(''); setSignal('all'); setDirection('all'); setStarredOnly(false) }
+  const hasFilters = !!search || signal !== 'all' || starredOnly
+  const clearFilters = () => { setSearch(''); setSignal('all'); setDivergenceRecency(DEFAULT_DIVERGENCE_RECENCY); setStarredOnly(false) }
   const feedLabel = failedCount ? `${failedCount} ${failedCount === 1 ? 'pair' : 'pairs'} reconnecting`
     : delayed ? `${delayed} ${delayed === 1 ? 'pair' : 'pairs'} delayed`
       : loadedRows.length === rows.length ? 'Market data connected' : `Loading ${loadedRows.length} / ${rows.length} pairs`
@@ -89,7 +97,7 @@ export function ScreenerGrid() {
           <div>
             <div className="screener__eyebrow">A CLEARER VIEW OF THE MARKET</div>
             <h1 id="screener-title">Market screener</h1>
-            <p>Price action, RSI divergences, and live Tug of War. One focused view.</p>
+            <p>Price action and RSI divergences. Find recent setups across the market.</p>
           </div>
           <div className="screener__feed">
             <Badge status={failedCount || delayed ? 'warning' : loadedRows.length ? 'success' : 'default'} text={feedLabel} />
@@ -106,12 +114,7 @@ export function ScreenerGrid() {
           <Card size="small" className="screener-stat">
             <span className="screener-stat__icon"><SwapOutlined /></span>
             <Statistic title="RSI divergences" value={divergenceCount} formatter={(value) => String(value).padStart(2, '0')} />
-            <div className="screener-stat__detail"><Tag className="screener__brand-tag">RSI 14</Tag><span>Pairs with an active divergence</span></div>
-          </Card>
-          <Card size="small" className="screener-stat">
-            <span className="screener-stat__icon"><ThunderboltOutlined /></span>
-            <Statistic title="Tug of War setups" value={towCount} formatter={(value) => String(value).padStart(2, '0')} />
-            <div className="screener-stat__detail"><Tag className="screener__brand-tag">Heikin-Ashi</Tag><span>Decisions forming across the market</span></div>
+            <div className="screener-stat__detail"><Tag className="screener__brand-tag">RSI 14</Tag><span>{usesDivergenceRecency && divergenceRecency !== 'any' ? `Active pairs · ${recencyLabel.toLowerCase()}` : 'Pairs with an active divergence'}</span></div>
           </Card>
         </div>
 
@@ -123,14 +126,31 @@ export function ScreenerGrid() {
             </div>
             <div className="screener__filter">
               <label htmlFor="indicator-filter">Indicator</label>
-              <Select id="indicator-filter" aria-label="Filter by indicator" value={signal} onChange={setSignal} options={SIGNAL_OPTIONS} />
-            </div>
-            <div className="screener__filter screener__filter--direction">
-              <label htmlFor="direction-filter">Direction</label>
-              <Select<DirectionFilter> id="direction-filter" aria-label="Filter by direction" value={direction} onChange={setDirection} options={DIRECTION_OPTIONS} />
+              <Cascader<IndicatorOption>
+                id="indicator-filter"
+                aria-label="Filter by indicator"
+                value={signal === 'divergence' ? [signal, divergenceRecency] : [signal]}
+                options={SIGNAL_OPTIONS}
+                changeOnSelect
+                allowClear={false}
+                displayRender={(labels) => labels[0]}
+                classNames={{ popup: { root: 'screener__indicator-menu' } }}
+                onChange={(value) => {
+                  const nextSignal = value[0]
+                  if (nextSignal !== 'all' && nextSignal !== 'divergence') return
+                  setSignal(nextSignal)
+                  const recency = value[1]
+                  if (recency === 1 || recency === 3 || recency === 5 || recency === 'any') setDivergenceRecency(recency)
+                }}
+              />
             </div>
             <div className="screener__timeframes"><span>Timeframe</span><TimeframePicker /></div>
           </div>
+          {usesDivergenceRecency && (
+            <p className="screener__filter-help">
+              Age starts at the confirmation close. Newly forming setups await confirmation. Older active divergences remain on the charts.
+            </p>
+          )}
         </Card>
 
         <div className="screener__results-bar">
@@ -154,23 +174,23 @@ export function ScreenerGrid() {
         </div>
         {hasFilters && (
           <div className="screener__active-filters">
-            <span>Showing {visibleRows.length} of {rows.length} pairs{direction !== 'all' ? ` · ${direction}` : ''}{signal !== 'all' ? ` · ${signal === 'divergence' ? 'RSI divergence' : 'Tug of War setups'}` : ''}</span>
+            <span>Showing {visibleRows.length} of {rows.length} pairs{signal !== 'all' ? ` · ${signal === 'divergence' ? 'RSI divergences' : 'Confirmed signals'}` : ''}{usesDivergenceRecency ? ` · ${recencyLabel.toLowerCase()}` : ''}</span>
             <Button type="link" size="small" onClick={clearFilters}>Reset filters</Button>
           </div>
         )}
         {failedCount > 0 && <Alert className="screener__notice" type="warning" showIcon title={`Market data unavailable for ${failedCount} ${failedCount === 1 ? 'pair' : 'pairs'}`} description="Retrying automatically. Available charts continue updating." />}
         {visibleRows.length ? (
           <div className={`screener__grid is-${cardDensity}`}>
-            {visibleRows.map((row) => <ScreenerCard key={`${timeframe}:${row.symbol}`} row={row} timeframe={timeframe} starred={starredSymbols.includes(row.symbol)} stale={row.feed.updatedAt !== null && now - row.feed.updatedAt > DELAYED_AFTER_MS} />)}
+            {visibleRows.map((row) => <ScreenerCard key={`${timeframe}:${row.symbol}`} row={row} timeframe={timeframe} starred={starredSymbols.includes(row.symbol)} stale={row.feed.updatedAt !== null && now - row.feed.updatedAt > DELAYED_AFTER_MS} matchingDivergences={usesDivergenceRecency ? filterDivergenceSetups(row.analysis.divergences, divergenceRecency).filter((setup) => signal !== 'confirmed' || setup.state === 'confirmed') : undefined} />)}
           </div>
         ) : (
           <Card className="screener__empty">
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={
-              <><h2>{starredOnly && starredSymbols.length === 0 ? 'Keep your favorites close' : 'No pairs match these filters'}</h2><p>{starredOnly && starredSymbols.length === 0 ? 'Star a card to build your own focused watchlist.' : 'Try another pair, direction, or indicator.'}</p></>
+              <><h2>{starredOnly && starredSymbols.length === 0 ? 'Keep your favorites close' : 'No pairs match these filters'}</h2><p>{starredOnly && starredSymbols.length === 0 ? 'Star a card to build your own focused watchlist.' : usesDivergenceRecency && divergenceRecency !== 'any' ? 'Try a wider candle window or Any age to find older active divergences.' : 'Try another pair or indicator.'}</p></>
             }><Button type="primary" onClick={clearFilters}>Show all pairs</Button></Empty>
           </Card>
         )}
-        <footer className="screener__footer"><span>Price, RSI & Tug of War follow the current candle</span><span>Live candles are provisional <span aria-hidden="true">·</span> All times UTC</span></footer>
+        <footer className="screener__footer"><span>Divergence setups update on candle closes</span><span>Live candles are provisional <span aria-hidden="true">·</span> All times UTC</span></footer>
       </div>
     </section>
   )
