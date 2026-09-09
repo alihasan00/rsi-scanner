@@ -1,10 +1,7 @@
 .app-header { display: flex; align-items: center; gap: 52px; min-height: 76px; padding: 0 36px; background: var(--color-page); border-bottom: 1px solid var(--color-hairline); flex-shrink: 0; }
 .app-header__brand { display: flex; align-items: center; gap: 12px; font-size: 24px; font-weight: 700; letter-spacing: -1px; }
 .app-header__brand-dot { color: var(--accent); }
-.app-header__mark { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; gap: 4px; transform: rotate(14deg); }
-.app-header__mark i { display: block; width: 5px; height: 15px; background: var(--accent); border-radius: 2px; }
-.app-header__mark i:nth-child(2) { height: 26px; }
-.app-header__mark i:nth-child(3) { height: 20px; }
+.app-header__mark { width: 30px; height: 30px; display: block; }
 .app-header__nav { align-self: stretch; display: flex; }
 .app-header__nav .ant-tabs { min-width: 106px; }
 .app-header__nav .ant-tabs-nav { height: 100%; margin: 0; }
@@ -25,7 +22,7 @@
 @media (max-width: 560px) {
   .app-header { gap: 22px; padding: 0 16px; min-height: 62px; }
   .app-header__brand { gap: 8px; font-size: 21px; }
-  .app-header__mark { width: 23px; }
+  .app-header__mark { width: 23px; height: 23px; }
   .app-header__venue, .app-header__settings.ant-btn > span:not(.ant-btn-icon) { display: none; }
   .app-header__nav .ant-tabs { min-width: 89px; }
   .app-header__nav .ant-tabs-tab { font-size: 12px; }

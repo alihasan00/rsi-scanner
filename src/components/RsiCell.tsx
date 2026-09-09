@@ -8,6 +8,7 @@ import { drawMiniRsiChart } from '../lib/drawRsiChart'
 import { DIVERGENCE_LABELS, divergenceStatus, formatSignalTime, liveDivergenceLabel } from '../lib/divergencePresentation'
 import { isLiveDivergence } from '../lib/divergenceLifecycle'
 import { formatQuotePrice } from '../lib/priceFormatting'
+import { getRsiState, RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_STATE_LABELS } from '../lib/rsiState'
 import { useScannerStore } from '../store/scannerStore'
 import './RsiCell.css'
 
@@ -54,12 +55,16 @@ function RsiCellImpl({ symbol, width, height }: RsiCellProps) {
   }, [series, bars, liveDivergences, showDivergences, rsiColor, midlineColor, lineWidth, width, height])
 
   const rsi = series.length > 0 ? series[series.length - 1] : null
-  const rsiClass = rsi === null ? '' : rsi >= 70 ? 'is-high' : rsi <= 30 ? 'is-low' : ''
+  const rsiState = getRsiState(rsi)
+  const rsiClass = rsiState === 'overbought' ? 'is-high' : rsiState === 'oversold' ? 'is-low' : ''
+  const isLive = bars.at(-1)?.isClosed === false
+  const rsiLabel = rsiState && rsi !== null ? `RSI ${rsi.toFixed(1)}, ${RSI_STATE_LABELS[rsiState].toLowerCase()}${isLive ? ', provisional' : ''}.` : 'RSI unavailable.'
 
   const tooltipContent = (
     <div className="rsi-cell__tooltip-content">
       <strong>{symbol}</strong>
-      {rsi !== null && <div>RSI: {rsi.toFixed(2)}</div>}
+      {rsiState && rsi !== null && <div>RSI: {rsi.toFixed(2)} · {RSI_STATE_LABELS[rsiState]}{isLive ? ' · Live' : ''}</div>}
+      <div>Overbought ≥ {RSI_OVERBOUGHT} · Oversold ≤ {RSI_OVERSOLD}</div>
       {showPrice && <div>Price: {formatQuotePrice(price)}</div>}
       {showVolume && <div>Volume: {volume.toFixed(2)}</div>}
       {showDivergences && (liveDivergences.length ? (
@@ -92,6 +97,7 @@ function RsiCellImpl({ symbol, width, height }: RsiCellProps) {
         className="rsi-cell"
         style={{ width, height }}
         role="button"
+        aria-label={`${symbol}. ${rsiLabel}${latestDivergence ? ` ${liveDivergenceLabel(latestDivergence)}${liveDivergences.length > 1 ? `, ${liveDivergences.length} live setups total` : ''}.` : ''} Open detailed chart.`}
         tabIndex={0}
         onClick={() => selectSymbol(symbol)}
         onKeyDown={(e) => {
@@ -101,10 +107,15 @@ function RsiCellImpl({ symbol, width, height }: RsiCellProps) {
           }
         }}
       >
-        <canvas ref={canvasRef} className="rsi-cell__canvas" />
+        <canvas ref={canvasRef} className="rsi-cell__canvas" aria-hidden="true" />
         <div className="rsi-cell__label">
           <span className="rsi-cell__symbol">{symbol.replace('USDT', '')}</span>
-          {rsi !== null && <span className={`rsi-cell__value ${rsiClass}`}>{rsi.toFixed(1)}</span>}
+          {rsiState && rsi !== null && (
+            <span className={`rsi-cell__value ${rsiClass}`}>
+              {rsi.toFixed(1)}
+              {rsiState !== 'neutral' && <small className="rsi-cell__state">{RSI_STATE_LABELS[rsiState]}</small>}
+            </span>
+          )}
         </div>
         {latestDivergence && (
           <div

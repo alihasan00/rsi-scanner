@@ -2,6 +2,8 @@ import type { ChartSettings, RsiBar, SymbolSnapshot } from '../types'
 import { findRsiDivergenceSetups, isLiveDivergence } from './divergenceLifecycle'
 import type { DivergenceSetup } from './divergenceLifecycle'
 import type { FeedStatus } from '../store/feedStatusStore'
+import { getRsiState } from './rsiState'
+import type { RsiStateFilter } from './rsiState'
 
 export type SignalFilter = 'all' | 'divergence' | 'confirmed'
 export type DivergenceRecency = 1 | 3 | 5 | 'any'
@@ -50,6 +52,7 @@ export interface ScreenerFilters {
   search: string; signal: SignalFilter
   starredOnly: boolean; starredSymbols: readonly string[]; sort: ScreenerSort
   divergenceRecency?: DivergenceRecency
+  rsiState?: RsiStateFilter
 }
 /** Signal filtering and ranking describe live RSI setups within the selected age window. */
 export function filterScreenerRows(rows: readonly ScreenerRow[], filters: ScreenerFilters): ScreenerRow[] {
@@ -63,6 +66,12 @@ export function filterScreenerRows(rows: readonly ScreenerRow[], filters: Screen
     const { symbol, snapshot, analysis } = row
     if (query && !symbol.includes(query)) return false
     if (filters.starredOnly && !filters.starredSymbols.includes(symbol)) return false
+    if (filters.rsiState && filters.rsiState !== 'all') {
+      const state = getRsiState(snapshot.bars.at(-1)?.rsi)
+      if (filters.rsiState === 'either') {
+        if (state !== 'overbought' && state !== 'oversold') return false
+      } else if (state !== filters.rsiState) return false
+    }
     if (filters.signal === 'all') return true
     if (!snapshot.bars.length) return false
     return selectedDivergences(analysis).length > 0

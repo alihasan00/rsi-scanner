@@ -5,6 +5,7 @@ import { useNearViewport } from '../hooks/useNearViewport'
 import type { DivergenceSetup } from '../lib/divergenceLifecycle'
 import { DIVERGENCE_LABELS, formatSignalTime } from '../lib/divergencePresentation'
 import type { ScreenerRow } from '../lib/screener'
+import { getRsiState, RSI_STATE_LABELS } from '../lib/rsiState'
 import { useScannerStore } from '../store/scannerStore'
 import type { Timeframe } from '../types'
 import { ScreenerChart } from './ScreenerChart'
@@ -21,6 +22,11 @@ function ScreenerCardImpl({ row, timeframe, starred, stale, matchingDivergences 
   const selectSymbol = useScannerStore((state) => state.selectSymbol)
   const toggleStarredSymbol = useScannerStore((state) => state.toggleStarredSymbol)
   const base = symbol.replace(/USDT$/, '')
+  const latestBar = snapshot.bars.at(-1)
+  const rsiState = getRsiState(latestBar?.rsi)
+  const rsiDescription = latestBar && rsiState
+    ? `RSI ${latestBar.rsi.toFixed(1)}, ${RSI_STATE_LABELS[rsiState].toLowerCase()}${latestBar.isClosed ? '' : ', provisional live candle'}.`
+    : 'RSI unavailable.'
   const feedError = feed.state === 'error'
   const feedWarning = feedError ? 'Data unavailable · retrying' : stale ? 'Updates delayed' : null
   const latestDivergence = matchingDivergences?.reduce<DivergenceSetup | undefined>((latest, setup) => (
@@ -64,7 +70,7 @@ function ScreenerCardImpl({ row, timeframe, starred, stale, matchingDivergences 
             </Tooltip>
           </div>
         )}
-        <button type="button" className="screener-card__chart-button" aria-label={`Open ${base} chart`} onClick={() => selectSymbol(symbol)}>
+        <button type="button" className="screener-card__chart-button" aria-label={`Open ${base} chart. ${rsiDescription}`} onClick={() => selectSymbol(symbol)}>
           <ScreenerChart symbol={symbol} timeframe={timeframe} bars={snapshot.bars} divergences={analysis.divergences} active={isNearViewport} />
           <span className="screener-card__chart-hint">Explore chart <ArrowRightOutlined /></span>
         </button>

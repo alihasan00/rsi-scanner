@@ -340,6 +340,67 @@ describe('screener signal filters', () => {
   })
 })
 
+describe('screener RSI state filters', () => {
+  const readings = [0, 30, 30.001, 50, 69.999, 70, 100]
+  const valueRows = readings.map((rsi) => row(`RSI-${rsi}`, analysis(), [bar(0, { rsi })]))
+  const invalidRows = [
+    row('EMPTY', analysis(), []),
+    ...[NaN, Infinity, -Infinity, -1, 101].map((rsi) => row(`INVALID-${rsi}`, analysis(), [bar(0, { rsi })])),
+  ]
+  const rows = [...valueRows, ...invalidRows]
+
+  test('all remains the default and includes rows without usable RSI', () => {
+    expect(symbols(rows)).toEqual(rows.map((item) => item.symbol))
+    expect(symbols(rows, { rsiState: 'all' })).toEqual(rows.map((item) => item.symbol))
+  })
+
+  test.each([
+    { state: 'overbought' as const, matches: ['RSI-70', 'RSI-100'] },
+    { state: 'oversold' as const, matches: ['RSI-0', 'RSI-30'] },
+    { state: 'either' as const, matches: ['RSI-0', 'RSI-30', 'RSI-70', 'RSI-100'] },
+    { state: 'neutral' as const, matches: ['RSI-30.001', 'RSI-50', 'RSI-69.999'] },
+  ])('$state uses inclusive extreme thresholds and excludes unavailable RSI', ({ state, matches }) => {
+    expect(symbols(rows, { rsiState: state })).toEqual(matches)
+  })
+
+  test('uses the latest chart bar, including its provisional live value', () => {
+    const divergences = analysis([confirmedSignal(0)])
+    const bars = [bar(0, { rsi: 75 }), bar(1, { rsi: 25, isClosed: false })]
+    const current = row('LIVE', divergences, bars)
+    // A stale series or prior closed RSI must not override the displayed bar.
+    current.snapshot.series = [75]
+    expect(symbols([current], { rsiState: 'oversold' })).toEqual(['LIVE'])
+    expect(symbols([current], { rsiState: 'overbought' })).toEqual([])
+
+    const next = row('LIVE', divergences, [bars[0], { ...bars[1], rsi: 50 }])
+    expect(symbols([next], { rsiState: 'oversold' })).toEqual([])
+    expect(symbols([next], { rsiState: 'neutral' })).toEqual(['LIVE'])
+    expect(next.analysis).toBe(divergences)
+  })
+
+  test('combines RSI state with search, favorites, and divergence recency independently', () => {
+    const overbought = [bar(0, { rsi: 80 })]
+    const candidates = [
+      row('BTCUSDT', analysis([confirmedSignal(0)]), overbought),
+      row('WBTCUSDT', analysis([confirmedSignal(0, 'regular-bearish')]), overbought),
+      row('ETHUSDT', analysis([confirmedSignal(0)]), overbought),
+      row('OLD-BTCUSDT', analysis([confirmedSignal(3)]), overbought),
+      row('FORMING-BTCUSDT', analysis([signal('regular-bullish')]), overbought),
+      row('QUIET-BTCUSDT', analysis(), overbought),
+      row('NEUTRAL-BTCUSDT', analysis([confirmedSignal(0)])),
+    ]
+    const selected = {
+      search: 'btc/usdt', signal: 'divergence' as const, rsiState: 'overbought' as const,
+      starredOnly: true, starredSymbols: candidates.filter((item) => item.symbol !== 'FORMING-BTCUSDT').map((item) => item.symbol),
+    }
+    expect(symbols(candidates, selected)).toEqual(['BTCUSDT', 'WBTCUSDT'])
+    expect(symbols(candidates, { ...selected, divergenceRecency: 'any' })).toEqual(['BTCUSDT', 'WBTCUSDT', 'OLD-BTCUSDT'])
+    expect(symbols(candidates, { ...selected, starredOnly: false })).toEqual(['BTCUSDT', 'WBTCUSDT', 'FORMING-BTCUSDT'])
+    expect(symbols(candidates, { ...selected, rsiState: 'neutral' })).toEqual(['NEUTRAL-BTCUSDT'])
+    expect(symbols(candidates, { ...selected, signal: 'all' })).toEqual(['BTCUSDT', 'WBTCUSDT', 'OLD-BTCUSDT', 'QUIET-BTCUSDT'])
+  })
+})
+
 describe('screener price context stays separate from RSI signals', () => {
   test.each(['bullish', 'bearish'] as const)('a %s TOW confirmation cannot match RSI filters or boost signal rank', (direction) => {
     const resolution = direction === 'bullish'

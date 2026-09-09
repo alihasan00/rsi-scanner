@@ -1,4 +1,5 @@
 import { computeSma } from './rsi'
+import { getRsiState, RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_STATE_LABELS } from './rsiState'
 import type { DivergenceSignal } from './divergence'
 import type { DivergenceSetup } from './divergenceLifecycle'
 import type { HeikinAshiBar, TugOfWarPreview } from './tugOfWar'
@@ -38,6 +39,48 @@ const CHART_BACKGROUND = '#1A1A1A'
 const GRID_COLOR = '#333333'
 const AXIS_COLOR = '#D4D4D4'
 
+/** Shared, fixed-scale RSI context for card, detail, and compact charts. */
+export function drawRsiZones(
+  ctx: CanvasRenderingContext2D,
+  region: ChartRegion,
+  labels: 'detail' | 'compact' | 'none',
+): ChartRegion[] {
+  const width = region.right - region.left
+  const height = region.bottom - region.top
+  const toY = (value: number) => region.bottom - value / 100 * height
+  const labelBoxes: ChartRegion[] = []
+  ctx.save()
+  ctx.fillStyle = 'rgba(239, 68, 68, 0.07)'
+  ctx.fillRect(region.left, region.top, width, toY(RSI_OVERBOUGHT) - region.top)
+  ctx.fillStyle = 'rgba(52, 211, 153, 0.07)'
+  ctx.fillRect(region.left, toY(RSI_OVERSOLD), width, region.bottom - toY(RSI_OVERSOLD))
+
+  ctx.font = `${labels === 'detail' ? 10 : 9}px Inter, system-ui, sans-serif`
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.lineWidth = 1
+  ctx.setLineDash([3, 4])
+  for (const { threshold, label, color, stroke, offset } of [
+    { threshold: RSI_OVERBOUGHT, label: `Overbought ≥ ${RSI_OVERBOUGHT}`, color: '#F28B8B', stroke: 'rgba(239, 68, 68, 0.32)', offset: -8 },
+    { threshold: RSI_OVERSOLD, label: `Oversold ≤ ${RSI_OVERSOLD}`, color: '#73C9AA', stroke: 'rgba(52, 211, 153, 0.32)', offset: 8 },
+  ]) {
+    const y = toY(threshold)
+    ctx.strokeStyle = stroke
+    ctx.beginPath()
+    ctx.moveTo(region.left, y)
+    ctx.lineTo(region.right, y)
+    ctx.stroke()
+    const labelWidth = ctx.measureText(label).width
+    if (labels !== 'none' && height >= 64 && labelWidth <= width - 12) {
+      ctx.fillStyle = color
+      ctx.fillText(label, region.left + 5, y + offset)
+      labelBoxes.push({ left: region.left + 4, right: region.left + labelWidth + 6, top: y + offset - 7, bottom: y + offset + 7 })
+    }
+  }
+  ctx.restore()
+  return labelBoxes
+}
+
 function visibleDivergences(context: RsiDivergenceChartContext, dataLength: number): VisibleDivergence[] {
   const bars = context.bars.slice(-dataLength)
   const offset = dataLength - bars.length
@@ -59,6 +102,7 @@ function drawDivergences(
   toY: (value: number) => number,
   valueKey: 'price' | 'rsi',
   labels: boolean,
+  reservedLabelBoxes: readonly ChartRegion[] = [],
 ): void {
   ctx.save()
   // Keep overlays out of the axes and the adjacent panel.
@@ -69,7 +113,7 @@ function drawDivergences(
   ctx.font = '600 10px Inter, system-ui, sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  const labelBoxes: ChartRegion[] = []
+  const labelBoxes: ChartRegion[] = [...reservedLabelBoxes]
 
   for (const { signal, startIndex, endIndex } of signals) {
     ctx.globalAlpha = signal.state && signal.state !== 'forming' && signal.state !== 'confirmed' ? 0.5 : 1
@@ -282,31 +326,6 @@ function drawTimeAxis(
   ctx.restore()
 }
 
-interface RsiScale {
-  min: number
-  max: number
-}
-
-function computeRsiScale(data: number[], padding: number): RsiScale {
-  let dataMax = -Infinity
-  let dataMin = Infinity
-  for (const v of data) {
-    if (v > dataMax) dataMax = v
-    if (v < dataMin) dataMin = v
-  }
-  const range = dataMax - dataMin
-
-  let max = Math.min(Math.max(dataMax + padding, 70), 100)
-  let min = Math.max(Math.min(dataMin - padding, 30), 0)
-
-  if (range < 10) {
-    const midpoint = (dataMax + dataMin) / 2
-    max = midpoint + 10
-    min = midpoint - 10
-  }
-  return { min, max }
-}
-
 /** Resizes a canvas' backing store to match its CSS size at the current device pixel ratio. */
 export function syncCanvasResolution(canvas: HTMLCanvasElement): { width: number; height: number } {
   // A 2x backing store is already crisp while avoiding hundreds of MB of
@@ -336,14 +355,14 @@ export function drawMiniRsiChart(
   ctx.clearRect(0, 0, width, height)
   if (data.length === 0) return
 
-  const dataRange = Math.max(...data) - Math.min(...data)
-  const padding = Math.max(5, dataRange * 0.2)
-  const { min: minRsi, max: maxRsi } = computeRsiScale(data, padding)
-  const scaleY = height / (maxRsi - minRsi)
+  // Keep the same 0–100 reference even when RSI is flat or at an extreme.
+  const toY = (value: number) => height - value / 100 * height
 
   const rightGap = width * 0.12
   const chartWidth = width - rightGap
   const stepX = data.length > 1 ? chartWidth / (data.length - 1) : 0
+
+  drawRsiZones(ctx, { left: 0, right: width, top: 0, bottom: height }, 'none')
 
   ctx.beginPath()
   ctx.strokeStyle = settings.rsiColor
@@ -351,13 +370,13 @@ export function drawMiniRsiChart(
   ctx.lineJoin = 'round'
   for (let i = 0; i < data.length; i++) {
     const x = i * stepX
-    const y = height - (data[i] - minRsi) * scaleY
+    const y = toY(data[i])
     if (i === 0) ctx.moveTo(x, y)
     else ctx.lineTo(x, y)
   }
   ctx.stroke()
 
-  const fiftyLineY = height - (50 - minRsi) * scaleY
+  const fiftyLineY = toY(50)
   ctx.beginPath()
   ctx.strokeStyle = settings.midlineColor
   ctx.lineWidth = 1
@@ -373,7 +392,7 @@ export function drawMiniRsiChart(
       visibleDivergences(context, data.length),
       { left: 0, right: chartWidth, top: 0, bottom: height },
       stepX,
-      (value) => height - (value - minRsi) * scaleY,
+      toY,
       'rsi',
       false,
     )
@@ -443,11 +462,12 @@ export function drawDetailRsiChart(
   const heikinAshiBottom = heikinAshiTop + priceHeight
   const chartTop = showHeikinAshiPanel
     ? heikinAshiBottom + panelGap + panelTitleHeight
-    : showPricePanel ? priceBottom + panelGap + panelTitleHeight : margin
+    : showPricePanel ? priceBottom + panelGap + panelTitleHeight : margin + panelTitleHeight
   const chartWidth = chartRight - chartLeft
   const chartHeight = chartBottom - chartTop
 
-  const { min: minRsi, max: maxRsi } = computeRsiScale(data, 10)
+  const minRsi = 0
+  const maxRsi = 100
   const scaleY = chartHeight / (maxRsi - minRsi)
   const stepX = data.length > 1 ? chartWidth / (data.length - 1) : 0
 
@@ -519,24 +539,36 @@ export function drawDetailRsiChart(
     ctx.stroke()
   }
 
-  if (showPricePanel || showHeikinAshiPanel) {
-    ctx.font = '600 11px Inter, system-ui, sans-serif'
-    ctx.textAlign = 'left'
-    ctx.fillStyle = '#F9F9F9'
-    ctx.fillText('RSI (14)', chartLeft, chartTop - 12)
+  ctx.font = '600 11px Inter, system-ui, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.fillStyle = '#F9F9F9'
+  ctx.fillText('RSI (14)', chartLeft, chartTop - 12)
+  const titleWidth = ctx.measureText('RSI (14)').width
+  const latestRsi = data.at(-1)!
+  const rsiState = getRsiState(latestRsi)
+  if (rsiState) {
+    const isLive = visibleBars.at(-1)?.isClosed === false
+    ctx.font = '11px Inter, system-ui, sans-serif'
+    ctx.textAlign = 'right'
+    ctx.fillStyle = rsiState === 'overbought' ? '#F28B8B' : rsiState === 'oversold' ? '#73C9AA' : AXIS_COLOR
+    ctx.fillText(`${latestRsi.toFixed(1)} · ${RSI_STATE_LABELS[rsiState]}${isLive ? ' · Live' : ''}`, chartRight, chartTop - 12, Math.max(1, chartWidth - titleWidth - 12))
   }
+  const rsiZoneLabelBoxes = drawRsiZones(ctx, { left: chartLeft, right: chartRight, top: chartTop, bottom: chartBottom }, 'detail')
   ctx.font = '12px Inter, system-ui, sans-serif'
 
-  for (let v = Math.ceil(minRsi / 10) * 10; v <= maxRsi; v += 10) {
+  const rsiTicks = chartHeight >= 180 ? Array.from({ length: 11 }, (_, index) => index * 10) : [0, RSI_OVERSOLD, 50, RSI_OVERBOUGHT, 100]
+  for (const v of rsiTicks) {
     const y = chartBottom - (v - minRsi) * scaleY
-    ctx.beginPath()
-    ctx.moveTo(chartLeft, y)
-    ctx.lineTo(chartRight, y)
-    ctx.strokeStyle = v === 50 ? settings.midlineColor : GRID_COLOR
-    ctx.lineWidth = v === 50 ? 1.5 : 1
-    ctx.stroke()
+    if (v !== RSI_OVERBOUGHT && v !== RSI_OVERSOLD) {
+      ctx.beginPath()
+      ctx.moveTo(chartLeft, y)
+      ctx.lineTo(chartRight, y)
+      ctx.strokeStyle = v === 50 ? settings.midlineColor : GRID_COLOR
+      ctx.lineWidth = v === 50 ? 1.5 : 1
+      ctx.stroke()
+    }
 
-    ctx.fillStyle = AXIS_COLOR
+    ctx.fillStyle = v === RSI_OVERBOUGHT ? '#F28B8B' : v === RSI_OVERSOLD ? '#73C9AA' : AXIS_COLOR
     ctx.textAlign = 'right'
     ctx.fillText(v.toFixed(0), width - margin - 8, y)
   }
@@ -579,6 +611,7 @@ export function drawDetailRsiChart(
       (value) => chartBottom - (value - minRsi) * scaleY,
       'rsi',
       true,
+      rsiZoneLabelBoxes,
     )
   }
 

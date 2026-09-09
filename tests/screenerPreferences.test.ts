@@ -11,6 +11,7 @@ const SELECTED: ScreenerPreferences = {
   search: 'BTC / USDT',
   signal: 'divergence',
   divergenceRecency: 'any',
+  rsiState: 'either',
   starredOnly: true,
   sort: 'signals',
   timeframe: '4h',
@@ -49,6 +50,12 @@ describe('stored screener preferences', () => {
     })).toEqual(DEFAULT_SCREENER_PREFERENCES)
   })
 
+  test.each([undefined, null, 'Overbought', 'extreme', 70, ['oversold']].map((rsiState) => ({ rsiState })))(
+    'missing or invalid saved RSI state $rsiState preserves other preferences', ({ rsiState }) => {
+      expect(restoreScreenerPreferences({ ...SELECTED, rsiState })).toEqual({ ...SELECTED, rsiState: 'all' })
+    },
+  )
+
   test('returns fresh values without sharing mutable defaults or the input object', () => {
     const restored = restoreScreenerPreferences(SELECTED)
     expect(restored).toEqual(SELECTED)
@@ -65,7 +72,7 @@ describe('screener URL preferences', () => {
     expect(readScreenerPreferencesFromSearch(search)).toBeNull()
   })
 
-  test.each(['q', 'indicator', 'candles', 'starred', 'sort', 'timeframe', 'density'])('recognizes even an empty %s parameter as a complete default view', (key) => {
+  test.each(['q', 'indicator', 'candles', 'rsi', 'starred', 'sort', 'timeframe', 'density'])('recognizes even an empty %s parameter as a complete default view', (key) => {
     expect(readScreenerPreferencesFromSearch(`?${key}=`)).toEqual(DEFAULT_SCREENER_PREFERENCES)
   })
 
@@ -85,6 +92,10 @@ describe('screener URL preferences', () => {
     expect(readScreenerPreferencesFromSearch(`?candles=${candles}`)).toEqual(DEFAULT_SCREENER_PREFERENCES)
   })
 
+  test.each(['Overbought', 'extreme', '70', 'oversold,overbought', 'null'])('rejects unsupported RSI state %s', (rsi) => {
+    expect(readScreenerPreferencesFromSearch(`?rsi=${rsi}`)).toEqual(DEFAULT_SCREENER_PREFERENCES)
+  })
+
   test('validates boolean, timeframe, density, and sort URL values independently', () => {
     expect(readScreenerPreferencesFromSearch('?starred=1&sort=rsi-low&timeframe=8h&density=compact')).toEqual({
       ...DEFAULT_SCREENER_PREFERENCES, starredOnly: true, sort: 'rsi-low', timeframe: '8h', cardDensity: 'compact',
@@ -95,11 +106,11 @@ describe('screener URL preferences', () => {
   })
 
   test('first duplicate values win consistently, including when the first value is invalid', () => {
-    expect(readScreenerPreferencesFromSearch('?q=ETH&q=BTC&indicator=divergence&indicator=all&candles=5&candles=1&starred=0&starred=1&sort=change&sort=signals&timeframe=1h&timeframe=4h&density=compact&density=comfortable')).toEqual({
-      search: 'ETH', signal: 'divergence', divergenceRecency: 5, starredOnly: false,
+    expect(readScreenerPreferencesFromSearch('?q=ETH&q=BTC&indicator=divergence&indicator=all&candles=5&candles=1&rsi=oversold&rsi=overbought&starred=0&starred=1&sort=change&sort=signals&timeframe=1h&timeframe=4h&density=compact&density=comfortable')).toEqual({
+      search: 'ETH', signal: 'divergence', divergenceRecency: 5, rsiState: 'oversold', starredOnly: false,
       sort: 'change', timeframe: '1h', cardDensity: 'compact',
     })
-    expect(readScreenerPreferencesFromSearch('?indicator=confirmed&indicator=divergence&timeframe=12h&timeframe=4h')).toEqual(DEFAULT_SCREENER_PREFERENCES)
+    expect(readScreenerPreferencesFromSearch('?indicator=confirmed&indicator=divergence&rsi=extreme&rsi=either&timeframe=12h&timeframe=4h')).toEqual(DEFAULT_SCREENER_PREFERENCES)
   })
 })
 
@@ -108,16 +119,16 @@ describe('canonical screener URL writing', () => {
     const search = writeScreenerPreferencesToSearch('', { ...DEFAULT_SCREENER_PREFERENCES })
     expect(search).toBe('?timeframe=15m')
     expect(readScreenerPreferencesFromSearch(search)).toEqual(DEFAULT_SCREENER_PREFERENCES)
-    expect(writeScreenerPreferencesToSearch('?q=BTC&indicator=divergence&candles=5&starred=1&sort=signals&timeframe=4h&density=compact', { ...DEFAULT_SCREENER_PREFERENCES })).toBe(search)
+    expect(writeScreenerPreferencesToSearch('?q=BTC&indicator=divergence&candles=5&rsi=overbought&starred=1&sort=signals&timeframe=4h&density=compact', { ...DEFAULT_SCREENER_PREFERENCES })).toBe(search)
   })
 
   test('retains unrelated parameters and their duplicates while replacing all owned duplicates', () => {
-    const input = '?campaign=a&campaign=b&q=old&q=older&indicator=confirmed&indicator=all&candles=14&candles=1&starred=0&starred=0&sort=symbol&sort=change&timeframe=1m&timeframe=1w&density=dense&density=comfortable&note=a%26b'
+    const input = '?campaign=a&campaign=b&q=old&q=older&indicator=confirmed&indicator=all&candles=14&candles=1&rsi=old&rsi=oversold&starred=0&starred=0&sort=symbol&sort=change&timeframe=1m&timeframe=1w&density=dense&density=comfortable&note=a%26b'
     const search = writeScreenerPreferencesToSearch(input, SELECTED)
     const params = new URLSearchParams(search)
     expect(params.getAll('campaign')).toEqual(['a', 'b'])
     expect(params.get('note')).toBe('a&b')
-    for (const key of ['q', 'indicator', 'candles', 'starred', 'sort', 'timeframe', 'density']) {
+    for (const key of ['q', 'indicator', 'candles', 'rsi', 'starred', 'sort', 'timeframe', 'density']) {
       expect(params.getAll(key)).toHaveLength(1)
     }
     expect(readScreenerPreferencesFromSearch(search)).toEqual(SELECTED)
@@ -138,6 +149,7 @@ describe('canonical screener URL writing', () => {
       search: ['', 'SOL / USDT'],
       signal: ['all', 'divergence'],
       divergenceRecency: [1, 3, 5, 'any'],
+      rsiState: ['all', 'overbought', 'oversold', 'either', 'neutral'],
       starredOnly: [false, true],
       sort: ['watchlist', 'signals', 'change', 'rsi-low', 'rsi-high', 'symbol'],
       timeframe: ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '8h', '1d', '3d', '1w'],

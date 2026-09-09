@@ -1,6 +1,7 @@
 import type { ChartSettings, RsiBar, Timeframe } from '../types'
 import type { DivergenceSetup } from './divergenceLifecycle'
-import { syncCanvasResolution } from './drawRsiChart'
+import { drawRsiZones, syncCanvasResolution } from './drawRsiChart'
+import { getRsiState, RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_STATE_LABELS } from './rsiState'
 
 interface ScreenerChartData {
   bars: readonly RsiBar[]
@@ -107,7 +108,7 @@ export function drawScreenerChart(canvas: HTMLCanvasElement, data: ScreenerChart
     Number.isFinite(bar.openTime) && Number.isFinite(bar.closeTime)
     && Number.isFinite(bar.open) && Number.isFinite(bar.high)
     && Number.isFinite(bar.low) && Number.isFinite(bar.close)
-    && Number.isFinite(bar.rsi) && bar.low > 0 && bar.high >= bar.low
+    && getRsiState(bar.rsi) !== null && bar.low > 0 && bar.high >= bar.low
   ))
   if (bars.length === 0) return
 
@@ -224,16 +225,25 @@ export function drawScreenerChart(canvas: HTMLCanvasElement, data: ScreenerChart
   ctx.fillStyle = rsiColor
   ctx.font = '500 9px Inter, system-ui, sans-serif'
   ctx.fillText('RSI 14', left, rsiTop - 4)
+  const titleWidth = ctx.measureText('RSI 14').width
+  const rsiState = getRsiState(latest.rsi)!
+  ctx.fillStyle = rsiState === 'overbought' ? '#F28B8B' : rsiState === 'oversold' ? '#73C9AA' : AXIS_COLOR
+  ctx.textAlign = 'right'
+  ctx.fillText(`${latest.rsi.toFixed(1)} · ${RSI_STATE_LABELS[rsiState]}${latest.isClosed ? '' : ' · Live'}`, right, rsiTop - 4, Math.max(1, plotWidth - titleWidth - 10))
+  ctx.textAlign = 'left'
+  drawRsiZones(ctx, { left, right, top: rsiTop, bottom: rsiBottom }, 'compact')
   ctx.font = '9px Inter, system-ui, sans-serif'
-  for (const value of [30, 50, 70]) {
+  for (const value of [RSI_OVERSOLD, 50, RSI_OVERBOUGHT]) {
     const y = rsiToY(value)
-    ctx.strokeStyle = value === 50 ? midlineColor : GRID_COLOR
-    ctx.setLineDash(value === 50 ? [2, 3] : [])
-    ctx.beginPath()
-    ctx.moveTo(left, y)
-    ctx.lineTo(right, y)
-    ctx.stroke()
-    ctx.fillStyle = AXIS_COLOR
+    if (value === 50) {
+      ctx.strokeStyle = midlineColor
+      ctx.setLineDash([2, 3])
+      ctx.beginPath()
+      ctx.moveTo(left, y)
+      ctx.lineTo(right, y)
+      ctx.stroke()
+    }
+    ctx.fillStyle = value === RSI_OVERBOUGHT ? '#F28B8B' : value === RSI_OVERSOLD ? '#73C9AA' : AXIS_COLOR
     ctx.fillText(`${value}`, right + 8, y)
   }
   ctx.setLineDash([])
@@ -258,7 +268,7 @@ export function drawScreenerChart(canvas: HTMLCanvasElement, data: ScreenerChart
     ctx.stroke()
   }
   ctx.setLineDash([])
-  ctx.fillStyle = rsiColor
+  ctx.fillStyle = rsiState === 'overbought' ? DOWN_COLOR : rsiState === 'oversold' ? UP_COLOR : rsiColor
   ctx.beginPath()
   ctx.arc(toX(latest.openTime), rsiToY(latest.rsi), 1.8, 0, Math.PI * 2)
   ctx.fill()

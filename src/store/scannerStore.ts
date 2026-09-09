@@ -93,8 +93,8 @@ function restoreChartSettings(saved?: Partial<ChartSettings>): ChartSettings {
   return settings
 }
 
-function pickScreenerFilters({ search, signal, divergenceRecency, starredOnly, sort }: ScreenerPreferences): ScreenerFilterPreferences {
-  return { search, signal, divergenceRecency, starredOnly, sort }
+function pickScreenerFilters({ search, signal, divergenceRecency, rsiState, starredOnly, sort }: ScreenerPreferences): ScreenerFilterPreferences {
+  return { search, signal, divergenceRecency, rsiState, starredOnly, sort }
 }
 
 /** Storage may be blocked or full; controls and shareable URLs must still work. */

@@ -4,6 +4,7 @@ import { useElementSize } from '../hooks/useElementSize'
 import { drawScreenerChart } from '../lib/drawScreenerChart'
 import type { DivergenceSetup } from '../lib/divergenceLifecycle'
 import { formatQuotePrice } from '../lib/priceFormatting'
+import { getRsiState, RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_STATE_LABELS } from '../lib/rsiState'
 import { useScannerStore } from '../store/scannerStore'
 import type { RsiBar, Timeframe } from '../types'
 import './ScreenerChart.css'
@@ -25,9 +26,10 @@ function ScreenerChartImpl({ bars, divergences, active = true, symbol, timeframe
     midlineColor: state.settings.midlineColor,
   })))
   const latest = bars.at(-1)
+  const rsiState = getRsiState(latest?.rsi)
   const latestDivergence = divergences.at(-1)
   const label = latest
-    ? `${symbol}, ${timeframe} price candlesticks and RSI 14. Showing the latest ${Math.min(bars.length, 72)} candles. Price ${formatQuotePrice(latest.close)} USDT. RSI ${latest.rsi.toFixed(1)}. ${latest.isClosed ? 'Latest candle is closed.' : 'The hollow final candle is still forming; price and RSI are provisional.'}${latestDivergence ? ` Latest divergence: ${latestDivergence.kind.replaceAll('-', ' ')}, ${latestDivergence.state}.` : ''} Chart times are UTC.`
+    ? `${symbol}, ${timeframe} price candlesticks and RSI 14. Showing the latest ${Math.min(bars.length, 72)} candles. Price ${formatQuotePrice(latest.close)} USDT. ${rsiState ? `RSI ${latest.rsi.toFixed(1)}, ${RSI_STATE_LABELS[rsiState].toLowerCase()}.` : 'RSI unavailable.'} Overbought at ${RSI_OVERBOUGHT} or above; oversold at ${RSI_OVERSOLD} or below. ${latest.isClosed ? 'Latest candle is closed.' : 'The hollow final candle is still forming; price and RSI are provisional.'}${latestDivergence ? ` Latest divergence: ${latestDivergence.kind.replaceAll('-', ' ')}, ${latestDivergence.state}.` : ''} Chart times are UTC.`
     : `${symbol}, ${timeframe}. Waiting for market data.`
 
   useEffect(() => {

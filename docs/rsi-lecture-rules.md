@@ -171,9 +171,14 @@ Trend context, confluence, and the "not near 50" margin remain manual.
 
 ### Screener recency preference
 
-The **Indicator → RSI divergences** menu contains nested choices for the latest
-**1**, **3** (default), or **5 closed candles**, or **Any age**. Selecting RSI
-divergences uses the current choice and opens those options in the same menu.
+The **Filters** modal groups indicator, RSI state, and pair collection choices.
+Selecting **Indicator → RSI divergences** reveals the latest **1**, **3**
+(default), or **5 closed candles**, or **Any age**. Selecting RSI divergences
+retains the current age choice. **Apply** saves the selected filters; closing
+the modal without applying discards those edits. **Clear all** immediately
+resets filters and sorting and closes the modal, retaining timeframe, density,
+favorites, and chart settings. The toolbar badge counts active indicator,
+RSI-state, and collection filters, excluding search and sorting.
 Confirmed setup age is the number of closed candles since its
 price-confirmation candle. Age 0 means it confirmed on the latest close; latest
 3 includes ages 0, 1, and 2. It does not measure time since the first pivot or
@@ -190,3 +195,22 @@ keeps active divergences of any age. Bullish and bearish setups are included
 together. Active-signal ranking uses RSI divergence setups only; Tug of War has no screener filter, counter, or
 card badge. Chart overlays, lifecycle decisions, and backtest results retain
 their existing behavior, and Heikin-Ashi remains available in the detail chart.
+
+### RSI overbought and oversold
+
+The requested chart context and screener filter use conventional RSI(14)
+thresholds: **overbought at 70 or above**, **oversold at 30 or below**, and
+**neutral strictly between 30 and 70**. Card, detail, and compact RSI charts use
+a fixed 0–100 scale, named shaded zones, and a current state label. A reading
+on the forming candle is labeled **Live** and remains provisional.
+
+**Filters → RSI state** offers **Any state**, **Overbought**, **Oversold**,
+**Overbought or oversold**, and **Neutral**. It uses the latest candle's RSI,
+including the forming candle, so the displayed chart state and matching filter
+update together. Symbols without a valid RSI are excluded from a specific state
+filter. RSI state combines with indicator, recency, search, and starred filters;
+it is saved in local storage and shared through the `rsi` URL parameter.
+
+These thresholds are display and screening preferences, not additional lecture
+rules. They do not change divergence detection, confirmation, invalidation,
+completion, or backtest outcomes.

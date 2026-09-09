@@ -8,7 +8,7 @@ export function Header() {
   return (
     <header className="app-header">
       <div className="app-header__brand">
-        <span className="app-header__mark" aria-hidden="true"><i /><i /><i /></span>
+        <img className="app-header__mark" src="/favicon.svg" alt="" aria-hidden="true" />
         <span>scanners<span className="app-header__brand-dot">.</span></span>
       </div>
       <nav className="app-header__nav" aria-label="Workspace">

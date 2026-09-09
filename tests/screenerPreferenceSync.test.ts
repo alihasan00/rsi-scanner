@@ -14,10 +14,11 @@ import type { SymbolSnapshot } from '../src/types'
 
 const STORAGE_KEY = 'rsi-scanner-preferences'
 const DEFAULT_FILTERS = {
-  search: '', signal: 'all', divergenceRecency: 3, starredOnly: false, sort: 'watchlist',
+  search: '', signal: 'all', divergenceRecency: 3, rsiState: 'all', starredOnly: false, sort: 'watchlist',
 }
 const SELECTED: ScreenerPreferences = {
   search: 'ETH / USDT', signal: 'divergence', divergenceRecency: 'any',
+  rsiState: 'either',
   starredOnly: true, sort: 'signals', timeframe: '4h', cardDensity: 'compact',
 }
 const cleanups: Array<() => void> = []
@@ -122,6 +123,7 @@ describe('screener store persistence', () => {
     const { storage } = memoryStorage({
       screenerFilters: {
         search: 'SOL', signal: 'tug-of-war', divergenceRecency: '5',
+        rsiState: 'extreme',
         starredOnly: 'true', sort: 'rsi-high', direction: 'bearish',
       },
       timeframe: '1h', cardDensity: 'compact', starredSymbols: ['SOLUSDT'],
@@ -224,6 +226,7 @@ describe('screener URL and store synchronization', () => {
     expect(params.get('q')).toBe('ETH / USDT')
     expect(params.get('indicator')).toBe('divergence')
     expect(params.get('candles')).toBe('any')
+    expect(params.get('rsi')).toBe('either')
     expect(params.get('starred')).toBe('1')
     expect(params.get('sort')).toBe('signals')
     expect(params.get('timeframe')).toBe('4h')
@@ -266,6 +269,20 @@ describe('screener URL and store synchronization', () => {
     expect(browser.location.hash).toBe('#rsi')
   })
 
+  test('an RSI-only shared URL replaces saved filters and persists its complete view', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    store.getState().applyScreenerPreferences(SELECTED)
+    const browser = fakeBrowser('/screener?rsi=oversold')
+
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+
+    const expected = { ...DEFAULT_SCREENER_PREFERENCES, rsiState: 'oversold' }
+    expect(preferences(store)).toEqual(expected)
+    expect(preferences(createScannerStore(storage))).toEqual(expected)
+    expect(browser.location.search).toBe('?timeframe=15m&rsi=oversold')
+  })
+
   test('filter edits and reset update the shareable URL and storage while retaining timeframe, density, and favorites', () => {
     const { storage } = memoryStorage()
     const store = createScannerStore(storage)
@@ -274,11 +291,12 @@ describe('screener URL and store synchronization', () => {
     cleanups.push(startScreenerPreferenceSync(store, browser))
     store.getState().toggleStarredSymbol('ETHUSDT')
     store.getState().applyScreenerPreferences(SELECTED)
-    store.getState().updateScreenerFilters({ search: 'SOL + ETH', divergenceRecency: 5, sort: 'rsi-low' })
+    store.getState().updateScreenerFilters({ search: 'SOL + ETH', divergenceRecency: 5, rsiState: 'overbought', sort: 'rsi-low' })
 
     const selected = new URLSearchParams(browser.location.search)
     expect(selected.get('q')).toBe('SOL + ETH')
     expect(selected.get('candles')).toBe('5')
+    expect(selected.get('rsi')).toBe('overbought')
     expect(selected.get('sort')).toBe('rsi-low')
     expect(selected.get('indicator')).toBe('divergence')
     expect(selected.get('starred')).toBe('1')
@@ -330,11 +348,11 @@ describe('screener URL and store synchronization', () => {
     setFeedStatus('BTCUSDT', { state: 'ready', updatedAt: 900_000, error: null })
     const historyState = { position: 2 }
 
-    browser.navigate('/screener?q=BTC&indicator=divergence&candles=5&sort=change&timeframe=1h#price', historyState)
+    browser.navigate('/screener?q=BTC&indicator=divergence&candles=5&rsi=neutral&sort=change&timeframe=1h#price', historyState)
 
     expect(preferences(store)).toEqual({
       ...DEFAULT_SCREENER_PREFERENCES, search: 'BTC', signal: 'divergence',
-      divergenceRecency: 5, sort: 'change', timeframe: '1h',
+      divergenceRecency: 5, rsiState: 'neutral', sort: 'change', timeframe: '1h',
     })
     expect(getSymbolSnapshot('BTCUSDT').bars).toEqual([])
     expect(getFeedStatus('BTCUSDT').state).toBe('loading')

@@ -7,6 +7,7 @@ import { useElementSize } from '../hooks/useElementSize'
 import { drawDetailRsiChart } from '../lib/drawRsiChart'
 import { isLiveDivergence } from '../lib/divergenceLifecycle'
 import { formatQuotePrice } from '../lib/priceFormatting'
+import { getRsiState, RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_STATE_LABELS } from '../lib/rsiState'
 import { analyzeTugOfWar, previewTugOfWar } from '../lib/tugOfWar'
 import { useScannerStore } from '../store/scannerStore'
 import './ChartModal.css'
@@ -46,6 +47,7 @@ export function ChartModal() {
   const latestBar = bars.at(-1)
   const isLive = latestBar !== undefined && !latestBar.isClosed
   const currentRsi = series.at(-1)
+  const rsiState = getRsiState(currentRsi)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -57,7 +59,7 @@ export function ChartModal() {
     }
   }, [series, bars, liveDivergences, heikinAshiBars, rsiColor, smaColor, midlineColor, lineWidth, width, height])
 
-  const chartLabel = `${symbol}, ${timeframe}. Price, Heikin-Ashi candles, and RSI 14 on a shared UTC timeline. Heikin-Ashi uses averaged prices.${isLive ? ' The final Heikin-Ashi candle is hollow and still forming.' : ''}${currentRsi !== undefined ? ` RSI ${currentRsi.toFixed(2)}.` : ''}`
+  const chartLabel = `${symbol}, ${timeframe}. Price, Heikin-Ashi candles, and RSI 14 on a shared UTC timeline. Heikin-Ashi uses averaged prices.${isLive ? ' The final Heikin-Ashi candle is hollow and still forming; current price and RSI are provisional.' : ''}${rsiState && currentRsi !== undefined ? ` RSI ${currentRsi.toFixed(2)}, ${RSI_STATE_LABELS[rsiState].toLowerCase()}.` : ' RSI unavailable.'} Overbought at ${RSI_OVERBOUGHT} or above; oversold at ${RSI_OVERSOLD} or below.`
 
   return (
     <Modal
