@@ -1,5 +1,7 @@
 # Market Screener
 
+Deployed app: [rsi-scanner-dusky.vercel.app](https://rsi-scanner-dusky.vercel.app/)
+
 A Vite + React + TypeScript app with one **Screener** workspace for Binance Spot
 USDT pairs. Each card keeps just a pair heading and a price and RSI chart.
 Filters focus on **RSI divergences**. Binance REST seeds
