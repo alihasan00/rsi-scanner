@@ -2,8 +2,10 @@ import type { Timeframe } from '../types'
 import { DEFAULT_DIVERGENCE_RECENCY } from './screener'
 import type { DivergenceRecency, ScreenerSort } from './screener'
 import type { RsiStateFilter } from './rsiState'
+import type { ScreenerMarket } from './markets'
 
 export interface ScreenerPreferences {
+  market: ScreenerMarket
   search: string
   signal: 'all' | 'divergence'
   divergenceRecency: DivergenceRecency
@@ -18,6 +20,7 @@ export type ScreenerFilterPreferences = Pick<ScreenerPreferences,
   'search' | 'signal' | 'divergenceRecency' | 'rsiState' | 'starredOnly' | 'sort'>
 
 export const DEFAULT_SCREENER_PREFERENCES: Readonly<ScreenerPreferences> = Object.freeze({
+  market: 'spot',
   search: '',
   signal: 'all',
   divergenceRecency: DEFAULT_DIVERGENCE_RECENCY,
@@ -34,7 +37,8 @@ const RSI_STATES = ['all', 'overbought', 'oversold', 'either', 'neutral'] as con
 const SORTS = ['watchlist', 'signals', 'change', 'rsi-low', 'rsi-high', 'symbol'] as const satisfies readonly ScreenerSort[]
 const TIMEFRAMES = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '8h', '1d', '3d', '1w'] as const satisfies readonly Timeframe[]
 const DENSITIES = ['comfortable', 'compact'] as const
-const SEARCH_KEYS = ['q', 'indicator', 'candles', 'rsi', 'starred', 'sort', 'timeframe', 'density'] as const
+const MARKETS = ['spot', 'tradfi'] as const satisfies readonly ScreenerMarket[]
+const SEARCH_KEYS = ['market', 'q', 'indicator', 'candles', 'rsi', 'starred', 'sort', 'timeframe', 'density'] as const
 
 function isChoice<T extends string | number>(value: unknown, choices: readonly T[]): value is T {
   return choices.some((choice) => choice === value)
@@ -46,6 +50,7 @@ export function restoreScreenerPreferences(input: unknown): ScreenerPreferences 
     ? input as Record<string, unknown> : {}
   const defaults = DEFAULT_SCREENER_PREFERENCES
   return {
+    market: isChoice(saved.market, MARKETS) ? saved.market : defaults.market,
     search: typeof saved.search === 'string' ? saved.search : defaults.search,
     signal: isChoice(saved.signal, SIGNALS) ? saved.signal : defaults.signal,
     divergenceRecency: isChoice(saved.divergenceRecency, RECENCIES) ? saved.divergenceRecency : defaults.divergenceRecency,
@@ -63,6 +68,7 @@ export function readScreenerPreferencesFromSearch(search: string): ScreenerPrefe
   if (!SEARCH_KEYS.some((key) => params.has(key))) return null
   const candles = params.get('candles')
   return restoreScreenerPreferences({
+    market: params.get('market'),
     search: params.get('q'),
     signal: params.get('indicator'),
     divergenceRecency: candles === '1' ? 1 : candles === '3' ? 3 : candles === '5' ? 5 : candles,
@@ -82,6 +88,7 @@ export function writeScreenerPreferencesToSearch(search: string, prefs: Screener
   for (const key of SEARCH_KEYS) params.delete(key)
   // An explicit anchor distinguishes a default shared view from no shared view.
   params.set('timeframe', current.timeframe)
+  if (current.market !== defaults.market) params.set('market', current.market)
   if (current.search !== defaults.search) params.set('q', current.search)
   if (current.signal !== defaults.signal) params.set('indicator', current.signal)
   if (current.divergenceRecency !== defaults.divergenceRecency) params.set('candles', String(current.divergenceRecency))

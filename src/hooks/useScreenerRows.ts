@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { SYMBOLS } from '../lib/symbols'
 import { getScreenerAnalysis } from '../lib/screener'
 import type { ScreenerRow } from '../lib/screener'
 import { getSymbolSnapshot, subscribeAllSymbols, getSymbolStoreVersion } from '../store/dataStore'
@@ -10,7 +9,7 @@ const rowCache = new Map<string, ScreenerRow>()
 const version = () => `${getSymbolStoreVersion()}:${getFeedStatusVersion()}`
 
 /** Batch market-wide filters to twice a second rather than on every socket tick. */
-export function useScreenerRows() {
+export function useScreenerRows(symbols: readonly string[]) {
   const settings = useScannerStore(useShallow((state) => ({
     showHiddenDivergences: state.settings.showHiddenDivergences,
     requireBodyAgreement: state.settings.requireBodyAgreement,
@@ -28,7 +27,7 @@ export function useScreenerRows() {
     return () => { unsubscribeData(); unsubscribeStatus(); if (timer !== null) clearTimeout(timer) }
   }, [])
   const currentVersion = useSyncExternalStore(subscribe, version, version)
-  return useMemo(() => SYMBOLS.map((symbol) => {
+  return useMemo(() => symbols.map((symbol) => {
     const snapshot = getSymbolSnapshot(symbol)
     const analysis = getScreenerAnalysis(symbol, snapshot.bars, settings)
     const feed = getFeedStatus(symbol)
@@ -37,5 +36,5 @@ export function useScreenerRows() {
     const row = { symbol, snapshot, analysis, feed }
     rowCache.set(symbol, row)
     return row
-  }), [settings, currentVersion]) // eslint-disable-line react-hooks/exhaustive-deps
+  }), [symbols, settings, currentVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 }

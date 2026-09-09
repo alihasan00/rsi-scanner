@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Header } from './components/Header'
 import { ScreenerGrid } from './components/ScreenerGrid'
 import { useRsiFeed } from './hooks/useRsiFeed'
+import { useMarketUniverse } from './hooks/useMarketUniverse'
 import { useScannerStore } from './store/scannerStore'
 
 const ChartModal = lazy(() => import('./components/ChartModal').then(
@@ -12,16 +13,18 @@ const SettingsDrawer = lazy(() => import('./components/SettingsDrawer').then(
 ))
 
 function App() {
+  const market = useScannerStore((state) => state.market)
   const selectedSymbol = useScannerStore((state) => state.selectedSymbol)
   const settingsOpen = useScannerStore((state) => state.settingsOpen)
 
-  useRsiFeed()
+  const universe = useMarketUniverse(market)
+  useRsiFeed(universe.symbols, market)
 
   return (
     <div className="app-shell">
       <Header />
       <main className="scanner-panel" id="screener-panel">
-        <ScreenerGrid />
+        <ScreenerGrid key={market} universe={universe} />
       </main>
       {selectedSymbol && (
         <Suspense fallback={null}>

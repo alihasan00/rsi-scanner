@@ -8,6 +8,7 @@ import {
 import type { ScreenerPreferences } from '../src/lib/screenerPreferences'
 
 const SELECTED: ScreenerPreferences = {
+  market: 'tradfi',
   search: 'BTC / USDT',
   signal: 'divergence',
   divergenceRecency: 'any',
@@ -41,10 +42,12 @@ describe('stored screener preferences', () => {
 
   test('does not coerce invalid field types or similarly named values', () => {
     expect(restoreScreenerPreferences({
+      market: 'TradFi',
       search: 123, signal: 'Divergence', divergenceRecency: NaN, starredOnly: 1,
       sort: ['signals'], timeframe: '4H', cardDensity: { value: 'compact' },
     })).toEqual(DEFAULT_SCREENER_PREFERENCES)
     expect(restoreScreenerPreferences({
+      market: ['tradfi'],
       search: null, signal: false, divergenceRecency: 14, starredOnly: '1',
       sort: 'price', timeframe: '12h', cardDensity: 'small',
     })).toEqual(DEFAULT_SCREENER_PREFERENCES)
@@ -72,7 +75,7 @@ describe('screener URL preferences', () => {
     expect(readScreenerPreferencesFromSearch(search)).toBeNull()
   })
 
-  test.each(['q', 'indicator', 'candles', 'rsi', 'starred', 'sort', 'timeframe', 'density'])('recognizes even an empty %s parameter as a complete default view', (key) => {
+  test.each(['market', 'q', 'indicator', 'candles', 'rsi', 'starred', 'sort', 'timeframe', 'density'])('recognizes even an empty %s parameter as a complete default view', (key) => {
     expect(readScreenerPreferencesFromSearch(`?${key}=`)).toEqual(DEFAULT_SCREENER_PREFERENCES)
   })
 
@@ -80,6 +83,14 @@ describe('screener URL preferences', () => {
     expect(readScreenerPreferencesFromSearch('?timeframe=1h')).toEqual({ ...DEFAULT_SCREENER_PREFERENCES, timeframe: '1h' })
     expect(readScreenerPreferencesFromSearch('?indicator=divergence')).toEqual({ ...DEFAULT_SCREENER_PREFERENCES, signal: 'divergence' })
     expect(readScreenerPreferencesFromSearch('?q=&timeframe=15m')).toEqual(DEFAULT_SCREENER_PREFERENCES)
+  })
+
+  test('market-only URLs define a complete view, with Spot as the missing or invalid default', () => {
+    expect(DEFAULT_SCREENER_PREFERENCES.market).toBe('spot')
+    expect(readScreenerPreferencesFromSearch('?market=tradfi')).toEqual({ ...DEFAULT_SCREENER_PREFERENCES, market: 'tradfi' })
+    expect(readScreenerPreferencesFromSearch('?market=spot')).toEqual(DEFAULT_SCREENER_PREFERENCES)
+    expect(readScreenerPreferencesFromSearch('?market=futures')).toEqual(DEFAULT_SCREENER_PREFERENCES)
+    expect(restoreScreenerPreferences({ search: 'BTC' }).market).toBe('spot')
   })
 
   test.each(['tug-of-war', 'confirmed', 'bullish', 'DIVERGENCE'])('does not restore obsolete or unsupported indicator %s', (indicator) => {
@@ -106,11 +117,12 @@ describe('screener URL preferences', () => {
   })
 
   test('first duplicate values win consistently, including when the first value is invalid', () => {
-    expect(readScreenerPreferencesFromSearch('?q=ETH&q=BTC&indicator=divergence&indicator=all&candles=5&candles=1&rsi=oversold&rsi=overbought&starred=0&starred=1&sort=change&sort=signals&timeframe=1h&timeframe=4h&density=compact&density=comfortable')).toEqual({
+    expect(readScreenerPreferencesFromSearch('?market=tradfi&market=spot&q=ETH&q=BTC&indicator=divergence&indicator=all&candles=5&candles=1&rsi=oversold&rsi=overbought&starred=0&starred=1&sort=change&sort=signals&timeframe=1h&timeframe=4h&density=compact&density=comfortable')).toEqual({
+      market: 'tradfi',
       search: 'ETH', signal: 'divergence', divergenceRecency: 5, rsiState: 'oversold', starredOnly: false,
       sort: 'change', timeframe: '1h', cardDensity: 'compact',
     })
-    expect(readScreenerPreferencesFromSearch('?indicator=confirmed&indicator=divergence&rsi=extreme&rsi=either&timeframe=12h&timeframe=4h')).toEqual(DEFAULT_SCREENER_PREFERENCES)
+    expect(readScreenerPreferencesFromSearch('?market=futures&market=tradfi&indicator=confirmed&indicator=divergence&rsi=extreme&rsi=either&timeframe=12h&timeframe=4h')).toEqual(DEFAULT_SCREENER_PREFERENCES)
   })
 })
 
@@ -123,12 +135,12 @@ describe('canonical screener URL writing', () => {
   })
 
   test('retains unrelated parameters and their duplicates while replacing all owned duplicates', () => {
-    const input = '?campaign=a&campaign=b&q=old&q=older&indicator=confirmed&indicator=all&candles=14&candles=1&rsi=old&rsi=oversold&starred=0&starred=0&sort=symbol&sort=change&timeframe=1m&timeframe=1w&density=dense&density=comfortable&note=a%26b'
+    const input = '?campaign=a&campaign=b&market=spot&market=invalid&q=old&q=older&indicator=confirmed&indicator=all&candles=14&candles=1&rsi=old&rsi=oversold&starred=0&starred=0&sort=symbol&sort=change&timeframe=1m&timeframe=1w&density=dense&density=comfortable&note=a%26b'
     const search = writeScreenerPreferencesToSearch(input, SELECTED)
     const params = new URLSearchParams(search)
     expect(params.getAll('campaign')).toEqual(['a', 'b'])
     expect(params.get('note')).toBe('a&b')
-    for (const key of ['q', 'indicator', 'candles', 'rsi', 'starred', 'sort', 'timeframe', 'density']) {
+    for (const key of ['market', 'q', 'indicator', 'candles', 'rsi', 'starred', 'sort', 'timeframe', 'density']) {
       expect(params.getAll(key)).toHaveLength(1)
     }
     expect(readScreenerPreferencesFromSearch(search)).toEqual(SELECTED)
@@ -146,6 +158,7 @@ describe('canonical screener URL writing', () => {
 
   test('round trips every supported setting value through stored and URL validation', () => {
     const choices: { [Key in keyof ScreenerPreferences]: readonly ScreenerPreferences[Key][] } = {
+      market: ['spot', 'tradfi'],
       search: ['', 'SOL / USDT'],
       signal: ['all', 'divergence'],
       divergenceRecency: [1, 3, 5, 'any'],

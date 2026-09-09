@@ -13,9 +13,10 @@ import { useScannerStore } from '../store/scannerStore'
 import './ChartModal.css'
 
 export function ChartModal() {
-  const { symbol, timeframe, closeChart, rsiColor, smaColor, midlineColor, lineWidth, showHiddenDivergences, requireBodyAgreement, requireSameRsiCycle, divergenceInvalidationAnchor } = useScannerStore(
+  const { symbol, market, timeframe, closeChart, rsiColor, smaColor, midlineColor, lineWidth, showHiddenDivergences, requireBodyAgreement, requireSameRsiCycle, divergenceInvalidationAnchor } = useScannerStore(
     useShallow((state) => ({
       symbol: state.selectedSymbol,
+      market: state.market,
       timeframe: state.timeframe,
       closeChart: state.closeChart,
       rsiColor: state.settings.rsiColor,
@@ -74,6 +75,7 @@ export function ChartModal() {
         <div className="chart-modal__title">
           <span className="chart-modal__symbol">{symbol}</span>
           <Tag className="chart-modal__timeframe">{timeframe}</Tag>
+          {market === 'tradfi' && <Tag>TradFi perpetual</Tag>}
           <span className="chart-modal__price">{formatQuotePrice(price)} <small>USDT</small></span>
           {isLive && <Tag color="purple" className="chart-modal__live">Live</Tag>}
         </div>

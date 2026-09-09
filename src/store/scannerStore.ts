@@ -5,6 +5,7 @@ import { resetSymbolData } from './dataStore'
 import { resetFeedStatus } from './feedStatusStore'
 import { DEFAULT_SCREENER_PREFERENCES, restoreScreenerPreferences } from '../lib/screenerPreferences'
 import type { ScreenerFilterPreferences, ScreenerPreferences } from '../lib/screenerPreferences'
+import type { ScreenerMarket } from '../lib/markets'
 import type {
   ChartSettings, SupportResistanceFilters, SupportResistanceSort, SupportResistanceView, Timeframe,
 } from '../types'
@@ -51,7 +52,9 @@ export function restoreSupportResistanceFilters(
 }
 
 interface ScannerState {
+  market: ScreenerMarket
   starredSymbols: string[]
+  starredSymbolsByMarket: Record<ScreenerMarket, string[]>
   cardDensity: 'comfortable' | 'compact'
   timeframe: Timeframe
   cellSize: number
@@ -63,6 +66,7 @@ interface ScannerState {
   supportResistanceView: SupportResistanceView
   supportResistanceSort: SupportResistanceSort
   supportResistanceFilters: SupportResistanceFilters
+  setMarket: (market: ScreenerMarket) => void
   toggleStarredSymbol: (symbol: string) => void
   setCardDensity: (density: 'comfortable' | 'compact') => void
   updateScreenerFilters: (patch: Partial<ScreenerFilterPreferences>) => void
@@ -97,6 +101,20 @@ function pickScreenerFilters({ search, signal, divergenceRecency, rsiState, star
   return { search, signal, divergenceRecency, rsiState, starredOnly, sort }
 }
 
+function restoreStarredSymbols(input: unknown): string[] {
+  return Array.isArray(input)
+    ? [...new Set(input.filter((symbol): symbol is string => typeof symbol === 'string'))] : []
+}
+
+/** The original unscoped favorites belong to Spot, including when opening a TradFi URL. */
+function restoreStarredSymbolsByMarket(saved?: Partial<ScannerState>): Record<ScreenerMarket, string[]> {
+  const favorites = saved?.starredSymbolsByMarket
+  if (favorites === null || typeof favorites !== 'object' || Array.isArray(favorites)) {
+    return { spot: restoreStarredSymbols(saved?.starredSymbols), tradfi: [] }
+  }
+  return { spot: restoreStarredSymbols(favorites.spot), tradfi: restoreStarredSymbols(favorites.tradfi) }
+}
+
 /** Storage may be blocked or full; controls and shareable URLs must still work. */
 function safeStorage(storage?: StateStorage): StateStorage {
   return {
@@ -124,7 +142,9 @@ function safeStorage(storage?: StateStorage): StateStorage {
 export const createScannerStore = (storage?: StateStorage) => create<ScannerState>()(
   persist(
     (set, get) => ({
+      market: DEFAULT_SCREENER_PREFERENCES.market,
       starredSymbols: [],
+      starredSymbolsByMarket: { spot: [], tradfi: [] },
       cardDensity: DEFAULT_SCREENER_PREFERENCES.cardDensity,
       timeframe: DEFAULT_SCREENER_PREFERENCES.timeframe,
       cellSize: 120,
@@ -136,11 +156,22 @@ export const createScannerStore = (storage?: StateStorage) => create<ScannerStat
       supportResistanceView: 'cards',
       supportResistanceSort: 'symbol',
       supportResistanceFilters: DEFAULT_SUPPORT_RESISTANCE_FILTERS,
-      toggleStarredSymbol: (symbol) => set((state) => ({
-        starredSymbols: state.starredSymbols.includes(symbol)
+      setMarket: (market) => {
+        const state = get()
+        if (state.market === market) return
+        resetSymbolData()
+        resetFeedStatus()
+        set({ market, selectedSymbol: null, starredSymbols: state.starredSymbolsByMarket[market] })
+      },
+      toggleStarredSymbol: (symbol) => set((state) => {
+        const starredSymbols = state.starredSymbols.includes(symbol)
           ? state.starredSymbols.filter((item) => item !== symbol)
-          : [...state.starredSymbols, symbol],
-      })),
+          : [...state.starredSymbols, symbol]
+        return {
+          starredSymbols,
+          starredSymbolsByMarket: { ...state.starredSymbolsByMarket, [state.market]: starredSymbols },
+        }
+      }),
       setCardDensity: (cardDensity) => set({ cardDensity }),
       updateScreenerFilters: (patch) => set((state) => ({
         screenerFilters: pickScreenerFilters(restoreScreenerPreferences({ ...state.screenerFilters, ...patch })),
@@ -148,11 +179,16 @@ export const createScannerStore = (storage?: StateStorage) => create<ScannerStat
       resetScreenerFilters: () => set({ screenerFilters: pickScreenerFilters(DEFAULT_SCREENER_PREFERENCES) }),
       applyScreenerPreferences: (preferences) => {
         const restored = restoreScreenerPreferences(preferences)
-        if (get().timeframe !== restored.timeframe) {
+        const state = get()
+        const marketChanged = state.market !== restored.market
+        if (marketChanged || state.timeframe !== restored.timeframe) {
           resetSymbolData()
           resetFeedStatus()
         }
         set({
+          market: restored.market,
+          starredSymbols: state.starredSymbolsByMarket[restored.market],
+          selectedSymbol: marketChanged ? null : state.selectedSymbol,
           screenerFilters: pickScreenerFilters(restored),
           timeframe: restored.timeframe,
           cardDensity: restored.cardDensity,
@@ -190,21 +226,23 @@ export const createScannerStore = (storage?: StateStorage) => create<ScannerStat
       name: 'rsi-scanner-preferences',
       storage: createJSONStorage(() => safeStorage(storage)),
       partialize: ({
-        starredSymbols, cardDensity, timeframe, cellSize, starredTimeframes, settings, screenerFilters,
+        market, starredSymbolsByMarket, cardDensity, timeframe, cellSize, starredTimeframes, settings, screenerFilters,
         supportResistanceView, supportResistanceSort, supportResistanceFilters,
       }) => ({
-        starredSymbols, cardDensity, timeframe, cellSize, starredTimeframes, settings, screenerFilters,
+        market, starredSymbolsByMarket, cardDensity, timeframe, cellSize, starredTimeframes, settings, screenerFilters,
         supportResistanceView, supportResistanceSort, supportResistanceFilters,
       }),
       // Keep defaults for preferences added after a user's settings were saved.
       merge: (persisted, current) => {
         const saved = persisted as Partial<ScannerState> | undefined
-        const { timeframe, cardDensity } = restoreScreenerPreferences(saved)
+        const { market, timeframe, cardDensity } = restoreScreenerPreferences(saved)
+        const starredSymbolsByMarket = restoreStarredSymbolsByMarket(saved)
         return {
           ...current,
           ...saved,
-          starredSymbols: Array.isArray(saved?.starredSymbols)
-            ? saved.starredSymbols.filter((symbol): symbol is string => typeof symbol === 'string') : [],
+          market,
+          starredSymbols: starredSymbolsByMarket[market],
+          starredSymbolsByMarket,
           timeframe,
           cardDensity,
           screenerFilters: pickScreenerFilters(restoreScreenerPreferences(saved?.screenerFilters)),

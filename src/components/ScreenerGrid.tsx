@@ -4,6 +4,7 @@ import type { InputRef } from 'antd'
 import { AppstoreOutlined, BarsOutlined, SearchOutlined, SlidersOutlined, StarOutlined, SwapOutlined } from '@ant-design/icons'
 import { useShallow } from 'zustand/react/shallow'
 import { useScreenerRows } from '../hooks/useScreenerRows'
+import type { MarketUniverse } from '../hooks/useMarketUniverse'
 import { candleChange, DEFAULT_DIVERGENCE_RECENCY, filterDivergenceSetups, filterScreenerRows } from '../lib/screener'
 import type { ScreenerSort } from '../lib/screener'
 import { useScannerStore } from '../store/scannerStore'
@@ -23,7 +24,8 @@ const SORT_OPTIONS = [
   { value: 'symbol', label: 'Name: A to Z' },
 ]
 
-export function ScreenerGrid() {
+export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
+  const { market, symbols, status: universeStatus } = universe
   const { timeframe, starredSymbols, cardDensity, setCardDensity, screenerFilters, updateScreenerFilters, resetScreenerFilters } = useScannerStore(useShallow((state) => ({
     timeframe: state.timeframe,
     starredSymbols: state.starredSymbols,
@@ -33,7 +35,7 @@ export function ScreenerGrid() {
     updateScreenerFilters: state.updateScreenerFilters,
     resetScreenerFilters: state.resetScreenerFilters,
   })))
-  const rows = useScreenerRows()
+  const rows = useScreenerRows(symbols)
   const { search, signal, divergenceRecency, rsiState, starredOnly, sort } = screenerFilters
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [now, setNow] = useState(() => Date.now())
@@ -74,13 +76,17 @@ export function ScreenerGrid() {
   const activeFilterCount = Number(signal !== 'all') + Number(rsiState !== 'all') + Number(starredOnly)
   const hasFilters = !!search || activeFilterCount > 0 || sort !== 'watchlist' || divergenceRecency !== DEFAULT_DIVERGENCE_RECENCY
   const rsiFilterLabel = RSI_FILTER_OPTIONS.find((option) => option.value === rsiState)!.label
-  const feedLabel = failedCount ? `${failedCount} ${failedCount === 1 ? 'pair' : 'pairs'} reconnecting`
+  const feedLabel = universeStatus === 'loading' ? 'Loading TradFi markets'
+    : universeStatus === 'error' ? 'Market list unavailable'
+      : rows.length === 0 ? 'No active markets'
+        : failedCount ? `${failedCount} ${failedCount === 1 ? 'pair' : 'pairs'} reconnecting`
     : delayed ? `${delayed} ${delayed === 1 ? 'pair' : 'pairs'} delayed`
       : loadedRows.length === rows.length ? 'Market data connected' : `Loading ${loadedRows.length} / ${rows.length} pairs`
 
   return (
     <section className="screener" ref={scrollRef} aria-label="Market screener">
       <div className="screener__content">
+        {market === 'tradfi' && <p className="screener__market-description"><strong>TradFi</strong> USDT perpetual contracts tracking equities, ETFs, and commodities.</p>}
         <div className="screener__overview" aria-label="Watchlist overview">
           <Card size="small" className="screener-stat">
             <span className="screener-stat__icon"><AppstoreOutlined /></span>
@@ -98,7 +104,7 @@ export function ScreenerGrid() {
           <div className="screener__toolbar">
             <div className="screener__search">
               <label htmlFor="pair-search">Find a pair</label>
-              <Input id="pair-search" ref={searchRef} value={search} onChange={(event) => updateScreenerFilters({ search: event.target.value })} prefix={<SearchOutlined />} suffix={!search && <kbd>/</kbd>} allowClear placeholder="Search BTC, ETH, SOL…" aria-label="Search pairs" />
+              <Input id="pair-search" ref={searchRef} value={search} onChange={(event) => updateScreenerFilters({ search: event.target.value })} prefix={<SearchOutlined />} suffix={!search && <kbd>/</kbd>} allowClear placeholder={market === 'tradfi' ? 'Search TSLA, NVDA, XAU…' : 'Search BTC, ETH, SOL…'} aria-label="Search pairs" />
             </div>
             <Button
               className="screener__filters-trigger"
@@ -140,10 +146,15 @@ export function ScreenerGrid() {
             <Button type="link" size="small" onClick={resetScreenerFilters}>Reset filters</Button>
           </div>
         )}
+        {universeStatus === 'error' && <Alert className="screener__notice" type="error" showIcon title="TradFi market list unavailable" description={universe.error} action={<Button onClick={universe.retry}>Retry</Button>} />}
         {failedCount > 0 && <Alert className="screener__notice" type="warning" showIcon title={`Market data unavailable for ${failedCount} ${failedCount === 1 ? 'pair' : 'pairs'}`} description="Retrying automatically. Available charts continue updating." />}
-        {visibleRows.length ? (
+        {universeStatus === 'loading' ? (
+          <Card className="screener__empty"><p role="status">Loading Binance TradFi contracts…</p></Card>
+        ) : universeStatus === 'error' ? null : rows.length === 0 ? (
+          <Card className="screener__empty"><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No active USDT TradFi contracts are currently available."><Button onClick={universe.retry}>Refresh markets</Button></Empty></Card>
+        ) : visibleRows.length ? (
           <div className={`screener__grid is-${cardDensity}`}>
-            {visibleRows.map((row) => <ScreenerCard key={`${timeframe}:${row.symbol}`} row={row} timeframe={timeframe} starred={starredSymbols.includes(row.symbol)} stale={row.feed.updatedAt !== null && now - row.feed.updatedAt > DELAYED_AFTER_MS} matchingDivergences={usesDivergenceRecency ? filterDivergenceSetups(row.analysis.divergences, divergenceRecency) : undefined} />)}
+            {visibleRows.map((row) => <ScreenerCard key={`${market}:${timeframe}:${row.symbol}`} row={row} timeframe={timeframe} starred={starredSymbols.includes(row.symbol)} stale={row.feed.updatedAt !== null && now - row.feed.updatedAt > DELAYED_AFTER_MS} matchingDivergences={usesDivergenceRecency ? filterDivergenceSetups(row.analysis.divergences, divergenceRecency) : undefined} />)}
           </div>
         ) : (
           <Card className="screener__empty">
@@ -152,7 +163,7 @@ export function ScreenerGrid() {
             }><Button onClick={() => setFiltersOpen(true)}>Edit filters</Button><Button type="primary" onClick={resetScreenerFilters}>Show all pairs</Button></Empty>
           </Card>
         )}
-        <footer className="screener__footer"><Badge status={failedCount || delayed ? 'warning' : loadedRows.length ? 'success' : 'default'} text={feedLabel} /><span>Divergence setups update on candle closes</span><span>Live candles are provisional <span aria-hidden="true">·</span> All times UTC</span></footer>
+        <footer className="screener__footer"><Badge status={universeStatus === 'error' || failedCount || delayed ? 'warning' : loadedRows.length ? 'success' : 'default'} text={feedLabel} /><span>Divergence setups update on candle closes</span><span>Live candles are provisional <span aria-hidden="true">·</span> All times UTC</span></footer>
       </div>
     </section>
   )

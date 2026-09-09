@@ -2,8 +2,10 @@
 
 Deployed app: [rsi-scanner-dusky.vercel.app](https://rsi-scanner-dusky.vercel.app/)
 
-A Vite + React + TypeScript app with one **Screener** workspace for Binance Spot
-USDT pairs. Each card keeps just a pair heading and a price and RSI chart.
+A Vite + React + TypeScript app with **Crypto** and **TradFi** screeners for
+Binance USDT markets. Crypto uses Spot pairs; TradFi uses USDT perpetual
+contracts tracking equities, ETFs, and commodities. Each card keeps just a
+pair heading and a price and RSI chart.
 Filters focus on **RSI divergences**. Binance REST seeds
 the candle history and combined kline WebSocket streams keep it current. Open
 any card for aligned price, Heikin-Ashi, and RSI charts.
@@ -31,7 +33,8 @@ bun run build
 
 ## Screener
 
-The single **Screener** workspace shows a card for each watchlist pair. Each card
+Choose **Crypto** or **TradFi** in the header. The screener shows a card for each
+pair in the selected market. Each card
 has a compact pair heading and favorite button,
 followed by equally tall raw price candlestick and RSI(14) panels on a shared
 timeline. Quotes, percentage changes, indicator breakdowns, and status footers
@@ -56,6 +59,8 @@ in each card heading.
   **All indicators** includes active divergences of any age.
   Bullish and bearish setups are included together.
 - **Favorites:** star cards and switch to **Starred** for a focused collection.
+  Crypto and TradFi have separate favorites; existing saved favorites belong
+  to Crypto.
 - **Sorting:** use watchlist order, active signals, candle change, RSI ascending
   or descending, or pair name. **Active signals** ranks RSI divergence setups,
   with confirmed setups before forming setups.
@@ -76,14 +81,39 @@ and RSI charts share one timeline. Heikin-Ashi prices are labeled as averaged,
 and the open candle updates live. Support/resistance, market-analysis, and
 order-flow views are no longer part of the interface.
 
+### Binance TradFi
+
+TradFi discovers active USDT-margined, USDT-quoted contracts directly from
+Binance Futures exchange information each time this market is opened. The
+selection uses Binance's exact `TRADIFI_PERPETUAL` contract type, keeping crypto
+perpetuals and non-USDT contracts out of this view. Equities, ETFs, commodities,
+and other TradFi listings that meet those criteria are included automatically.
+These charts show the perpetual contract's traded price. Search by the Binance
+ticker, such as `TSLA`, `NVDA`, or `XAU`.
+
+Live history comes from `https://fapi.binance.com/fapi/v1/klines` and combined
+streams from `wss://fstream.binance.com/market/stream`. Both use the existing
+RSI, divergence, and candle-closure rules. Switching markets disconnects the
+previous feed, cancels outstanding requests and retries, clears its candles,
+and closes the detail chart before loading the new data. Seed requests are
+limited to eight at a time. Market-list failures show a **Retry** action;
+an empty exchange result is shown explicitly.
+
+Verified on 2026-09-09 against Binance's
+[exchange information](https://developers.binance.com/en/docs/catalog/core-trading-derivatives-trading-usd-s-m-futures/api/rest-api/market-data#exchange-information)
+and [market streams](https://developers.binance.com/en/docs/catalog/core-trading-derivatives-trading-usd-s-m-futures/api/ws-streams/market),
+with 190 active USDT TradFi contracts and live TSLA/XAU candles. The count comes
+from discovery and is not fixed in the app.
+
 ### Saved and shared views
 
-Search, the indicator and its nested divergence recency, **Starred**-only,
+Market, search, the indicator and its nested divergence recency, **Starred**-only,
 sorting, timeframe, and card density persist in local storage and synchronize
 with the URL. Control changes replace the current browser history entry.
 
 | URL parameter | View preference |
 | --- | --- |
+| `market` | `spot` (Crypto, default) or `tradfi` |
 | `q` | Pair search |
 | `indicator` | `all` or `divergence` |
 | `candles` | Latest `1`, `3`, or `5` closed candles, or `any` age |
@@ -93,16 +123,18 @@ with the URL. Control changes replace the current browser history entry.
 | `density` | `comfortable` or `compact` |
 
 Any recognized parameter makes the URL the complete view. Omitted or invalid
-values use defaults: empty search, All indicators, latest 3 closed candles,
+values use defaults: Crypto, empty search, All indicators, latest 3 closed candles,
 All pairs, watchlist order, 15m, and comfortable cards. A URL without these
 parameters restores the saved local preferences. Generated URLs always include
 the timeframe, including for a default view, and preserve unrelated parameters.
 
 For example, [BTC RSI divergences on 4h with a 5-candle window](https://rsi-scanner-dusky.vercel.app/?timeframe=4h&q=BTC&indicator=divergence&candles=5)
 includes recent confirmations and newly forming setups awaiting confirmation.
+For TradFi, use `?market=tradfi&timeframe=15m`; the selected market is also
+restored from local preferences on a bare URL.
 
 **Reset filters** resets search, indicator, divergence recency, Starred-only,
-and sorting to their defaults. It retains the timeframe, card density,
+and sorting to their defaults. It retains the market, timeframe, card density,
 favorites, and chart settings. The favorite-symbol list and chart settings
 themselves stay local; a shared Starred-only view uses the recipient's favorites.
 
@@ -291,8 +323,11 @@ plus candle/RSI alignment and seed-to-stream handling.
   writes shared view URL parameters.
 - `src/store/dataStore.ts` holds per-symbol market snapshots;
   `src/store/feedStatusStore.ts` tracks loading, request errors, and update times.
-- `src/hooks/useRsiFeed.ts` owns REST/WebSocket lifecycle state, including
-  cancellation when the timeframe changes and automatic recovery.
+- `src/lib/markets.ts` selects market endpoints and discovers the TradFi universe;
+  `src/hooks/useMarketUniverse.ts` handles loading, errors, retry, and cancellation.
+- `src/hooks/useRsiFeed.ts` connects the active market and timeframe to the
+  REST/WebSocket lifecycle in `src/lib/rsiFeed.ts`, including cancellation,
+  bounded concurrency, and automatic recovery.
 - `src/components/ScreenerGrid.tsx` renders the unified overview, filters, and
   card grid; `src/components/ScreenerCard.tsx` presents each pair's compact
   heading and price/RSI chart.

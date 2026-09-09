@@ -1,7 +1,7 @@
 import type { Candle } from '../types'
 import { isValidCandle } from './rsiHistory'
-
-const REST_BASE = 'https://api.binance.com/api/v3/klines'
+import { MARKETS } from './markets'
+import type { ScreenerMarket } from './markets'
 
 // Seed a modest live history; the retained log grows as candles close. Recovery
 // also uses this window if the socket misses a candle during a disconnect.
@@ -43,8 +43,10 @@ export async function fetchSeedKlines(
   symbol: string,
   interval: string,
   signal?: AbortSignal,
+  market: ScreenerMarket = 'spot',
 ): Promise<SeedResult> {
-  const url = `${REST_BASE}?symbol=${symbol}&interval=${interval}&limit=${SEED_CANDLES}`
+  const params = new URLSearchParams({ symbol, interval, limit: String(SEED_CANDLES) })
+  const url = `${MARKETS[market].restBase}/klines?${params}`
   const response = await fetch(url, { signal })
   if (!response.ok) {
     throw new Error(`Binance REST ${response.status} for ${symbol}`)

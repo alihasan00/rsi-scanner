@@ -1,10 +1,11 @@
 import type { Candle } from '../types'
 import { isValidCandle } from './rsiHistory'
+import { MARKETS } from './markets'
+import type { ScreenerMarket } from './markets'
 
 // Combined kline stream manager. Binance limits how many streams a single
 // connection may carry, so symbols are sharded across a few sockets.
 
-const WS_BASE = 'wss://stream.binance.com:9443/stream'
 const CHUNK_SIZE = 50
 const RECONNECT_DELAY_MS = 3000
 
@@ -44,9 +45,11 @@ export class KlineStreamManager {
   private reconnectTimers = new Set<ReturnType<typeof setTimeout>>()
   private closed = true
   private readonly listener: KlineListener
+  private readonly streamBase: string
 
-  constructor(listener: KlineListener) {
+  constructor(listener: KlineListener, market: ScreenerMarket = 'spot') {
     this.listener = listener
+    this.streamBase = MARKETS[market].streamBase
   }
 
   connect(symbols: readonly string[], interval: string): void {
@@ -70,7 +73,7 @@ export class KlineStreamManager {
     if (this.closed) return
 
     const streams = symbols.map((s) => `${s.toLowerCase()}@kline_${interval}`).join('/')
-    const socket = new WebSocket(`${WS_BASE}?streams=${streams}`)
+    const socket = new WebSocket(`${this.streamBase}?streams=${streams}`)
     this.sockets.add(socket)
 
     socket.addEventListener('message', (event) => {

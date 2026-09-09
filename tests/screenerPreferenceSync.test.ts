@@ -17,6 +17,7 @@ const DEFAULT_FILTERS = {
   search: '', signal: 'all', divergenceRecency: 3, rsiState: 'all', starredOnly: false, sort: 'watchlist',
 }
 const SELECTED: ScreenerPreferences = {
+  market: 'spot',
   search: 'ETH / USDT', signal: 'divergence', divergenceRecency: 'any',
   rsiState: 'either',
   starredOnly: true, sort: 'signals', timeframe: '4h', cardDensity: 'compact',
@@ -75,7 +76,7 @@ function fakeBrowser(initialUrl = '/screener', initialState: unknown = { route: 
 
 function preferences(store: ReturnType<typeof createScannerStore>): ScreenerPreferences {
   const state = store.getState()
-  return { ...state.screenerFilters, timeframe: state.timeframe, cardDensity: state.cardDensity }
+  return { ...state.screenerFilters, market: state.market, timeframe: state.timeframe, cardDensity: state.cardDensity }
 }
 
 function loadedSnapshot(): SymbolSnapshot {
@@ -95,6 +96,98 @@ afterEach(() => {
 })
 
 describe('screener store persistence', () => {
+  test('legacy favorites migrate to Spot only, even if the saved market is TradFi', () => {
+    const { storage } = memoryStorage({ market: 'tradfi', starredSymbols: ['BTCUSDT', 7, 'BTCUSDT', 'ETHUSDT'] })
+    const store = createScannerStore(storage)
+
+    expect(store.getState().market).toBe('tradfi')
+    expect(store.getState().starredSymbols).toEqual([])
+    expect(store.getState().starredSymbolsByMarket).toEqual({ spot: ['BTCUSDT', 'ETHUSDT'], tradfi: [] })
+    store.getState().toggleStarredSymbol('XAUUSDT')
+    store.getState().setMarket('spot')
+    expect(store.getState().starredSymbols).toEqual(['BTCUSDT', 'ETHUSDT'])
+
+    const reloaded = createScannerStore(storage)
+    expect(reloaded.getState().market).toBe('spot')
+    expect(reloaded.getState().starredSymbolsByMarket).toEqual({ spot: ['BTCUSDT', 'ETHUSDT'], tradfi: ['XAUUSDT'] })
+    reloaded.getState().setMarket('tradfi')
+    expect(reloaded.getState().starredSymbols).toEqual(['XAUUSDT'])
+  })
+
+  test('favorites remain independent across markets and reloads, including overlapping symbol names', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    expect(store.getState().market).toBe('spot')
+    store.getState().toggleStarredSymbol('BTCUSDT')
+    store.getState().toggleStarredSymbol('SHAREDUSDT')
+    store.getState().setMarket('tradfi')
+    expect(store.getState().starredSymbols).toEqual([])
+    store.getState().toggleStarredSymbol('SHAREDUSDT')
+    store.getState().toggleStarredSymbol('XAUUSDT')
+    store.getState().toggleStarredSymbol('SHAREDUSDT')
+
+    const reloaded = createScannerStore(storage)
+    expect(reloaded.getState().market).toBe('tradfi')
+    expect(reloaded.getState().starredSymbols).toEqual(['XAUUSDT'])
+    reloaded.getState().setMarket('spot')
+    expect(reloaded.getState().starredSymbols).toEqual(['BTCUSDT', 'SHAREDUSDT'])
+    expect(reloaded.getState().starredSymbolsByMarket.tradfi).toEqual(['XAUUSDT'])
+  })
+
+  test('invalid saved markets default to Spot and malformed favorites are isolated to their own collection', () => {
+    const store = createScannerStore(memoryStorage({
+      market: 'futures',
+      starredSymbols: ['LEGACYUSDT'],
+      starredSymbolsByMarket: { spot: ['BTCUSDT', null, 'BTCUSDT'], tradfi: 'XAUUSDT' },
+    }).storage)
+    expect(store.getState().market).toBe('spot')
+    expect(store.getState().starredSymbols).toEqual(['BTCUSDT'])
+    store.getState().setMarket('tradfi')
+    expect(store.getState().starredSymbols).toEqual([])
+  })
+
+  test('market subscribers see empty caches and a closed chart while other preferences are retained', () => {
+    const store = createScannerStore(memoryStorage().storage)
+    store.getState().applyScreenerPreferences(SELECTED)
+    store.getState().toggleStarredSymbol('BTCUSDT')
+    store.getState().selectSymbol('BTCUSDT')
+    store.getState().updateSettings({ showVolume: true })
+    const previous = store.getState()
+    for (const symbol of ['BTCUSDT', 'XAUUSDT']) {
+      setSymbolSnapshot(symbol, loadedSnapshot())
+      setFeedStatus(symbol, { state: 'ready', updatedAt: 900_000, error: null })
+    }
+    const observed: unknown[] = []
+    cleanups.push(store.subscribe((state) => observed.push({
+      market: state.market,
+      selectedSymbol: state.selectedSymbol,
+      favorites: state.starredSymbols,
+      bars: ['BTCUSDT', 'XAUUSDT'].map((symbol) => getSymbolSnapshot(symbol).bars.length),
+      feeds: ['BTCUSDT', 'XAUUSDT'].map((symbol) => getFeedStatus(symbol).state),
+    })))
+
+    store.getState().setMarket('tradfi')
+
+    expect(observed).toEqual([{
+      market: 'tradfi', selectedSymbol: null, favorites: [], bars: [0, 0], feeds: ['loading', 'loading'],
+    }])
+    expect(store.getState().timeframe).toBe(previous.timeframe)
+    expect(store.getState().screenerFilters).toBe(previous.screenerFilters)
+    expect(store.getState().settings).toBe(previous.settings)
+    expect(store.getState().cardDensity).toBe(previous.cardDensity)
+
+    store.getState().selectSymbol('XAUUSDT')
+    const loaded = loadedSnapshot()
+    setSymbolSnapshot('XAUUSDT', loaded)
+    const marketVersion = getSymbolStoreVersion()
+    const feedVersion = getFeedStatusVersion()
+    store.getState().setMarket('tradfi')
+    expect(getSymbolSnapshot('XAUUSDT')).toBe(loaded)
+    expect(getSymbolStoreVersion()).toBe(marketVersion)
+    expect(getFeedStatusVersion()).toBe(feedVersion)
+    expect(store.getState().selectedSymbol).toBe('XAUUSDT')
+  })
+
   test('a new store restores filters and existing display and personal preferences', () => {
     const { storage } = memoryStorage()
     const first = createScannerStore(storage)
@@ -206,6 +299,78 @@ describe('screener store persistence', () => {
 })
 
 describe('screener URL and store synchronization', () => {
+  test('market-only shared URLs override saved markets before the feed starts and persist on reload', () => {
+    const { storage } = memoryStorage({ starredSymbols: ['BTCUSDT'] })
+    const store = createScannerStore(storage)
+    store.getState().selectSymbol('BTCUSDT')
+    setSymbolSnapshot('BTCUSDT', loadedSnapshot())
+    setFeedStatus('BTCUSDT', { state: 'ready', updatedAt: 900_000, error: null })
+    const browser = fakeBrowser('/screener?market=tradfi')
+
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+
+    expect(preferences(store)).toEqual({ ...DEFAULT_SCREENER_PREFERENCES, market: 'tradfi' })
+    expect(store.getState().selectedSymbol).toBeNull()
+    expect(store.getState().starredSymbols).toEqual([])
+    expect(store.getState().starredSymbolsByMarket.spot).toEqual(['BTCUSDT'])
+    expect(getSymbolSnapshot('BTCUSDT').bars).toEqual([])
+    expect(getFeedStatus('BTCUSDT').state).toBe('loading')
+    expect(browser.location.search).toBe('?timeframe=15m&market=tradfi')
+
+    const reloaded = createScannerStore(storage)
+    const bareBrowser = fakeBrowser('/screener')
+    cleanups.push(startScreenerPreferenceSync(reloaded, bareBrowser))
+    expect(reloaded.getState().market).toBe('tradfi')
+    expect(bareBrowser.location.search).toBe('?timeframe=15m&market=tradfi')
+    bareBrowser.navigate('/screener?market=spot')
+    expect(reloaded.getState().market).toBe('spot')
+    expect(reloaded.getState().starredSymbols).toEqual(['BTCUSDT'])
+    expect(bareBrowser.location.search).toBe('?timeframe=15m')
+    expect(createScannerStore(storage).getState().market).toBe('spot')
+  })
+
+  test('old shared URLs restore Spot over saved TradFi and browser navigation clears data at the same timeframe', () => {
+    const store = createScannerStore(memoryStorage().storage)
+    store.getState().toggleStarredSymbol('BTCUSDT')
+    store.getState().setMarket('tradfi')
+    store.getState().toggleStarredSymbol('XAUUSDT')
+    const browser = fakeBrowser('/screener?timeframe=15m')
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+    expect(store.getState().market).toBe('spot')
+    expect(store.getState().starredSymbols).toEqual(['BTCUSDT'])
+    store.getState().selectSymbol('BTCUSDT')
+    setSymbolSnapshot('BTCUSDT', loadedSnapshot())
+    setFeedStatus('BTCUSDT', { state: 'ready', updatedAt: 900_000, error: null })
+
+    browser.navigate('/screener?market=tradfi&timeframe=15m')
+
+    expect(store.getState().market).toBe('tradfi')
+    expect(store.getState().starredSymbols).toEqual(['XAUUSDT'])
+    expect(store.getState().selectedSymbol).toBeNull()
+    expect(getSymbolSnapshot('BTCUSDT').bars).toEqual([])
+    expect(getFeedStatus('BTCUSDT').state).toBe('loading')
+  })
+
+  test('market selection updates the URL and filter reset retains market and its favorites', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    const browser = fakeBrowser('/screener?timeframe=4h&density=compact&q=gold&sort=signals')
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+    store.getState().setMarket('tradfi')
+    store.getState().toggleStarredSymbol('XAUUSDT')
+    expect(new URLSearchParams(browser.location.search).get('market')).toBe('tradfi')
+    expect(new URLSearchParams(browser.location.search).get('q')).toBe('gold')
+
+    store.getState().resetScreenerFilters()
+
+    expect(preferences(store)).toEqual({
+      ...DEFAULT_SCREENER_PREFERENCES, market: 'tradfi', timeframe: '4h', cardDensity: 'compact',
+    })
+    expect(store.getState().starredSymbols).toEqual(['XAUUSDT'])
+    expect(browser.location.search).toBe('?timeframe=4h&market=tradfi&density=compact')
+    expect(preferences(createScannerStore(storage))).toEqual(preferences(store))
+  })
+
   test('a URL without screener keys uses saved preferences and preserves unrelated URL and history data', () => {
     const { storage } = memoryStorage()
     const saved = createScannerStore(storage)
