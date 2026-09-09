@@ -3,6 +3,10 @@ import { createRoot } from 'react-dom/client'
 import { ConfigProvider, theme } from 'antd'
 import './index.css'
 import App from './App.tsx'
+import { startScreenerPreferenceSync } from './lib/screenerPreferenceSync'
+
+const stopPreferenceSync = startScreenerPreferenceSync()
+if (import.meta.hot) import.meta.hot.dispose(stopPreferenceSync)
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('Root element not found')

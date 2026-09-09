@@ -1,7 +1,10 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
+import type { StateStorage } from 'zustand/middleware'
 import { resetSymbolData } from './dataStore'
 import { resetFeedStatus } from './feedStatusStore'
+import { DEFAULT_SCREENER_PREFERENCES, restoreScreenerPreferences } from '../lib/screenerPreferences'
+import type { ScreenerFilterPreferences, ScreenerPreferences } from '../lib/screenerPreferences'
 import type {
   ChartSettings, SupportResistanceFilters, SupportResistanceSort, SupportResistanceView, Timeframe,
 } from '../types'
@@ -56,11 +59,15 @@ interface ScannerState {
   selectedSymbol: string | null
   settingsOpen: boolean
   settings: ChartSettings
+  screenerFilters: ScreenerFilterPreferences
   supportResistanceView: SupportResistanceView
   supportResistanceSort: SupportResistanceSort
   supportResistanceFilters: SupportResistanceFilters
   toggleStarredSymbol: (symbol: string) => void
   setCardDensity: (density: 'comfortable' | 'compact') => void
+  updateScreenerFilters: (patch: Partial<ScreenerFilterPreferences>) => void
+  resetScreenerFilters: () => void
+  applyScreenerPreferences: (preferences: ScreenerPreferences) => void
   setSupportResistanceView: (view: SupportResistanceView) => void
   setSupportResistanceSort: (sort: SupportResistanceSort) => void
   updateSupportResistanceFilters: (filters: Partial<SupportResistanceFilters>) => void
@@ -86,17 +93,46 @@ function restoreChartSettings(saved?: Partial<ChartSettings>): ChartSettings {
   return settings
 }
 
-export const useScannerStore = create<ScannerState>()(
+function pickScreenerFilters({ search, signal, divergenceRecency, starredOnly, sort }: ScreenerPreferences): ScreenerFilterPreferences {
+  return { search, signal, divergenceRecency, starredOnly, sort }
+}
+
+/** Storage may be blocked or full; controls and shareable URLs must still work. */
+function safeStorage(storage?: StateStorage): StateStorage {
+  return {
+    getItem: (name) => {
+      try {
+        const value = (storage ?? localStorage).getItem(name)
+        return value instanceof Promise ? value.catch(() => null) : value
+      } catch { return null }
+    },
+    setItem: (name, value) => {
+      try {
+        const result = (storage ?? localStorage).setItem(name, value)
+        if (result instanceof Promise) return result.catch(() => undefined)
+      } catch { /* Keep in-memory preferences when storage is unavailable. */ }
+    },
+    removeItem: (name) => {
+      try {
+        const result = (storage ?? localStorage).removeItem(name)
+        if (result instanceof Promise) return result.catch(() => undefined)
+      } catch { /* Storage can also be unavailable when clearing preferences. */ }
+    },
+  }
+}
+
+export const createScannerStore = (storage?: StateStorage) => create<ScannerState>()(
   persist(
     (set, get) => ({
       starredSymbols: [],
-      cardDensity: 'comfortable',
-      timeframe: '15m',
+      cardDensity: DEFAULT_SCREENER_PREFERENCES.cardDensity,
+      timeframe: DEFAULT_SCREENER_PREFERENCES.timeframe,
       cellSize: 120,
       starredTimeframes: DEFAULT_STARRED_TIMEFRAMES,
       selectedSymbol: null,
       settingsOpen: false,
       settings: DEFAULT_SETTINGS,
+      screenerFilters: pickScreenerFilters(DEFAULT_SCREENER_PREFERENCES),
       supportResistanceView: 'cards',
       supportResistanceSort: 'symbol',
       supportResistanceFilters: DEFAULT_SUPPORT_RESISTANCE_FILTERS,
@@ -106,6 +142,22 @@ export const useScannerStore = create<ScannerState>()(
           : [...state.starredSymbols, symbol],
       })),
       setCardDensity: (cardDensity) => set({ cardDensity }),
+      updateScreenerFilters: (patch) => set((state) => ({
+        screenerFilters: pickScreenerFilters(restoreScreenerPreferences({ ...state.screenerFilters, ...patch })),
+      })),
+      resetScreenerFilters: () => set({ screenerFilters: pickScreenerFilters(DEFAULT_SCREENER_PREFERENCES) }),
+      applyScreenerPreferences: (preferences) => {
+        const restored = restoreScreenerPreferences(preferences)
+        if (get().timeframe !== restored.timeframe) {
+          resetSymbolData()
+          resetFeedStatus()
+        }
+        set({
+          screenerFilters: pickScreenerFilters(restored),
+          timeframe: restored.timeframe,
+          cardDensity: restored.cardDensity,
+        })
+      },
       setSupportResistanceView: (supportResistanceView) => set({ supportResistanceView }),
       setSupportResistanceSort: (supportResistanceSort) => set({ supportResistanceSort }),
       updateSupportResistanceFilters: (filters) => set((state) => ({
@@ -136,22 +188,26 @@ export const useScannerStore = create<ScannerState>()(
     }),
     {
       name: 'rsi-scanner-preferences',
+      storage: createJSONStorage(() => safeStorage(storage)),
       partialize: ({
-        starredSymbols, cardDensity, timeframe, cellSize, starredTimeframes, settings,
+        starredSymbols, cardDensity, timeframe, cellSize, starredTimeframes, settings, screenerFilters,
         supportResistanceView, supportResistanceSort, supportResistanceFilters,
       }) => ({
-        starredSymbols, cardDensity, timeframe, cellSize, starredTimeframes, settings,
+        starredSymbols, cardDensity, timeframe, cellSize, starredTimeframes, settings, screenerFilters,
         supportResistanceView, supportResistanceSort, supportResistanceFilters,
       }),
       // Keep defaults for preferences added after a user's settings were saved.
       merge: (persisted, current) => {
         const saved = persisted as Partial<ScannerState> | undefined
+        const { timeframe, cardDensity } = restoreScreenerPreferences(saved)
         return {
           ...current,
           ...saved,
           starredSymbols: Array.isArray(saved?.starredSymbols)
             ? saved.starredSymbols.filter((symbol): symbol is string => typeof symbol === 'string') : [],
-          cardDensity: saved?.cardDensity === 'compact' ? 'compact' : 'comfortable',
+          timeframe,
+          cardDensity,
+          screenerFilters: pickScreenerFilters(restoreScreenerPreferences(saved?.screenerFilters)),
           settings: restoreChartSettings(saved?.settings),
           supportResistanceView: saved?.supportResistanceView === 'list' ? 'list' : 'cards',
           supportResistanceSort: SORT_KEYS.find((key) => key === saved?.supportResistanceSort) ?? 'symbol',
@@ -161,3 +217,5 @@ export const useScannerStore = create<ScannerState>()(
     },
   ),
 )
+
+export const useScannerStore = createScannerStore()

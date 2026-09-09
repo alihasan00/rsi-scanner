@@ -60,8 +60,8 @@ in each card heading.
   or descending, or pair name. **Active signals** ranks RSI divergence setups,
   with confirmed setups before forming setups.
 - **Layout and timeframe:** choose comfortable or compact cards and a common
-  candle timeframe. Favorites, card density, timeframe preferences, and
-  indicator settings are saved across reloads.
+  candle timeframe. The selected view is saved across reloads and reflected in
+  the URL.
 
 Loading cards show **Waiting for market data**. Failed requests retry
 automatically while available pairs keep updating. A small warning icon in the
@@ -75,6 +75,36 @@ shows the pair, timeframe, and current raw market price. Raw price, Heikin-Ashi,
 and RSI charts share one timeline. Heikin-Ashi prices are labeled as averaged,
 and the open candle updates live. Support/resistance, market-analysis, and
 order-flow views are no longer part of the interface.
+
+### Saved and shared views
+
+Search, the indicator and its nested divergence recency, **Starred**-only,
+sorting, timeframe, and card density persist in local storage and synchronize
+with the URL. Control changes replace the current browser history entry.
+
+| URL parameter | View preference |
+| --- | --- |
+| `q` | Pair search |
+| `indicator` | `all` or `divergence` |
+| `candles` | Latest `1`, `3`, or `5` closed candles, or `any` age |
+| `starred` | `1` for Starred-only; otherwise All pairs |
+| `sort` | `watchlist`, `signals`, `change`, `rsi-low`, `rsi-high`, or `symbol` |
+| `timeframe` | Selected candle timeframe, such as `15m` or `4h` |
+| `density` | `comfortable` or `compact` |
+
+Any recognized parameter makes the URL the complete view. Omitted or invalid
+values use defaults: empty search, All indicators, latest 3 closed candles,
+All pairs, watchlist order, 15m, and comfortable cards. A URL without these
+parameters restores the saved local preferences. Generated URLs always include
+the timeframe, including for a default view, and preserve unrelated parameters.
+
+For example, [BTC RSI divergences on 4h with a 5-candle window](https://rsi-scanner-dusky.vercel.app/?timeframe=4h&q=BTC&indicator=divergence&candles=5)
+includes recent confirmations and newly forming setups awaiting confirmation.
+
+**Reset filters** resets search, indicator, divergence recency, Starred-only,
+and sorting to their defaults. It retains the timeframe, card density,
+favorites, and chart settings. The favorite-symbol list and chart settings
+themselves stay local; a shared Starred-only view uses the recipient's favorites.
 
 ### Heikin-Ashi and Tug of War library
 
@@ -256,7 +286,9 @@ plus candle/RSI alignment and seed-to-stream handling.
 ## Architecture
 
 - `src/store/scannerStore.ts` uses Zustand for shared UI state, favorites, and
-  persisted display preferences.
+  persisted screener and display preferences.
+- `src/lib/screenerPreferences.ts` validates saved preferences and reads and
+  writes shared view URL parameters.
 - `src/store/dataStore.ts` holds per-symbol market snapshots;
   `src/store/feedStatusStore.ts` tracks loading, request errors, and update times.
 - `src/hooks/useRsiFeed.ts` owns REST/WebSocket lifecycle state, including
