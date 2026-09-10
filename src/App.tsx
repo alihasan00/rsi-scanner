@@ -4,6 +4,7 @@ import { ScreenerGrid } from './components/ScreenerGrid'
 import { useRsiFeed } from './hooks/useRsiFeed'
 import { useMarketUniverse } from './hooks/useMarketUniverse'
 import { useScannerStore } from './store/scannerStore'
+import { useSrContextFeed } from './hooks/useSrContext'
 
 const ChartModal = lazy(() => import('./components/ChartModal').then(
   (module) => ({ default: module.ChartModal }),
@@ -16,9 +17,11 @@ function App() {
   const market = useScannerStore((state) => state.market)
   const selectedSymbol = useScannerStore((state) => state.selectedSymbol)
   const settingsOpen = useScannerStore((state) => state.settingsOpen)
+  const showLiquidity = useScannerStore((state) => state.screenerFilters.signal === 'sr')
 
   const universe = useMarketUniverse(market)
   useRsiFeed(universe.symbols, market)
+  useSrContextFeed(universe.symbols, market, showLiquidity)
 
   return (
     <div className="app-shell">

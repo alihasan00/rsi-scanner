@@ -15,7 +15,6 @@
 .screener-filters__recency { margin-top: 16px; padding-left: 12px; border-left: 2px solid var(--color-hairline); }
 .screener-filters__recency > .screener-filters__group + .screener-filters__group { margin-top: 16px; }
 .screener-filters__help { margin: 10px 0 0; color: var(--color-ink-muted); font-size: 11px; line-height: 1.6; }
-.screener-filters__option-count { padding: 0 5px; border-radius: 4px; background: var(--color-hairline); color: var(--color-ink-secondary); font-size: 10px; line-height: 16px; }
 .screener-filters__footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .screener-filters__footer .ant-btn { height: 34px; border-radius: 6px; font-size: 13px; }
 .screener-filters__footer .ant-btn-text { padding-left: 0; color: var(--color-ink-secondary); }

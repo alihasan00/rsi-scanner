@@ -13,6 +13,7 @@ import { useScannerStore } from '../store/scannerStore'
 import { getFibAnalysis } from '../lib/fibScreener'
 import { FibChart } from './FibChart'
 import { FibDetails } from './FibDetails'
+import { LiquidityDetails } from './LiquidityDetails'
 import './ChartModal.css'
 
 export function ChartModal() {
@@ -33,7 +34,11 @@ export function ChartModal() {
     })),
   )
   const open = symbol !== null
-  const [view, setView] = useState<'rsi' | 'fib'>(() => useScannerStore.getState().screenerFilters.signal === 'fib' ? 'fib' : 'rsi')
+  const liquidityTab = useScannerStore((state) => state.screenerFilters.signal === 'sr')
+  const [view, setView] = useState<'rsi' | 'fib' | 'sr'>(() => {
+    const signal = useScannerStore.getState().screenerFilters.signal
+    return signal === 'sr' || signal === 'fib' ? signal : 'rsi'
+  })
   const [fibGrid, setFibGrid] = useState(false)
   const fibSettings = useScannerStore((state) => state.fibSettings)
   const { price, series, bars } = useSymbolData(symbol ?? '', open)
@@ -88,8 +93,8 @@ export function ChartModal() {
         </div>
       }
     >
-      <div className="chart-modal__view"><Segmented<'rsi' | 'fib'> aria-label="Chart view" value={view} onChange={setView} options={[{ value: 'rsi', label: 'Price & RSI' }, { value: 'fib', label: 'Fib system' }]} />{view === 'fib' && <Segmented aria-label="Fib chart levels" value={fibGrid ? 'grid' : 'trade'} onChange={(value) => setFibGrid(value === 'grid')} options={[{ value: 'trade', label: 'Trade levels' }, { value: 'grid', label: 'Full grid' }]} />}</div>
-      {view === 'fib' ? <><FibChart symbol={symbol ?? ''} bars={bars} setup={fib.setup} showReferenceGrid={fibGrid} /><FibDetails analysis={fib} price={price} live={isLive} market={market} /></> : <div className="chart-modal__chart-area" ref={chartAreaRef}>
+      <div className="chart-modal__view"><Segmented<'rsi' | 'fib' | 'sr'> aria-label="Chart view" value={view} onChange={setView} options={[...(liquidityTab ? [{ value: 'sr' as const, label: 'Support & resistance' }] : []), { value: 'rsi', label: 'Price & RSI' }, { value: 'fib', label: 'Fib system' }]} />{view === 'fib' && <Segmented aria-label="Fib chart levels" value={fibGrid ? 'grid' : 'trade'} onChange={(value) => setFibGrid(value === 'grid')} options={[{ value: 'trade', label: 'Trade levels' }, { value: 'grid', label: 'Full grid' }]} />}</div>
+      {view === 'sr' ? <LiquidityDetails symbol={symbol ?? ''} bars={bars} price={price} timeframe={timeframe} /> : view === 'fib' ? <><FibChart symbol={symbol ?? ''} bars={bars} setup={fib.setup} showReferenceGrid={fibGrid} /><FibDetails analysis={fib} price={price} live={isLive} market={market} /></> : <div className="chart-modal__chart-area" ref={chartAreaRef}>
         <canvas ref={canvasRef} className="chart-modal__base-canvas" role="img" aria-label={chartLabel} />
         {!latestBar && (
           <div className="chart-modal__empty">

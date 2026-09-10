@@ -13,6 +13,8 @@ import { ScreenerCard } from './ScreenerCard'
 import { DIVERGENCE_RECENCY_OPTIONS, FIB_STAGE_OPTIONS, RSI_FILTER_OPTIONS } from '../lib/screenerFilterOptions'
 import { ScreenerFiltersModal } from './ScreenerFiltersModal'
 import { isActiveFibSetup } from '../lib/fibonacci'
+import { LiquidityScreener } from './LiquidityScreener'
+import { PairCollectionPicker } from './PairCollectionPicker'
 import './ScreenerGrid.css'
 
 const DELAYED_AFTER_MS = 60_000
@@ -39,7 +41,7 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
   })))
   const rows = useScreenerRows(symbols)
   const { search, signal, divergenceRecency, rsiState, starredOnly, sort, fibDirection, fibStage, fibConfluence } = screenerFilters
-  const activeTab = signal === 'fib' ? 'fib' : 'rsi'
+  const activeTab = signal === 'sr' ? 'sr' : signal === 'fib' ? 'fib' : 'rsi'
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const searchRef = useRef<InputRef>(null)
@@ -51,6 +53,7 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
   }, [])
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (activeTab === 'sr') return
       if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return
       const target = event.target as HTMLElement
       if (target.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return
@@ -60,7 +63,7 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [filtersOpen])
+  }, [filtersOpen, activeTab])
   useEffect(() => { scrollRef.current?.scrollTo({ top: 0 }) }, [timeframe, activeTab])
 
   const visibleRows = useMemo(() => filterScreenerRows(rows, {
@@ -75,9 +78,9 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
   ).length > 0).length
   const failedCount = rows.filter((row) => row.feed.state === 'error').length
   const delayed = loadedRows.filter((row) => row.feed.updatedAt !== null && now - row.feed.updatedAt > DELAYED_AFTER_MS).length
-  const activeFilterCount = Number(signal === 'divergence') + Number(rsiState !== 'all') + Number(starredOnly)
+  const activeFilterCount = Number(signal === 'divergence') + Number(rsiState !== 'all')
     + (signal === 'fib' ? Number(fibDirection !== 'any') + Number(fibStage !== 'any') + Number(fibConfluence !== 'any') : 0)
-  const hasFilters = !!search || activeFilterCount > 0 || sort !== 'watchlist'
+  const hasFilters = !!search || activeFilterCount > 0 || starredOnly || sort !== 'watchlist'
   const rsiFilterLabel = RSI_FILTER_OPTIONS.find((option) => option.value === rsiState)!.label
   const fibStageLabel = FIB_STAGE_OPTIONS.find((option) => option.value === fibStage)!.label
   const feedLabel = universeStatus === 'loading' ? 'Loading TradFi markets'
@@ -94,11 +97,12 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
         <nav className="screener__view-nav" aria-label="Screener indicator">
           <Tabs
             activeKey={activeTab}
-            onChange={(tab) => { if (tab === 'rsi' || tab === 'fib') setScreenerTab(tab) }}
-            items={[{ key: 'rsi', label: 'RSI' }, { key: 'fib', label: 'Fibs' }]}
-            tabBarExtraContent={<span className="screener__view-summary">{loadedRows.length} / {rows.length} pairs <span aria-hidden="true">·</span> <strong>{activeTab === 'fib' ? fibCount : divergenceCount}</strong> {activeTab === 'fib' ? 'setups' : 'divergences'}</span>}
+            onChange={(tab) => { if (tab === 'rsi' || tab === 'fib' || tab === 'sr') setScreenerTab(tab) }}
+            items={[{ key: 'rsi', label: 'RSI' }, { key: 'fib', label: 'Fibs' }, { key: 'sr', label: 'Support & Resistance' }]}
+            tabBarExtraContent={<span className="screener__view-summary">{loadedRows.length} / {rows.length} pairs{activeTab !== 'sr' && <> <span aria-hidden="true">·</span> <strong>{activeTab === 'fib' ? fibCount : divergenceCount}</strong> {activeTab === 'fib' ? 'setups' : 'divergences'}</>}</span>}
           />
         </nav>
+        {activeTab === 'sr' ? <LiquidityScreener universe={universe} rows={rows} now={now} /> : <>
         <p className="screener__view-description">{activeTab === 'fib' ? 'Follow the trend. Open a card for Fibonacci levels and the full trade plan.' : 'Track price and RSI. Open a card to explore the chart.'}</p>
 
         <Card className="screener__controls" size="small">
@@ -124,7 +128,6 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
 
         {filtersOpen && <ScreenerFiltersModal
           initialFilters={screenerFilters}
-          starredCount={starredSymbols.length}
           onApply={updateScreenerFilters}
           onClear={resetScreenerFilters}
           onClose={() => setFiltersOpen(false)}
@@ -139,6 +142,7 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
               { value: 'comfortable', label: <Tooltip title="Comfortable cards"><AppstoreOutlined aria-label="Comfortable cards" /></Tooltip> },
               { value: 'compact', label: <Tooltip title="Compact cards"><BarsOutlined aria-label="Compact cards" /></Tooltip> },
             ]} />
+            <PairCollectionPicker starredOnly={starredOnly} starredCount={starredSymbols.length} onChange={(starredOnly) => updateScreenerFilters({ starredOnly })} />
           </div>
         </div>
         {hasFilters && (
@@ -167,6 +171,7 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
           </Card>
         )}
         <footer className="screener__footer"><Badge status={universeStatus === 'error' || failedCount || delayed ? 'warning' : loadedRows.length ? 'success' : 'default'} text={feedLabel} /><span>Setup states update on candle closes</span><span>Live candles are provisional <span aria-hidden="true">·</span> All times UTC</span></footer>
+        </>}
       </div>
     </section>
   )

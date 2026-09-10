@@ -10,12 +10,15 @@ import type { FibStage } from './fibScreener'
 export interface ScreenerPreferences {
   market: ScreenerMarket
   search: string
-  signal: 'all' | 'divergence' | 'fib'
+  signal: 'all' | 'divergence' | 'fib' | 'sr'
   divergenceRecency: DivergenceRecency
   fibDirection: 'any' | 'long' | 'short'
   fibStage: FibStage
   fibConfluence: 'any' | 'aligned'
   fibSettings: FibSettings
+  srSource: 'all' | 'week' | 'month' | 'monday'
+  srSignal: 'all' | 'near' | 'sfp' | 'bullish' | 'bearish'
+  srSort: 'watchlist' | 'nearest' | 'signals' | 'symbol'
   rsiState: RsiStateFilter
   starredOnly: boolean
   sort: ScreenerSort
@@ -24,7 +27,7 @@ export interface ScreenerPreferences {
 }
 
 export type ScreenerFilterPreferences = Pick<ScreenerPreferences,
-  'search' | 'signal' | 'divergenceRecency' | 'fibDirection' | 'fibStage' | 'fibConfluence' | 'rsiState' | 'starredOnly' | 'sort'>
+  'search' | 'signal' | 'divergenceRecency' | 'fibDirection' | 'fibStage' | 'fibConfluence' | 'srSource' | 'srSignal' | 'srSort' | 'rsiState' | 'starredOnly' | 'sort'>
 
 export const DEFAULT_SCREENER_PREFERENCES: Readonly<ScreenerPreferences> = Object.freeze({
   market: 'spot',
@@ -35,6 +38,9 @@ export const DEFAULT_SCREENER_PREFERENCES: Readonly<ScreenerPreferences> = Objec
   fibStage: 'any',
   fibConfluence: 'any',
   fibSettings: DEFAULT_FIB_SETTINGS,
+  srSource: 'all',
+  srSignal: 'all',
+  srSort: 'watchlist',
   rsiState: 'all',
   starredOnly: false,
   sort: 'watchlist',
@@ -42,7 +48,10 @@ export const DEFAULT_SCREENER_PREFERENCES: Readonly<ScreenerPreferences> = Objec
   cardDensity: 'comfortable',
 })
 
-const SIGNALS = ['all', 'divergence', 'fib'] as const
+const SIGNALS = ['all', 'divergence', 'fib', 'sr'] as const
+const SR_SOURCES = ['all', 'week', 'month', 'monday'] as const
+const SR_SIGNALS = ['all', 'near', 'sfp', 'bullish', 'bearish'] as const
+const SR_SORTS = ['watchlist', 'nearest', 'signals', 'symbol'] as const
 const RECENCIES = [1, 3, 5, 'any'] as const
 const FIB_DIRECTIONS = ['any', 'long', 'short'] as const
 const FIB_STAGES = ['any', 'waiting', 'near', 'active', 'pocket'] as const satisfies readonly FibStage[]
@@ -55,6 +64,7 @@ const MARKETS = ['spot', 'tradfi'] as const satisfies readonly ScreenerMarket[]
 const SEARCH_KEYS = [
   'market', 'q', 'indicator', 'candles', 'rsi', 'starred', 'sort', 'timeframe', 'density',
   'fibSide', 'fibStage', 'fibTrend', 'fibScale', 'fibStop', 'fibTp3', 'fibTp4', 'fibRunner',
+  'srSource', 'srSignal', 'srSort',
 ] as const
 
 function isChoice<T extends string | number>(value: unknown, choices: readonly T[]): value is T {
@@ -75,6 +85,9 @@ export function restoreScreenerPreferences(input: unknown): ScreenerPreferences 
     fibStage: isChoice(saved.fibStage, FIB_STAGES) ? saved.fibStage : defaults.fibStage,
     fibConfluence: isChoice(saved.fibConfluence, FIB_CONFLUENCES) ? saved.fibConfluence : defaults.fibConfluence,
     fibSettings: restoreFibSettings(saved.fibSettings),
+    srSource: isChoice(saved.srSource, SR_SOURCES) ? saved.srSource : defaults.srSource,
+    srSignal: isChoice(saved.srSignal, SR_SIGNALS) ? saved.srSignal : defaults.srSignal,
+    srSort: isChoice(saved.srSort, SR_SORTS) ? saved.srSort : defaults.srSort,
     rsiState: isChoice(saved.rsiState, RSI_STATES) ? saved.rsiState : defaults.rsiState,
     starredOnly: typeof saved.starredOnly === 'boolean' ? saved.starredOnly : defaults.starredOnly,
     sort: isChoice(saved.sort, SORTS) ? saved.sort : defaults.sort,
@@ -102,6 +115,9 @@ export function readScreenerPreferencesFromSearch(search: string): ScreenerPrefe
     fibDirection: params.get('fibSide'),
     fibStage: params.get('fibStage'),
     fibConfluence: params.get('fibTrend'),
+    srSource: params.get('srSource'),
+    srSignal: params.get('srSignal'),
+    srSort: params.get('srSort'),
     fibSettings: {
       scale: params.get('fibScale'),
       stopRatio: readNumber(params.get('fibStop')),
@@ -132,6 +148,9 @@ export function writeScreenerPreferencesToSearch(search: string, prefs: Screener
   if (current.fibDirection !== defaults.fibDirection) params.set('fibSide', current.fibDirection)
   if (current.fibStage !== defaults.fibStage) params.set('fibStage', current.fibStage)
   if (current.fibConfluence !== defaults.fibConfluence) params.set('fibTrend', current.fibConfluence)
+  if (current.srSource !== defaults.srSource) params.set('srSource', current.srSource)
+  if (current.srSignal !== defaults.srSignal) params.set('srSignal', current.srSignal)
+  if (current.srSort !== defaults.srSort) params.set('srSort', current.srSort)
   if (current.fibSettings.scale !== defaults.fibSettings.scale) params.set('fibScale', current.fibSettings.scale)
   if (current.fibSettings.stopRatio !== defaults.fibSettings.stopRatio) params.set('fibStop', String(current.fibSettings.stopRatio))
   if (current.fibSettings.tp3Ratio !== defaults.fibSettings.tp3Ratio) params.set('fibTp3', String(current.fibSettings.tp3Ratio))

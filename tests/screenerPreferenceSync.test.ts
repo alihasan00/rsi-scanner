@@ -18,6 +18,7 @@ const STORAGE_KEY = 'rsi-scanner-preferences'
 const DEFAULT_FILTERS = {
   search: '', signal: 'all', divergenceRecency: 3, rsiState: 'all', starredOnly: false, sort: 'watchlist',
   fibDirection: 'any', fibStage: 'any', fibConfluence: 'any',
+  srSource: 'all', srSignal: 'all', srSort: 'watchlist',
 }
 const SELECTED: ScreenerPreferences = {
   ...DEFAULT_SCREENER_PREFERENCES,
@@ -100,6 +101,83 @@ afterEach(() => {
 })
 
 describe('screener store persistence', () => {
+  test('a shared SR view restores its own filters and survives reload with a canonical bare URL', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    store.getState().applyScreenerPreferences(SELECTED)
+    const browser = fakeBrowser('/screener?indicator=sr&market=tradfi&timeframe=1h&srSource=monday&srSignal=bullish&srSort=signals')
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+    const expected: ScreenerPreferences = {
+      ...DEFAULT_SCREENER_PREFERENCES, signal: 'sr', market: 'tradfi', timeframe: '1h',
+      srSource: 'monday', srSignal: 'bullish', srSort: 'signals',
+    }
+    expect(preferences(store)).toEqual(expected)
+    const restored = createScannerStore(storage)
+    const bareBrowser = fakeBrowser('/screener')
+    cleanups.push(startScreenerPreferenceSync(restored, bareBrowser))
+    expect(preferences(restored)).toEqual(expected)
+    const params = new URLSearchParams(bareBrowser.location.search)
+    expect(params.get('indicator')).toBe('sr')
+    expect(params.getAll('srSource')).toEqual(['monday'])
+    expect(params.getAll('srSignal')).toEqual(['bullish'])
+    expect(params.getAll('srSort')).toEqual(['signals'])
+    expect(params.get('market')).toBe('tradfi')
+    expect(params.get('timeframe')).toBe('1h')
+  })
+
+  test('remembers the RSI signal across SR and Fib switches, edits, and reload', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    store.getState().updateScreenerFilters({ signal: 'divergence', divergenceRecency: 5 })
+    store.getState().setScreenerTab('sr')
+    store.getState().updateScreenerFilters({ srSource: 'month', srSignal: 'sfp', srSort: 'signals' })
+    store.getState().setScreenerTab('fib')
+    store.getState().updateScreenerFilters({ fibDirection: 'short', fibStage: 'near' })
+    store.getState().setScreenerTab('sr')
+    expect(store.getState().lastRsiSignal).toBe('divergence')
+    const restored = createScannerStore(storage)
+    expect(restored.getState().screenerFilters.signal).toBe('sr')
+    expect(restored.getState().lastRsiSignal).toBe('divergence')
+    restored.getState().setScreenerTab('rsi')
+    expect(restored.getState().screenerFilters).toMatchObject({
+      signal: 'divergence', divergenceRecency: 5, srSource: 'month', srSignal: 'sfp',
+      srSort: 'signals', fibDirection: 'short', fibStage: 'near',
+    })
+    restored.getState().updateScreenerFilters({ signal: 'all' })
+    restored.getState().setScreenerTab('sr')
+    restored.getState().setScreenerTab('fib')
+    restored.getState().setScreenerTab('rsi')
+    expect(restored.getState().screenerFilters.signal).toBe('all')
+    expect(restored.getState().lastRsiSignal).toBe('all')
+  })
+
+  test('SR reset clears its filters while retaining the tab, market, timeframe, and RSI memory', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    store.getState().updateScreenerFilters({ signal: 'divergence' })
+    const browser = fakeBrowser('/screener?indicator=sr&market=tradfi&timeframe=4h&density=compact&srSource=week&srSignal=near&srSort=symbol&q=gold&starred=1')
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+    store.getState().toggleStarredSymbol('XAUUSDT')
+    store.getState().updateFibSettings({ scale: 'log' })
+    const template = store.getState().fibSettings
+    store.getState().resetScreenerFilters()
+    expect(store.getState().screenerFilters).toEqual({ ...DEFAULT_FILTERS, signal: 'sr' })
+    expect(store.getState().lastRsiSignal).toBe('divergence')
+    expect(preferences(store)).toEqual({
+      ...DEFAULT_SCREENER_PREFERENCES, signal: 'sr', market: 'tradfi', timeframe: '4h',
+      cardDensity: 'compact', fibSettings: template,
+    })
+    expect(store.getState().starredSymbols).toEqual(['XAUUSDT'])
+    const params = new URLSearchParams(browser.location.search)
+    expect(params.get('indicator')).toBe('sr')
+    expect(params.get('market')).toBe('tradfi')
+    expect(params.get('timeframe')).toBe('4h')
+    for (const key of ['srSource', 'srSignal', 'srSort', 'q', 'starred']) expect(params.has(key)).toBe(false)
+    expect(preferences(createScannerStore(storage))).toEqual(preferences(store))
+    store.getState().setScreenerTab('rsi')
+    expect(store.getState().screenerFilters.signal).toBe('divergence')
+  })
+
   test('switching screener tabs restores the last RSI choice through reload', () => {
     const { storage } = memoryStorage()
     const store = createScannerStore(storage)

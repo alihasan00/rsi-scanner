@@ -5,7 +5,8 @@ Deployed app: [rsi-scanner-dusky.vercel.app](https://rsi-scanner-dusky.vercel.ap
 A Vite + React + TypeScript app with **Crypto** and **TradFi** screeners for
 Binance USDT markets. Crypto uses Spot pairs; TradFi uses USDT perpetual
 contracts tracking equities, ETFs, and commodities. The **RSI** tab shows price
-and RSI charts; **Fibs** shows price candles with an impulse trendline.
+and RSI charts; **Fibs** shows price candles with an impulse trendline;
+**Support & Resistance** maps calendar liquidity and recent swing failures.
 Each tab has its own signal filters. Binance REST seeds
 the candle history and combined kline WebSocket streams keep it current. Open
 any card for aligned price, Heikin-Ashi, and RSI charts or the Fib system view.
@@ -33,7 +34,8 @@ bun run build
 
 ## Screener
 
-Choose **Crypto** or **TradFi** in the header, then select **RSI** or **Fibs**.
+Choose **Crypto** or **TradFi** in the header, then select **RSI**, **Fibs**, or
+**Support & Resistance**.
 RSI cards have a compact pair heading and favorite button above equally tall
 raw price and RSI(14) panels on a shared timeline. Selecting RSI divergences
 adds the matching setup's state and age. Fibs cards show the symbol, live price,
@@ -50,8 +52,9 @@ in each card heading.
 
 - **Search:** type a pair such as `BTC` or `BTC/USDT`; press `/` to focus search
   when no input or dialog is active.
-- **Tabs:** use **RSI** for price and oscillator charts or **Fibs** for Fib
-  trends. Returning to RSI restores your last **All RSI charts** or
+- **Tabs:** use **RSI** for price and oscillator charts, **Fibs** for Fib
+  trends, or **Support & Resistance** for calendar levels and sweeps.
+  Returning to RSI restores your last **All RSI charts** or
   **RSI divergences** choice.
 - **Divergence recency:** on the RSI tab, open **Filters → RSI divergences** for choices
   of the latest **1**, **3** (default), or **5 closed candles**, or **Any age**.
@@ -66,9 +69,10 @@ in each card heading.
   using the selected linear or logarithmic scale in either direction. Golden
   pocket narrows the results to prices inside the `0.618–0.666` zone. Open a
   matching card for its scaled entries, stop, and targets.
-- **Favorites:** star cards and switch to **Starred** for a focused collection.
-  Crypto and TradFi have separate favorites; existing saved favorites belong
-  to Crypto.
+- **Favorites:** star cards, then use **All pairs / Starred** to the right of
+  sorting and card size above the results. The selection applies immediately
+  across all three tabs. Crypto and TradFi have separate favorites; existing
+  saved favorites belong to Crypto.
 - **Sorting:** use watchlist order, active signals, candle change, RSI ascending
   or descending, or pair name. **Active signals** ranks RSI divergence setups
   with confirmed setups before forming setups. In the Fib view it ranks pairs
@@ -89,9 +93,46 @@ Click a chart to open the shared detail view. A card opened from Fibs starts in
 RSI starts in **Price & RSI**; the view control can switch between them.
 A compact header shows the pair, timeframe, and current raw market price.
 Raw price, Heikin-Ashi, and RSI charts share one timeline in the RSI view.
-Heikin-Ashi prices are labeled as averaged,
-and the open candle updates live. Support/resistance, market-analysis, and
-order-flow views are no longer part of the interface.
+Heikin-Ashi prices are labeled as averaged, and the open candle updates live.
+A card opened from Support & Resistance starts with its nearby liquidity
+chart, completed calendar levels, and recent reactions; Price & RSI and
+Fib system remain available in the view control.
+
+### Support & Resistance
+
+This tab implements the calendar-liquidity portion of the advanced lecture:
+previous completed week and month open/high/low/close, plus the latest
+completed Monday candle's **body** low/midpoint/high. Monday uses open and
+close, not wick extremes, and appears on minute/hour charts only. UTC
+calendar boundaries control updates; incomplete source periods are omitted.
+
+Cards show the nearest support below live price and resistance above it,
+their source, and distance in percent. A level changes roles when crossed.
+Open a card for the chart, all available levels with source dates, and
+recent bullish/bearish swing failures. A confirmed sweep wicks through a
+level and closes back on the approach side; the preceding contiguous
+candle must close on that side. Signals cover the latest 3 closed candles
+on the selected reaction timeframe. Forming sweeps stay provisional.
+
+Filters select the level source, **Within 0.5%**, and confirmed sweeps in
+either or one direction. **All pairs / Starred** applies immediately from
+the results toolbar, to the right of sorting and card size. The **Filters**
+badge counts only choices in the modal, excluding the pair collection.
+The default **Watchlist order** matches the other tabs: BTC, ETH, SOL, and
+the rest of the Crypto list, or exchange listing order on TradFi. Nearest
+level, recent sweeps, and name sorts are also available. Search, favorites,
+timeframe, and density are shared with the other tabs; RSI and Fib signal
+filters do not restrict this tab.
+
+The daily context feed runs only while this tab is active, separately from
+the selected reaction timeframe. It uses up to 180 closed daily candles,
+exchange-clock closure, four concurrent seeds, a rate-limit cooldown, and
+midnight refresh. Switching the market or leaving the tab cancels it.
+
+The lecture's Fib/anchored-volume-profile levels, VSA-cluster confluence,
+and 4h boxes require discretionary selection and are not estimated here.
+**How to read this** and **Settings** explain this scope. Calendar liquidity
+is context, not an entry system. See [the lecture rules](docs/support-resistance.md).
 
 ### Binance TradFi
 
@@ -119,7 +160,7 @@ from discovery and is not fixed in the app.
 
 ### Saved and shared views
 
-Market, search, the selected tab and its divergence or Fib filters, RSI
+Market, search, the selected tab and its divergence, Fib, or liquidity filters, RSI
 state, **Starred**-only, sorting, timeframe, card density, and the Fib template
 persist in local storage and synchronize with the URL. Control changes replace
 the current browser history entry.
@@ -128,7 +169,7 @@ the current browser history entry.
 | --- | --- |
 | `market` | `spot` (Crypto, default) or `tradfi` |
 | `q` | Pair search |
-| `indicator` | `all` or `divergence` selects RSI; `fib` selects Fibs |
+| `indicator` | `all` or `divergence` selects RSI; `fib` selects Fibs; `sr` selects Support & Resistance |
 | `candles` | Latest `1`, `3`, or `5` closed candles, or `any` age |
 | `rsi` | `all`, `overbought`, `oversold`, `either`, or `neutral` |
 | `fibSide` | `any` (default), `long`, or `short` |
@@ -139,6 +180,9 @@ the current browser history entry.
 | `fibTp3` | `-0.236` (default) or `0` |
 | `fibTp4` | A ratio below TP3; default `-0.382` |
 | `fibRunner` | A ratio below TP4; default `-0.618` |
+| `srSource` | `all` (default), `week`, `month`, or `monday` |
+| `srSignal` | `all` (default), `near` (within 0.5%), `sfp`, `bullish`, or `bearish` |
+| `srSort` | `watchlist` (default), `nearest`, `signals`, or `symbol` |
 | `starred` | `1` for Starred-only; otherwise All pairs |
 | `sort` | `watchlist`, `signals`, `change`, `rsi-low`, `rsi-high`, or `symbol` |
 | `timeframe` | Selected candle timeframe, such as `15m` or `4h` |
@@ -165,8 +209,8 @@ shares both the screen and the default Fib template. Optional Fib template
 parameters can share a different stop, scale, or target configuration.
 
 **Reset filters** and **Clear all** retain the current tab. On RSI they select
-**All RSI charts**; on Fibs they keep the Fibs view. They reset search,
-divergence recency, RSI state, Fib direction/stage/alignment, Starred-only, and
+**All RSI charts**; on Fibs or Support & Resistance they retain that tab. They reset search,
+divergence recency, RSI state, Fib direction/stage/alignment, liquidity filters, Starred-only, and
 sorting to their defaults. They retain the Fib template, market, timeframe,
 card density, favorites, and chart settings. The favorite-symbol list and chart settings
 themselves stay local; a shared Starred-only view uses the recipient's favorites.
@@ -410,7 +454,7 @@ plus candle/RSI alignment and seed-to-stream handling.
 - `src/hooks/useRsiFeed.ts` connects the active market and timeframe to the
   REST/WebSocket lifecycle in `src/lib/rsiFeed.ts`, including cancellation,
   bounded concurrency, and automatic recovery.
-- `src/components/ScreenerGrid.tsx` renders the RSI/Fibs tabs, contextual filters, and
+- `src/components/ScreenerGrid.tsx` renders the three tabs, contextual filters, and
   card grid; `src/components/ScreenerCard.tsx` presents each pair's compact
   heading with the RSI panels or Fib trend preview for the selected tab.
 - `src/hooks/useScreenerRows.ts` batches watchlist updates twice per second.
@@ -446,6 +490,11 @@ plus candle/RSI alignment and seed-to-stream handling.
 - `ChartModal` is loaded only when a chart is opened; `src/lib/drawRsiChart.ts`
   renders its aligned raw price, Heikin-Ashi, and RSI panels.
 
-Legacy support/resistance and market-analysis helpers remain in the source tree,
-but their views are not mounted in the screener. The original standalone HTML
+- `src/lib/liquidityLevels.ts` derives calendar references and strict sweep events;
+  `liquidityScreener.ts` filters and sorts them. `srContextRest.ts`,
+  `srContextFeed.ts`, and `srContextStore.ts` own daily data independently of RSI.
+  `LiquidityScreener`, `LiquidityChart`, and `LiquidityDetails` render the tab.
+
+Legacy pivot-based support/resistance and market-analysis helpers remain in the source tree,
+but their views are not mounted or used by the calendar-liquidity tab. The original standalone HTML
 file remains in the repository as a behavior reference.

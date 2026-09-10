@@ -9,7 +9,7 @@ import { getFibLiveContext, isActiveFibSetup } from './fibonacci'
 import { matchesFibFilters } from './fibScreener'
 import type { FibRowFilters } from './fibScreener'
 
-export type SignalFilter = 'all' | 'divergence' | 'confirmed' | 'fib'
+export type SignalFilter = 'all' | 'divergence' | 'confirmed' | 'fib' | 'sr'
 export type DivergenceRecency = 1 | 3 | 5 | 'any'
 export const DEFAULT_DIVERGENCE_RECENCY: DivergenceRecency = 3
 export type ScreenerSort = 'watchlist' | 'signals' | 'change' | 'rsi-low' | 'rsi-high' | 'symbol'
@@ -76,7 +76,8 @@ export function filterScreenerRows(rows: readonly ScreenerRow[], filters: Screen
         if (state !== 'overbought' && state !== 'oversold') return false
       } else if (state !== filters.rsiState) return false
     }
-    if (filters.signal === 'all') return true
+    // The liquidity tab applies its own calendar-level filters to these rows.
+    if (filters.signal === 'all' || filters.signal === 'sr') return true
     if (!snapshot.bars.length) return false
     if (filters.signal === 'fib') return matchesFibFilters(row.fib, snapshot.price, filters)
     return selectedDivergences(analysis).length > 0

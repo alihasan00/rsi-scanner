@@ -171,14 +171,18 @@ Trend context, confluence, and the "not near 50" margin remain manual.
 
 ### Screener recency preference
 
-The **Filters** modal groups indicator, RSI state, and pair collection choices.
-Selecting **Indicator → RSI divergences** reveals the latest **1**, **3**
-(default), or **5 closed candles**, or **Any age**. Selecting RSI divergences
-retains the current age choice. **Apply** saves the selected filters; closing
-the modal without applying discards those edits. **Clear all** immediately
-resets filters and sorting and closes the modal, retaining timeframe, density,
-favorites, and chart settings. The toolbar badge counts active indicator,
-RSI-state, and collection filters, excluding search and sorting.
+On the RSI tab, the **Filters** modal groups RSI signal and RSI state choices.
+Selecting **RSI divergences** reveals the latest **1**, **3** (default), or
+**5 closed candles**, or **Any age**. Selecting RSI divergences retains the
+current age choice. **Apply** saves the selected filters; closing the modal
+without applying discards those edits. **All pairs / Starred** switches the
+shared pair collection immediately from the results toolbar, to the right
+of sorting and card size. **Clear all** immediately resets filters and
+sorting, returns the collection to **All pairs**, and closes the modal,
+retaining timeframe, density, favorites, and chart settings. The **Filters**
+badge counts active RSI-signal and RSI-state filters, excluding pair
+collection, search, and sorting.
+
 Confirmed setup age is the number of closed candles since its
 price-confirmation candle. Age 0 means it confirmed on the latest close; latest
 3 includes ages 0, 1, and 2. It does not measure time since the first pivot or

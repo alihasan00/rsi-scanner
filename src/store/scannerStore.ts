@@ -73,7 +73,7 @@ interface ScannerState {
   setMarket: (market: ScreenerMarket) => void
   toggleStarredSymbol: (symbol: string) => void
   setCardDensity: (density: 'comfortable' | 'compact') => void
-  setScreenerTab: (tab: 'rsi' | 'fib') => void
+  setScreenerTab: (tab: 'rsi' | 'fib' | 'sr') => void
   updateScreenerFilters: (patch: Partial<ScreenerFilterPreferences>) => void
   resetScreenerFilters: () => void
   applyScreenerPreferences: (preferences: ScreenerPreferences) => void
@@ -104,13 +104,13 @@ function restoreChartSettings(saved?: Partial<ChartSettings>): ChartSettings {
 }
 
 function pickScreenerFilters({
-  search, signal, divergenceRecency, fibDirection, fibStage, fibConfluence, rsiState, starredOnly, sort,
+  search, signal, divergenceRecency, fibDirection, fibStage, fibConfluence, srSource, srSignal, srSort, rsiState, starredOnly, sort,
 }: ScreenerPreferences): ScreenerFilterPreferences {
-  return { search, signal, divergenceRecency, fibDirection, fibStage, fibConfluence, rsiState, starredOnly, sort }
+  return { search, signal, divergenceRecency, fibDirection, fibStage, fibConfluence, srSource, srSignal, srSort, rsiState, starredOnly, sort }
 }
 
 function restoreLastRsiSignal(signal: ScreenerFilterPreferences['signal'], saved: unknown): 'all' | 'divergence' {
-  if (signal !== 'fib') return signal
+  if (signal === 'all' || signal === 'divergence') return signal
   return saved === 'divergence' ? 'divergence' : 'all'
 }
 
@@ -192,7 +192,7 @@ export const createScannerStore = (storage?: StateStorage) => create<ScannerStat
         const lastRsiSignal = restoreLastRsiSignal(state.screenerFilters.signal, state.lastRsiSignal)
         return {
           lastRsiSignal,
-          screenerFilters: { ...state.screenerFilters, signal: tab === 'fib' ? 'fib' : lastRsiSignal },
+          screenerFilters: { ...state.screenerFilters, signal: tab === 'rsi' ? lastRsiSignal : tab },
         }
       }),
       updateScreenerFilters: (patch) => set((state) => {
@@ -205,9 +205,9 @@ export const createScannerStore = (storage?: StateStorage) => create<ScannerStat
       resetScreenerFilters: () => set((state) => ({
         screenerFilters: {
           ...pickScreenerFilters(DEFAULT_SCREENER_PREFERENCES),
-          signal: state.screenerFilters.signal === 'fib' ? 'fib' : 'all',
+          signal: state.screenerFilters.signal === 'fib' || state.screenerFilters.signal === 'sr' ? state.screenerFilters.signal : 'all',
         },
-        lastRsiSignal: state.screenerFilters.signal === 'fib' ? state.lastRsiSignal : 'all',
+        lastRsiSignal: state.screenerFilters.signal === 'fib' || state.screenerFilters.signal === 'sr' ? state.lastRsiSignal : 'all',
       })),
       applyScreenerPreferences: (preferences) => {
         const restored = restoreScreenerPreferences(preferences)

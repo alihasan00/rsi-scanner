@@ -3,17 +3,22 @@ import { Checkbox, ColorPicker, Divider, Drawer, Select, Slider, Space, Typograp
 import { useShallow } from 'zustand/react/shallow'
 import { useScannerStore } from '../store/scannerStore'
 import { FibSettingsPanel } from './FibSettingsPanel'
+import { LiquidityGuide } from './LiquidityGuide'
+import './Liquidity.css'
 
 const { Text, Paragraph } = Typography
 
 export function SettingsDrawer() {
-  const { settings, closeSettings, updateSettings, isFib } = useScannerStore(useShallow((state) => ({
+  const { settings, closeSettings, updateSettings, isFib, isLiquidity } = useScannerStore(useShallow((state) => ({
     settings: state.settings,
     closeSettings: state.closeSettings,
     updateSettings: state.updateSettings,
     isFib: state.screenerFilters.signal === 'fib',
+    isLiquidity: state.screenerFilters.signal === 'sr',
   })))
   const [draftLineWidth, setDraftLineWidth] = useState(settings.lineWidth)
+
+  if (isLiquidity) return <Drawer title="Support & resistance" open onClose={closeSettings} size={440}><LiquidityGuide /></Drawer>
 
   if (isFib) return <Drawer title="Fib settings" open onClose={closeSettings} size={360}>
     <Paragraph type="secondary" style={{ fontSize: 13 }}>Adjust the template used for the full plan inside each card.</Paragraph>

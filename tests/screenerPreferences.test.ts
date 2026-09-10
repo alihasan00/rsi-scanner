@@ -22,6 +22,19 @@ const SELECTED: ScreenerPreferences = {
 }
 
 describe('stored screener preferences', () => {
+  test('restores the SR tab and validates its source, sweep filter, and sort independently', () => {
+    const selected: ScreenerPreferences = {
+      ...SELECTED, signal: 'sr', srSource: 'monday', srSignal: 'bullish', srSort: 'signals',
+    }
+    expect(restoreScreenerPreferences(JSON.parse(JSON.stringify(selected)))).toEqual(selected)
+    expect(restoreScreenerPreferences({
+      ...selected, srSource: 'daily', srSignal: 'forming', srSort: 'touches',
+    })).toEqual({ ...selected, srSource: 'all', srSignal: 'all', srSort: 'watchlist' })
+    for (const key of ['srSource', 'srSignal', 'srSort']) {
+      expect(readScreenerPreferencesFromSearch(`?${key}=`)).toEqual(DEFAULT_SCREENER_PREFERENCES)
+    }
+  })
+
   test.each([undefined, null, false, 42, 'divergence', [], [SELECTED]].map((input) => ({ input })))(
     'rejects a malformed preference container ($input)', ({ input }) => {
       expect(restoreScreenerPreferences(input)).toEqual(DEFAULT_SCREENER_PREFERENCES)
@@ -145,6 +158,32 @@ describe('screener URL preferences', () => {
 })
 
 describe('canonical screener URL writing', () => {
+  test('round trips a shared SR view and replaces duplicate SR keys with one canonical value', () => {
+    const selected: ScreenerPreferences = {
+      ...DEFAULT_SCREENER_PREFERENCES, market: 'tradfi', timeframe: '4h',
+      signal: 'sr', srSource: 'week', srSignal: 'bearish', srSort: 'signals',
+    }
+    const search = writeScreenerPreferencesToSearch(
+      '?campaign=shared&indicator=fib&srSource=month&srSource=monday&srSignal=near&srSignal=all&srSort=symbol&srSort=nearest',
+      selected,
+    )
+    const params = new URLSearchParams(search)
+    expect(params.get('indicator')).toBe('sr')
+    expect(params.getAll('srSource')).toEqual(['week'])
+    expect(params.getAll('srSignal')).toEqual(['bearish'])
+    expect(params.getAll('srSort')).toEqual(['signals'])
+    expect(params.get('campaign')).toBe('shared')
+    expect(readScreenerPreferencesFromSearch(search)).toEqual(selected)
+    expect(writeScreenerPreferencesToSearch(search, selected)).toBe(search)
+    const reset = new URLSearchParams(writeScreenerPreferencesToSearch(search, {
+      ...DEFAULT_SCREENER_PREFERENCES, signal: 'sr',
+    }))
+    expect(reset.get('indicator')).toBe('sr')
+    expect(reset.has('srSource')).toBe(false)
+    expect(reset.has('srSignal')).toBe(false)
+    expect(reset.has('srSort')).toBe(false)
+  })
+
   test('default values still have a timeframe anchor and restore a deterministic complete view', () => {
     const search = writeScreenerPreferencesToSearch('', { ...DEFAULT_SCREENER_PREFERENCES })
     expect(search).toBe('?timeframe=15m')
@@ -178,7 +217,10 @@ describe('canonical screener URL writing', () => {
     const choices: { [Key in keyof ScreenerPreferences]: readonly ScreenerPreferences[Key][] } = {
       market: ['spot', 'tradfi'],
       search: ['', 'SOL / USDT'],
-      signal: ['all', 'divergence', 'fib'],
+      signal: ['all', 'divergence', 'fib', 'sr'],
+      srSource: ['all', 'week', 'month', 'monday'],
+      srSignal: ['all', 'near', 'sfp', 'bullish', 'bearish'],
+      srSort: ['watchlist', 'nearest', 'signals', 'symbol'],
       divergenceRecency: [1, 3, 5, 'any'],
       fibDirection: ['any', 'long', 'short'],
       fibStage: ['any', 'waiting', 'near', 'active', 'pocket'],
