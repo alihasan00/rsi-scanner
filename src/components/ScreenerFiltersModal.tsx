@@ -6,7 +6,7 @@ import { RSI_OVERBOUGHT, RSI_OVERSOLD } from '../lib/rsiState'
 import { DIVERGENCE_RECENCY_OPTIONS, RSI_FILTER_OPTIONS } from '../lib/screenerFilterOptions'
 import './ScreenerFiltersModal.css'
 
-type ModalFilters = Pick<ScreenerFilterPreferences, 'signal' | 'divergenceRecency' | 'rsiState' | 'starredOnly'>
+type ModalFilters = Pick<ScreenerFilterPreferences, 'signal' | 'divergenceRecency' | 'rsiState' | 'starredOnly' | 'fibDirection' | 'fibStage' | 'fibConfluence'>
 
 interface Props {
   initialFilters: ModalFilters
@@ -30,7 +30,7 @@ export function ScreenerFiltersModal({ initialFilters, starredCount, onApply, on
       className="screener-filters"
       onCancel={() => setOpen(false)}
       afterClose={onClose}
-      title={<span className="screener-filters__title"><SlidersOutlined aria-hidden="true" /> Filters</span>}
+      title={<span className="screener-filters__title"><SlidersOutlined aria-hidden="true" /> {initialFilters.signal === 'fib' ? 'Fib filters' : 'RSI filters'}</span>}
       footer={
         <div className="screener-filters__footer">
           <Button type="text" icon={<CloseOutlined aria-hidden="true" />} onClick={() => { onClear(); setOpen(false) }}>Clear all</Button>
@@ -40,18 +40,21 @@ export function ScreenerFiltersModal({ initialFilters, starredCount, onApply, on
               divergenceRecency: draft.divergenceRecency,
               rsiState: draft.rsiState,
               starredOnly: draft.starredOnly,
+              fibDirection: draft.fibDirection,
+              fibStage: draft.fibStage,
+              fibConfluence: draft.fibConfluence,
             })
             setOpen(false)
           }}>Apply</Button>
         </div>
       }
     >
-      <p className="screener-filters__intro">Choose the pairs and RSI conditions you want to see.</p>
+      <p className="screener-filters__intro">Choose the pairs and setups you want to see.</p>
       <div className="screener-filters__fields">
-        <fieldset className="screener-filters__group">
-          <legend>Indicator</legend>
+        {draft.signal !== 'fib' && <fieldset className="screener-filters__group">
+          <legend>RSI signals</legend>
           <div className="screener-filters__options">
-            <Button aria-pressed={draft.signal === 'all'} onClick={() => update({ signal: 'all' })}>All indicators</Button>
+            <Button aria-pressed={draft.signal === 'all'} onClick={() => update({ signal: 'all' })}>All RSI charts</Button>
             <Button aria-pressed={draft.signal === 'divergence'} onClick={() => update({ signal: 'divergence' })}>RSI divergences</Button>
           </div>
           {draft.signal === 'divergence' && (
@@ -65,7 +68,23 @@ export function ScreenerFiltersModal({ initialFilters, starredCount, onApply, on
               <p className="screener-filters__help">Age starts at the confirmation close. Newly forming setups also match. Older active divergences remain on the charts.</p>
             </fieldset>
           )}
-        </fieldset>
+        </fieldset>}
+          {draft.signal === 'fib' && <>
+            <fieldset className="screener-filters__group">
+              <legend>Fib direction</legend>
+              <div className="screener-filters__options">{([['any', 'Both directions'], ['long', 'Long'], ['short', 'Short']] as const).map(([value, label]) => <Button key={value} aria-pressed={draft.fibDirection === value} onClick={() => update({ fibDirection: value })}>{label}</Button>)}</div>
+            </fieldset>
+            <fieldset className="screener-filters__group">
+              <legend>Fib stage</legend>
+              <div className="screener-filters__options">{([['any', 'Any active setup'], ['waiting', 'Awaiting entry'], ['active', 'Entry reached'], ['pocket', 'In golden pocket']] as const).map(([value, label]) => <Button key={value} aria-pressed={draft.fibStage === value} onClick={() => update({ fibStage: value })}>{label}</Button>)}</div>
+              <p className="screener-filters__help">Structure and entry touches update on candle closes. Golden pocket proximity uses the current price and is provisional during a live candle. Used or invalidated setups are excluded.</p>
+            </fieldset>
+            <fieldset className="screener-filters__group">
+              <legend>Trend confluence</legend>
+              <div className="screener-filters__options"><Button aria-pressed={draft.fibConfluence === 'any'} onClick={() => update({ fibConfluence: 'any' })}>Any trend</Button><Button aria-pressed={draft.fibConfluence === 'aligned'} onClick={() => update({ fibConfluence: 'aligned' })}>Aligned with SMA 200</Button></div>
+              <p className="screener-filters__help">Longs above SMA 200; shorts below. Uses closed prices. Pairs with fewer than 200 closed candles cannot match alignment.</p>
+            </fieldset>
+          </>}
 
         <fieldset className="screener-filters__group">
           <legend>RSI state</legend>

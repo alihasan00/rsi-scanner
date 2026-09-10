@@ -2,6 +2,8 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import type { StateStorage } from 'zustand/middleware'
 import { DEFAULT_SCREENER_PREFERENCES } from '../src/lib/screenerPreferences'
 import type { ScreenerPreferences } from '../src/lib/screenerPreferences'
+import { DEFAULT_FIB_SETTINGS } from '../src/lib/fibPreferences'
+import type { FibSettings } from '../src/lib/fibPreferences'
 import { startScreenerPreferenceSync } from '../src/lib/screenerPreferenceSync'
 import { createScannerStore } from '../src/store/scannerStore'
 import {
@@ -15,8 +17,10 @@ import type { SymbolSnapshot } from '../src/types'
 const STORAGE_KEY = 'rsi-scanner-preferences'
 const DEFAULT_FILTERS = {
   search: '', signal: 'all', divergenceRecency: 3, rsiState: 'all', starredOnly: false, sort: 'watchlist',
+  fibDirection: 'any', fibStage: 'any', fibConfluence: 'any',
 }
 const SELECTED: ScreenerPreferences = {
+  ...DEFAULT_SCREENER_PREFERENCES,
   market: 'spot',
   search: 'ETH / USDT', signal: 'divergence', divergenceRecency: 'any',
   rsiState: 'either',
@@ -76,7 +80,7 @@ function fakeBrowser(initialUrl = '/screener', initialState: unknown = { route: 
 
 function preferences(store: ReturnType<typeof createScannerStore>): ScreenerPreferences {
   const state = store.getState()
-  return { ...state.screenerFilters, market: state.market, timeframe: state.timeframe, cardDensity: state.cardDensity }
+  return { ...state.screenerFilters, market: state.market, timeframe: state.timeframe, cardDensity: state.cardDensity, fibSettings: state.fibSettings }
 }
 
 function loadedSnapshot(): SymbolSnapshot {
@@ -96,6 +100,74 @@ afterEach(() => {
 })
 
 describe('screener store persistence', () => {
+  test('switching screener tabs restores the last RSI choice through reload', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    store.getState().updateScreenerFilters({ signal: 'divergence', divergenceRecency: 5, search: 'ETH', sort: 'signals' })
+    store.getState().setScreenerTab('fib')
+    store.getState().setScreenerTab('fib')
+    store.getState().updateScreenerFilters({ fibDirection: 'long', fibStage: 'pocket' })
+
+    expect(store.getState().screenerFilters.signal).toBe('fib')
+    expect(store.getState().lastRsiSignal).toBe('divergence')
+    const restored = createScannerStore(storage)
+    expect(restored.getState().screenerFilters.signal).toBe('fib')
+    expect(restored.getState().lastRsiSignal).toBe('divergence')
+    restored.getState().setScreenerTab('rsi')
+    expect(restored.getState().screenerFilters).toEqual({
+      ...DEFAULT_FILTERS, signal: 'divergence', divergenceRecency: 5, search: 'ETH', sort: 'signals',
+      fibDirection: 'long', fibStage: 'pocket',
+    })
+
+    restored.getState().updateScreenerFilters({ signal: 'all' })
+    restored.getState().setScreenerTab('fib')
+    restored.getState().setScreenerTab('rsi')
+    expect(restored.getState().screenerFilters.signal).toBe('all')
+    expect(restored.getState().lastRsiSignal).toBe('all')
+  })
+
+  test.each([undefined, null, 'fib', 'Divergence', false, 1, ['divergence'], { value: 'divergence' }].map((lastRsiSignal) => ({ lastRsiSignal })))(
+    'legacy or malformed remembered RSI choice defaults to all ($lastRsiSignal)', ({ lastRsiSignal }) => {
+      const store = createScannerStore(memoryStorage({ screenerFilters: { signal: 'fib' }, lastRsiSignal }).storage)
+      expect(store.getState().screenerFilters.signal).toBe('fib')
+      expect(store.getState().lastRsiSignal).toBe('all')
+      store.getState().setScreenerTab('rsi')
+      expect(store.getState().screenerFilters.signal).toBe('all')
+    },
+  )
+
+  test('an active saved RSI signal takes precedence over stale tab memory', () => {
+    for (const signal of ['all', 'divergence'] as const) {
+      const store = createScannerStore(memoryStorage({
+        screenerFilters: { signal }, lastRsiSignal: signal === 'all' ? 'divergence' : 'all',
+      }).storage)
+      expect(store.getState().lastRsiSignal).toBe(signal)
+      store.getState().setScreenerTab('fib')
+      store.getState().setScreenerTab('rsi')
+      expect(store.getState().screenerFilters.signal).toBe(signal)
+    }
+  })
+
+  test('reset clears filters and sort while retaining the active Fib tab and remembered RSI choice', () => {
+    const store = createScannerStore(memoryStorage().storage)
+    store.getState().updateScreenerFilters({ signal: 'divergence', divergenceRecency: 5, rsiState: 'oversold' })
+    store.getState().setScreenerTab('fib')
+    store.getState().updateScreenerFilters({ search: 'BTC', starredOnly: true, sort: 'signals',
+      fibDirection: 'short', fibStage: 'active', fibConfluence: 'aligned' })
+    store.getState().resetScreenerFilters()
+    expect(store.getState().screenerFilters).toEqual({ ...DEFAULT_FILTERS, signal: 'fib' })
+    expect(store.getState().lastRsiSignal).toBe('divergence')
+
+    store.getState().setScreenerTab('rsi')
+    expect(store.getState().screenerFilters.signal).toBe('divergence')
+    store.getState().resetScreenerFilters()
+    expect(store.getState().screenerFilters).toEqual(DEFAULT_FILTERS)
+    expect(store.getState().lastRsiSignal).toBe('all')
+    store.getState().setScreenerTab('fib')
+    store.getState().setScreenerTab('rsi')
+    expect(store.getState().screenerFilters.signal).toBe('all')
+  })
+
   test('legacy favorites migrate to Spot only, even if the saved market is TradFi', () => {
     const { storage } = memoryStorage({ market: 'tradfi', starredSymbols: ['BTCUSDT', 7, 'BTCUSDT', 'ETHUSDT'] })
     const store = createScannerStore(storage)
@@ -299,6 +371,129 @@ describe('screener store persistence', () => {
 })
 
 describe('screener URL and store synchronization', () => {
+  test('tab changes use the existing indicator URL field and navigation updates RSI memory', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    store.getState().updateScreenerFilters({ signal: 'divergence' })
+    const browser = fakeBrowser('/screener?indicator=fib')
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+    expect(store.getState().screenerFilters.signal).toBe('fib')
+    expect(store.getState().lastRsiSignal).toBe('divergence')
+    store.getState().setScreenerTab('rsi')
+    expect(browser.location.search).toBe('?timeframe=15m&indicator=divergence')
+    store.getState().setScreenerTab('fib')
+    expect(browser.location.search).toBe('?timeframe=15m&indicator=fib')
+
+    browser.navigate('/screener?timeframe=1h')
+    expect(store.getState().lastRsiSignal).toBe('all')
+    browser.navigate('/screener?indicator=fib')
+    expect(store.getState().lastRsiSignal).toBe('all')
+    browser.navigate('/screener?indicator=divergence')
+    expect(store.getState().lastRsiSignal).toBe('divergence')
+    store.getState().setScreenerTab('fib')
+    const reloaded = createScannerStore(storage)
+    reloaded.getState().setScreenerTab('rsi')
+    expect(reloaded.getState().screenerFilters.signal).toBe('divergence')
+  })
+
+  test('Fib filters and templates persist through reload and a bare URL restores them', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    store.getState().updateScreenerFilters({ signal: 'fib', fibDirection: 'long', fibStage: 'pocket', fibConfluence: 'aligned' })
+    store.getState().updateFibSettings({ scale: 'log', stopRatio: 1.04, tp3Ratio: 0, tp4Ratio: -0.5, runnerRatio: -1 })
+    const expected = preferences(store)
+    const reloaded = createScannerStore(storage)
+    const browser = fakeBrowser('/screener')
+
+    cleanups.push(startScreenerPreferenceSync(reloaded, browser))
+
+    expect(preferences(reloaded)).toEqual(expected)
+    const params = new URLSearchParams(browser.location.search)
+    expect(params.get('indicator')).toBe('fib')
+    expect(params.get('fibSide')).toBe('long')
+    expect(params.get('fibStage')).toBe('pocket')
+    expect(params.get('fibTrend')).toBe('aligned')
+    expect(params.get('fibScale')).toBe('log')
+    expect(params.get('fibStop')).toBe('1.04')
+    expect(params.get('fibTp3')).toBe('0')
+    expect(params.get('fibTp4')).toBe('-0.5')
+    expect(params.get('fibRunner')).toBe('-1')
+  })
+
+  test('Fib setting changes synchronize while filter reset retains the Fib tab and chosen template', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    const browser = fakeBrowser('/screener?timeframe=4h&density=compact&indicator=fib&fibSide=short&fibStage=waiting&fibTrend=aligned&sort=signals')
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+    store.getState().updateFibSettings({ scale: 'log', stopRatio: 1.272, runnerRatio: -1 })
+    store.getState().toggleStarredSymbol('BTCUSDT')
+    store.getState().updateSettings({ showVolume: true })
+    const template = store.getState().fibSettings
+    expect(new URLSearchParams(browser.location.search).get('fibScale')).toBe('log')
+    expect(new URLSearchParams(browser.location.search).get('fibStop')).toBe('1.272')
+    expect(new URLSearchParams(browser.location.search).get('fibRunner')).toBe('-1')
+
+    store.getState().resetScreenerFilters()
+
+    expect(store.getState().screenerFilters).toEqual({ ...DEFAULT_FILTERS, signal: 'fib' })
+    expect(store.getState().fibSettings).toBe(template)
+    expect(store.getState().settings.showVolume).toBe(true)
+    expect(store.getState().starredSymbols).toEqual(['BTCUSDT'])
+    expect(preferences(store)).toEqual({
+      ...DEFAULT_SCREENER_PREFERENCES, signal: 'fib', timeframe: '4h', cardDensity: 'compact', fibSettings: template,
+    })
+    const params = new URLSearchParams(browser.location.search)
+    expect(params.get('indicator')).toBe('fib')
+    expect(params.has('fibSide')).toBe(false)
+    expect(params.has('fibStage')).toBe(false)
+    expect(params.has('fibTrend')).toBe(false)
+    expect(params.get('fibScale')).toBe('log')
+    expect(preferences(createScannerStore(storage))).toEqual(preferences(store))
+  })
+
+  test('a Fib-only shared URL and browser navigation replace the complete template', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    store.getState().applyScreenerPreferences(SELECTED)
+    store.getState().updateFibSettings({ stopRatio: 1.272, tp3Ratio: 0, tp4Ratio: -1, runnerRatio: -2 })
+    const browser = fakeBrowser('/screener?fibScale=log')
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+
+    expect(preferences(store)).toEqual({
+      ...DEFAULT_SCREENER_PREFERENCES, fibSettings: { ...DEFAULT_FIB_SETTINGS, scale: 'log' },
+    })
+    expect(preferences(createScannerStore(storage))).toEqual(preferences(store))
+    browser.navigate('/screener?indicator=fib&fibSide=short&fibStage=active&fibTrend=aligned&fibStop=1.14&fibTp3=0&fibTp4=-0.5&fibRunner=-1')
+    expect(preferences(store)).toEqual({
+      ...DEFAULT_SCREENER_PREFERENCES,
+      signal: 'fib', fibDirection: 'short', fibStage: 'active', fibConfluence: 'aligned',
+      fibSettings: { scale: 'linear', stopRatio: 1.14, tp3Ratio: 0, tp4Ratio: -0.5, runnerRatio: -1 },
+    })
+    browser.navigate('/screener?fibStage=invalid&fibTp3=&fibTp4=Infinity&fibRunner=-Infinity')
+    expect(preferences(store)).toEqual(DEFAULT_SCREENER_PREFERENCES)
+    expect(browser.location.search).toBe('?timeframe=15m')
+  })
+
+  test('legacy storage gets default Fib settings and malformed saved values remain safely editable', () => {
+    const legacy = createScannerStore(memoryStorage({
+      timeframe: '1h', screenerFilters: { signal: 'divergence', divergenceRecency: 5 },
+    }).storage)
+    expect(legacy.getState().fibSettings).toEqual(DEFAULT_FIB_SETTINGS)
+    expect(legacy.getState().screenerFilters).toEqual({ ...DEFAULT_FILTERS, signal: 'divergence', divergenceRecency: 5 })
+    const { storage } = memoryStorage({
+      fibSettings: { scale: 'log', stopRatio: '1.04', tp3Ratio: false, tp4Ratio: 0, runnerRatio: -1 },
+      screenerFilters: { signal: 'fib', fibDirection: 'bullish', fibStage: 'active', fibConfluence: 'unknown' },
+    })
+    const restored = createScannerStore(storage)
+    expect(restored.getState().screenerFilters).toEqual({ ...DEFAULT_FILTERS, signal: 'fib', fibStage: 'active' })
+    expect(restored.getState().fibSettings).toEqual({ ...DEFAULT_FIB_SETTINGS, scale: 'log', runnerRatio: -1 })
+    restored.getState().updateFibSettings({ stopRatio: 1.04, tp4Ratio: NaN, runnerRatio: Infinity })
+    expect(restored.getState().fibSettings).toEqual({ ...DEFAULT_FIB_SETTINGS, scale: 'log', stopRatio: 1.04 })
+    restored.getState().updateFibSettings({ scale: 'Log', stopRatio: 1, tp3Ratio: '0' } as unknown as Partial<FibSettings>)
+    expect(restored.getState().fibSettings).toEqual(DEFAULT_FIB_SETTINGS)
+    expect(createScannerStore(storage).getState().fibSettings).toEqual(DEFAULT_FIB_SETTINGS)
+  })
+
   test('market-only shared URLs override saved markets before the feed starts and persist on reload', () => {
     const { storage } = memoryStorage({ starredSymbols: ['BTCUSDT'] })
     const store = createScannerStore(storage)

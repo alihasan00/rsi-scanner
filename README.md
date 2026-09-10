@@ -4,11 +4,11 @@ Deployed app: [rsi-scanner-dusky.vercel.app](https://rsi-scanner-dusky.vercel.ap
 
 A Vite + React + TypeScript app with **Crypto** and **TradFi** screeners for
 Binance USDT markets. Crypto uses Spot pairs; TradFi uses USDT perpetual
-contracts tracking equities, ETFs, and commodities. Each card keeps just a
-pair heading and a price and RSI chart.
-Filters focus on **RSI divergences**. Binance REST seeds
+contracts tracking equities, ETFs, and commodities. The **RSI** tab shows price
+and RSI charts; **Fibs** shows price candles with an impulse trendline.
+Each tab has its own signal filters. Binance REST seeds
 the candle history and combined kline WebSocket streams keep it current. Open
-any card for aligned price, Heikin-Ashi, and RSI charts.
+any card for aligned price, Heikin-Ashi, and RSI charts or the Fib system view.
 The interface uses Ant Design components with the supplied dark purple theme.
 
 This repository contains the frontend only. The standalone Rust data tool lives
@@ -33,14 +33,15 @@ bun run build
 
 ## Screener
 
-Choose **Crypto** or **TradFi** in the header. The screener shows a card for each
-pair in the selected market. Each card
-has a compact pair heading and favorite button,
-followed by equally tall raw price candlestick and RSI(14) panels on a shared
-timeline. Quotes, percentage changes, indicator breakdowns, and status footers
-are omitted from cards. Selecting RSI divergences adds the matching setup's
-state and age above the chart. The final hollow candle
-is still forming; its price and RSI are provisional. Chart times are shown in
+Choose **Crypto** or **TradFi** in the header, then select **RSI** or **Fibs**.
+RSI cards have a compact pair heading and favorite button above equally tall
+raw price and RSI(14) panels on a shared timeline. Selecting RSI divergences
+adds the matching setup's state and age. Fibs cards show the symbol, live price,
+favorite button, and **Uptrend** or **Downtrend** above raw candles and an
+impulse trendline. Golden-pocket shading, ratios, entries, targets, and stops
+appear only after opening the card. A compact summary beside the tabs shows
+loaded pairs and the active tab's signal count. The final hollow candle is
+still forming; its price and RSI are provisional. Chart times are shown in
 UTC. The candle-change sort uses the latest candle's open to its current close
 on the selected timeframe, **not a 24-hour change**.
 
@@ -49,21 +50,27 @@ in each card heading.
 
 - **Search:** type a pair such as `BTC` or `BTC/USDT`; press `/` to focus search
   when no input or dialog is active.
-- **Indicators:** choose **All indicators** or **RSI divergences**. Overview
-  counters show pairs tracked and pairs with an active RSI divergence. There is
-  no separate confirmation view or control; confirmation remains a signal state.
-- **Divergence recency:** open **Indicator → RSI divergences** for nested choices
+- **Tabs:** use **RSI** for price and oscillator charts or **Fibs** for Fib
+  trends. Returning to RSI restores your last **All RSI charts** or
+  **RSI divergences** choice.
+- **Divergence recency:** on the RSI tab, open **Filters → RSI divergences** for choices
   of the latest **1**, **3** (default), or **5 closed candles**, or **Any age**.
   Selecting RSI divergences uses the current choice and opens those options in
-  the same menu. This preference applies only to the RSI divergence filter;
-  **All indicators** includes active divergences of any age.
+  the same modal. This preference applies only to the RSI divergence filter;
+  **All RSI charts** includes active divergences of any age.
   Bullish and bearish setups are included together.
+- **Fib system:** on the Fibs tab, open **Filters** for direction, setup stage,
+  and optional SMA200 alignment. Waiting setups have an unfilled plan; active
+  setups have one or more modeled entry touches. Golden pocket narrows the
+  results to prices inside the `0.618–0.666` zone. Open a matching card for its
+  scaled entries, stop, and targets.
 - **Favorites:** star cards and switch to **Starred** for a focused collection.
   Crypto and TradFi have separate favorites; existing saved favorites belong
   to Crypto.
 - **Sorting:** use watchlist order, active signals, candle change, RSI ascending
-  or descending, or pair name. **Active signals** ranks RSI divergence setups,
-  with confirmed setups before forming setups.
+  or descending, or pair name. **Active signals** ranks RSI divergence setups
+  with confirmed setups before forming setups. In the Fib view it ranks pairs
+  in the golden pocket first, then entered setups before waiting plans.
 - **Layout and timeframe:** choose comfortable or compact cards and a common
   candle timeframe. The selected view is saved across reloads and reflected in
   the URL.
@@ -75,9 +82,12 @@ card heading exposes **Data unavailable · retrying** or **Updates delayed**
 Pairs without loaded candles cannot satisfy signal filters. Empty
 searches and filters have a reset action.
 
-Click a chart to open the shared detail view. A compact header
-shows the pair, timeframe, and current raw market price. Raw price, Heikin-Ashi,
-and RSI charts share one timeline. Heikin-Ashi prices are labeled as averaged,
+Click a chart to open the shared detail view. A card opened from Fibs starts in
+**Fib system**, with the full chart levels and trade plan. A card opened from
+RSI starts in **Price & RSI**; the view control can switch between them.
+A compact header shows the pair, timeframe, and current raw market price.
+Raw price, Heikin-Ashi, and RSI charts share one timeline in the RSI view.
+Heikin-Ashi prices are labeled as averaged,
 and the open candle updates live. Support/resistance, market-analysis, and
 order-flow views are no longer part of the interface.
 
@@ -107,35 +117,56 @@ from discovery and is not fixed in the app.
 
 ### Saved and shared views
 
-Market, search, the indicator and its nested divergence recency, **Starred**-only,
-sorting, timeframe, and card density persist in local storage and synchronize
-with the URL. Control changes replace the current browser history entry.
+Market, search, the selected tab and its divergence or Fib filters, RSI
+state, **Starred**-only, sorting, timeframe, card density, and the Fib template
+persist in local storage and synchronize with the URL. Control changes replace
+the current browser history entry.
 
 | URL parameter | View preference |
 | --- | --- |
 | `market` | `spot` (Crypto, default) or `tradfi` |
 | `q` | Pair search |
-| `indicator` | `all` or `divergence` |
+| `indicator` | `all` or `divergence` selects RSI; `fib` selects Fibs |
 | `candles` | Latest `1`, `3`, or `5` closed candles, or `any` age |
+| `rsi` | `all`, `overbought`, `oversold`, `either`, or `neutral` |
+| `fibSide` | `any` (default), `long`, or `short` |
+| `fibStage` | `any` (default), `waiting`, `active`, or `pocket` |
+| `fibTrend` | `any` (default) or `aligned` with SMA200 |
+| `fibScale` | `linear` (default) or `log` |
+| `fibStop` | Initial stop ratio: `0.92` (default), `1.04`, `1.14`, or `1.272` |
+| `fibTp3` | `-0.236` (default) or `0` |
+| `fibTp4` | A ratio below TP3; default `-0.382` |
+| `fibRunner` | A ratio below TP4; default `-0.618` |
 | `starred` | `1` for Starred-only; otherwise All pairs |
 | `sort` | `watchlist`, `signals`, `change`, `rsi-low`, `rsi-high`, or `symbol` |
 | `timeframe` | Selected candle timeframe, such as `15m` or `4h` |
 | `density` | `comfortable` or `compact` |
 
 Any recognized parameter makes the URL the complete view. Omitted or invalid
-values use defaults: Crypto, empty search, All indicators, latest 3 closed candles,
+values use defaults: Crypto, empty search, RSI with All RSI charts, latest 3 closed candles,
 All pairs, watchlist order, 15m, and comfortable cards. A URL without these
 parameters restores the saved local preferences. Generated URLs always include
 the timeframe, including for a default view, and preserve unrelated parameters.
+Fib defaults include either direction, any stage, no required SMA200 alignment,
+linear levels, the `0.92` stop, and the target ratios in the table above.
+The last RSI signal choice is remembered locally across tab switches and
+reloads. A shared URL selects its own tab and current filters through
+`indicator`; it does not include that separate local memory.
 
 For example, [BTC RSI divergences on 4h with a 5-candle window](https://rsi-scanner-dusky.vercel.app/?timeframe=4h&q=BTC&indicator=divergence&candles=5)
 includes recent confirmations and newly forming setups awaiting confirmation.
 For TradFi, use `?market=tradfi&timeframe=15m`; the selected market is also
 restored from local preferences on a bare URL.
 
-**Reset filters** resets search, indicator, divergence recency, Starred-only,
-and sorting to their defaults. It retains the market, timeframe, card density,
-favorites, and chart settings. The favorite-symbol list and chart settings
+For example, [long Fib setups on 4h with SMA200 alignment](https://rsi-scanner-dusky.vercel.app/?timeframe=4h&indicator=fib&fibSide=long&fibTrend=aligned)
+shares both the screen and the default Fib template. Optional Fib template
+parameters can share a different stop, scale, or target configuration.
+
+**Reset filters** and **Clear all** retain the current tab. On RSI they select
+**All RSI charts**; on Fibs they keep the Fibs view. They reset search,
+divergence recency, RSI state, Fib direction/stage/alignment, Starred-only, and
+sorting to their defaults. They retain the Fib template, market, timeframe,
+card density, favorites, and chart settings. The favorite-symbol list and chart settings
 themselves stay local; a shared Starred-only view uses the recipient's favorites.
 
 ### Heikin-Ashi and Tug of War library
@@ -144,8 +175,8 @@ The detail chart independently derives Heikin-Ashi candles. The underlying
 `src/lib/tugOfWar.ts` analysis library also remains available, with the same
 defaults as the sibling Rust CLI: **20 warmup candles**, a **0.05 minimum wick
 ratio**, **2 minimum Tug of War candles**, and a **0.30 minimum body ratio**.
-Tug of War does not contribute to screener filters, signal ranking, overview
-counters, or card badges.
+Tug of War does not contribute to screener filters, signal ranking, signal
+counts, or card badges.
 
 Both qualifying wicks indicate indecision. A sufficient sequence followed by
 accepted directional control can confirm a continuation or reversal; without a
@@ -166,13 +197,55 @@ the separately labeled Heikin-Ashi chart shows synthetic averaged prices.
 The frontend builds and runs independently of the Rust CLI. It does not start,
 call, or depend on the CLI for its analysis.
 
+## Fibonacci system
+
+Choose the **Fibs** tab. Open **Filters** and use long/short,
+waiting/active/golden-pocket, and optional SMA200 alignment to narrow the
+results. These filters combine with RSI state, pair search, and favorites.
+Closing the modal without applying discards edits; **Clear all** resets the
+filters while keeping the Fibs tab and your Fib template. Use **Apply** to
+save filter edits.
+
+The main card shows the symbol, live price, star, **Uptrend** or **Downtrend**,
+and raw candles with the impulse trendline. Open it for the golden pocket,
+Fib levels, and full trade plan: 20%, 30%, and 50% entries at `0.618`, `0.786`,
+and `0.886`; the modeled average of filled entries; the initial and current
+stop; and four partial exits with a 10% runner. The default initial stop is
+`0.92`. A waiting plan is not a filled position.
+Switch from **Trade levels** to **Full grid** to display all enabled screenshot
+ratios. Expand **Reference grid & recent setup events** for exact prices and
+the closed-candle event history; nonpositive reference prices are unavailable.
+
+The default targets are `0.382`, `0.236`, `−0.236`, and `−0.382`; the remaining
+10% moves its stop to TP4 at `−0.618`. The supplied Fib settings screenshot
+confirms the negative extension ratios. Fib settings let you choose TP3 at `0`,
+adjust TP4 and the runner, select another initial stop, or calculate levels on
+a logarithmic scale. Open **Settings** while on Fibs, or expand **Fib settings**
+in a chart's detail view, then use **Apply Fib settings**. **Restore template**
+resets the draft; apply it to save those defaults. These preferences are saved and
+included in shared URLs.
+
+Structure, entry touches, targets, and stop changes use closed candles. The
+forming candle can update live price proximity but cannot confirm or fill a
+setup. Plans whose entries were reached before their structure became
+observable are marked missed, and a used golden pocket cannot supply repeated
+new entries. If one closed candle spans conflicting trade levels, the replay
+uses a conservative ordering and identifies the ambiguity.
+
+These are hypothetical price levels and lifecycle states, not exchange orders
+or a profit record. The nominal break-even stop excludes fees, funding, and
+slippage. A bearish Fib setup on a Spot chart does not imply that instrument
+can be shorted. See [Fibonacci rules and implementation choices](docs/fibonacci-system.md)
+for the lecture references, swing confirmation, averaging, and replay rules.
+
 ## RSI divergences
 
 RSI divergence detection, lifecycle tracking, and chart overlays are always
-enabled. **Settings → Include hidden divergences** adds hidden patterns. Two
+enabled on RSI charts. On the RSI tab, **Settings → Include hidden divergences**
+adds hidden patterns. Two
 separately switchable **Lecture filters** are on by default: wick/body agreement
 and one RSI 50 cycle. The **RSI invalidation anchor** chooses which pivot's RSI
-kills a regular setup. These settings apply to every card and detail chart;
+kills a regular setup. These settings apply to every RSI card and RSI detail chart;
 equivalent flags configure the backtest CLI.
 
 ### What a card shows
@@ -328,9 +401,9 @@ plus candle/RSI alignment and seed-to-stream handling.
 - `src/hooks/useRsiFeed.ts` connects the active market and timeframe to the
   REST/WebSocket lifecycle in `src/lib/rsiFeed.ts`, including cancellation,
   bounded concurrency, and automatic recovery.
-- `src/components/ScreenerGrid.tsx` renders the unified overview, filters, and
+- `src/components/ScreenerGrid.tsx` renders the RSI/Fibs tabs, contextual filters, and
   card grid; `src/components/ScreenerCard.tsx` presents each pair's compact
-  heading and price/RSI chart.
+  heading with the RSI panels or Fib trend preview for the selected tab.
 - `src/hooks/useScreenerRows.ts` batches watchlist updates twice per second.
   `src/lib/screener.ts` caches closed-candle RSI divergence results and contains
   the pure filtering, sorting, and candle-change rules.
@@ -345,6 +418,12 @@ plus candle/RSI alignment and seed-to-stream handling.
 - `src/lib/symbols.ts` lists Binance Spot USDT pairs. `bun run check:symbols`
   reports pairs that are halted, delisted, or duplicated.
 - `src/lib/rsi.ts` contains the framework-independent RSI implementation.
+- `src/lib/fibonacci.ts` contains the pure Fibonacci structure and lifecycle model;
+  `fibScreener.ts` caches it separately and composes its screening filters.
+  `fibPreferences.ts` validates the persisted/shared template. `FibChart`,
+  `FibDetails`, and `FibSettingsPanel` render the chart, plan, and settings.
+  Main Fib cards use a compact candles-and-trendline chart; full levels and
+  trade details appear only in the clicked card's modal.
 - `src/lib/rsiHistory.ts` aligns OHLC and RSI, separates live previews from closed
   candles, and recovers stream gaps without recalculating established history.
 - `src/lib/divergence.ts` contains the pure pivot-pair detector and shared validation.

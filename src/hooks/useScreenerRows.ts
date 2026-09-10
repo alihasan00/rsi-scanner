@@ -2,6 +2,7 @@ import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { getScreenerAnalysis } from '../lib/screener'
 import type { ScreenerRow } from '../lib/screener'
+import { getFibAnalysis } from '../lib/fibScreener'
 import { getSymbolSnapshot, subscribeAllSymbols, getSymbolStoreVersion } from '../store/dataStore'
 import { getFeedStatus, getFeedStatusVersion, subscribeAllFeedStatuses } from '../store/feedStatusStore'
 import { useScannerStore } from '../store/scannerStore'
@@ -10,6 +11,7 @@ const version = () => `${getSymbolStoreVersion()}:${getFeedStatusVersion()}`
 
 /** Batch market-wide filters to twice a second rather than on every socket tick. */
 export function useScreenerRows(symbols: readonly string[]) {
+  const fibSettings = useScannerStore((state) => state.fibSettings)
   const settings = useScannerStore(useShallow((state) => ({
     showHiddenDivergences: state.settings.showHiddenDivergences,
     requireBodyAgreement: state.settings.requireBodyAgreement,
@@ -30,11 +32,12 @@ export function useScreenerRows(symbols: readonly string[]) {
   return useMemo(() => symbols.map((symbol) => {
     const snapshot = getSymbolSnapshot(symbol)
     const analysis = getScreenerAnalysis(symbol, snapshot.bars, settings)
+    const fib = getFibAnalysis(symbol, snapshot.bars, fibSettings)
     const feed = getFeedStatus(symbol)
     const cached = rowCache.get(symbol)
-    if (cached?.snapshot === snapshot && cached.analysis === analysis && cached.feed === feed) return cached
-    const row = { symbol, snapshot, analysis, feed }
+    if (cached?.snapshot === snapshot && cached.analysis === analysis && cached.fib === fib && cached.feed === feed) return cached
+    const row = { symbol, snapshot, analysis, fib, feed }
     rowCache.set(symbol, row)
     return row
-  }), [symbols, settings, currentVersion]) // eslint-disable-line react-hooks/exhaustive-deps
+  }), [symbols, settings, fibSettings, currentVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 }

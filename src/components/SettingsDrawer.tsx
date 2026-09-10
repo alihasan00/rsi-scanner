@@ -2,16 +2,23 @@ import { useState } from 'react'
 import { Checkbox, ColorPicker, Divider, Drawer, Select, Slider, Space, Typography } from 'antd'
 import { useShallow } from 'zustand/react/shallow'
 import { useScannerStore } from '../store/scannerStore'
+import { FibSettingsPanel } from './FibSettingsPanel'
 
 const { Text, Paragraph } = Typography
 
 export function SettingsDrawer() {
-  const { settings, closeSettings, updateSettings } = useScannerStore(useShallow((state) => ({
+  const { settings, closeSettings, updateSettings, isFib } = useScannerStore(useShallow((state) => ({
     settings: state.settings,
     closeSettings: state.closeSettings,
     updateSettings: state.updateSettings,
+    isFib: state.screenerFilters.signal === 'fib',
   })))
   const [draftLineWidth, setDraftLineWidth] = useState(settings.lineWidth)
+
+  if (isFib) return <Drawer title="Fib settings" open onClose={closeSettings} size={360}>
+    <Paragraph type="secondary" style={{ fontSize: 13 }}>Adjust the template used for the full plan inside each card.</Paragraph>
+    <FibSettingsPanel />
+  </Drawer>
 
   return (
     <Drawer title="Screener settings" open onClose={closeSettings} size={360}>

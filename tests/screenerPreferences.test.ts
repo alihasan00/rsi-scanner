@@ -6,8 +6,10 @@ import {
   writeScreenerPreferencesToSearch,
 } from '../src/lib/screenerPreferences'
 import type { ScreenerPreferences } from '../src/lib/screenerPreferences'
+import { DEFAULT_FIB_SETTINGS } from '../src/lib/fibPreferences'
 
 const SELECTED: ScreenerPreferences = {
+  ...DEFAULT_SCREENER_PREFERENCES,
   market: 'tradfi',
   search: 'BTC / USDT',
   signal: 'divergence',
@@ -75,7 +77,8 @@ describe('screener URL preferences', () => {
     expect(readScreenerPreferencesFromSearch(search)).toBeNull()
   })
 
-  test.each(['market', 'q', 'indicator', 'candles', 'rsi', 'starred', 'sort', 'timeframe', 'density'])('recognizes even an empty %s parameter as a complete default view', (key) => {
+  test.each(['market', 'q', 'indicator', 'candles', 'rsi', 'starred', 'sort', 'timeframe', 'density',
+    'fibSide', 'fibStage', 'fibTrend', 'fibScale', 'fibStop', 'fibTp3', 'fibTp4', 'fibRunner'])('recognizes even an empty %s parameter as a complete default view', (key) => {
     expect(readScreenerPreferencesFromSearch(`?${key}=`)).toEqual(DEFAULT_SCREENER_PREFERENCES)
   })
 
@@ -118,6 +121,7 @@ describe('screener URL preferences', () => {
 
   test('first duplicate values win consistently, including when the first value is invalid', () => {
     expect(readScreenerPreferencesFromSearch('?market=tradfi&market=spot&q=ETH&q=BTC&indicator=divergence&indicator=all&candles=5&candles=1&rsi=oversold&rsi=overbought&starred=0&starred=1&sort=change&sort=signals&timeframe=1h&timeframe=4h&density=compact&density=comfortable')).toEqual({
+      ...DEFAULT_SCREENER_PREFERENCES,
       market: 'tradfi',
       search: 'ETH', signal: 'divergence', divergenceRecency: 5, rsiState: 'oversold', starredOnly: false,
       sort: 'change', timeframe: '1h', cardDensity: 'compact',
@@ -160,8 +164,12 @@ describe('canonical screener URL writing', () => {
     const choices: { [Key in keyof ScreenerPreferences]: readonly ScreenerPreferences[Key][] } = {
       market: ['spot', 'tradfi'],
       search: ['', 'SOL / USDT'],
-      signal: ['all', 'divergence'],
+      signal: ['all', 'divergence', 'fib'],
       divergenceRecency: [1, 3, 5, 'any'],
+      fibDirection: ['any', 'long', 'short'],
+      fibStage: ['any', 'waiting', 'active', 'pocket'],
+      fibConfluence: ['any', 'aligned'],
+      fibSettings: [DEFAULT_FIB_SETTINGS, { scale: 'log', stopRatio: 1.272, tp3Ratio: 0, tp4Ratio: -0.5, runnerRatio: -1 }],
       rsiState: ['all', 'overbought', 'oversold', 'either', 'neutral'],
       starredOnly: [false, true],
       sort: ['watchlist', 'signals', 'change', 'rsi-low', 'rsi-high', 'symbol'],

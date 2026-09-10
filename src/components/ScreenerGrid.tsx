@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Badge, Button, Card, Empty, Input, Segmented, Select, Statistic, Tag, Tooltip } from 'antd'
+import { Alert, Badge, Button, Card, Empty, Input, Segmented, Select, Tabs, Tooltip } from 'antd'
 import type { InputRef } from 'antd'
-import { AppstoreOutlined, BarsOutlined, SearchOutlined, SlidersOutlined, StarOutlined, SwapOutlined } from '@ant-design/icons'
+import { AppstoreOutlined, BarsOutlined, SearchOutlined, SlidersOutlined, StarOutlined } from '@ant-design/icons'
 import { useShallow } from 'zustand/react/shallow'
 import { useScreenerRows } from '../hooks/useScreenerRows'
 import type { MarketUniverse } from '../hooks/useMarketUniverse'
-import { candleChange, DEFAULT_DIVERGENCE_RECENCY, filterDivergenceSetups, filterScreenerRows } from '../lib/screener'
+import { filterDivergenceSetups, filterScreenerRows } from '../lib/screener'
 import type { ScreenerSort } from '../lib/screener'
 import { useScannerStore } from '../store/scannerStore'
 import { TimeframePicker } from './TimeframePicker'
 import { ScreenerCard } from './ScreenerCard'
 import { DIVERGENCE_RECENCY_OPTIONS, RSI_FILTER_OPTIONS } from '../lib/screenerFilterOptions'
 import { ScreenerFiltersModal } from './ScreenerFiltersModal'
+import { isActiveFibSetup } from '../lib/fibonacci'
 import './ScreenerGrid.css'
 
 const DELAYED_AFTER_MS = 60_000
@@ -26,7 +27,7 @@ const SORT_OPTIONS = [
 
 export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
   const { market, symbols, status: universeStatus } = universe
-  const { timeframe, starredSymbols, cardDensity, setCardDensity, screenerFilters, updateScreenerFilters, resetScreenerFilters } = useScannerStore(useShallow((state) => ({
+  const { timeframe, starredSymbols, cardDensity, setCardDensity, screenerFilters, updateScreenerFilters, resetScreenerFilters, setScreenerTab } = useScannerStore(useShallow((state) => ({
     timeframe: state.timeframe,
     starredSymbols: state.starredSymbols,
     cardDensity: state.cardDensity,
@@ -34,9 +35,11 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
     screenerFilters: state.screenerFilters,
     updateScreenerFilters: state.updateScreenerFilters,
     resetScreenerFilters: state.resetScreenerFilters,
+    setScreenerTab: state.setScreenerTab,
   })))
   const rows = useScreenerRows(symbols)
-  const { search, signal, divergenceRecency, rsiState, starredOnly, sort } = screenerFilters
+  const { search, signal, divergenceRecency, rsiState, starredOnly, sort, fibDirection, fibStage, fibConfluence } = screenerFilters
+  const activeTab = signal === 'fib' ? 'fib' : 'rsi'
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const searchRef = useRef<InputRef>(null)
@@ -58,23 +61,23 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [filtersOpen])
-  useEffect(() => { scrollRef.current?.scrollTo({ top: 0 }) }, [timeframe])
+  useEffect(() => { scrollRef.current?.scrollTo({ top: 0 }) }, [timeframe, activeTab])
 
   const visibleRows = useMemo(() => filterScreenerRows(rows, {
-    search, signal, divergenceRecency, rsiState, starredOnly, starredSymbols, sort,
-  }), [rows, search, signal, divergenceRecency, rsiState, starredOnly, starredSymbols, sort])
+    search, signal, divergenceRecency, rsiState, starredOnly, starredSymbols, sort, fibDirection, fibStage, fibConfluence,
+  }), [rows, search, signal, divergenceRecency, rsiState, starredOnly, starredSymbols, sort, fibDirection, fibStage, fibConfluence])
   const usesDivergenceRecency = signal === 'divergence'
   const recencyLabel = DIVERGENCE_RECENCY_OPTIONS.find((option) => option.value === divergenceRecency)!.label
   const loadedRows = rows.filter((row) => row.snapshot.bars.length > 0)
+  const fibCount = loadedRows.filter((row) => row.fib?.setup && isActiveFibSetup(row.fib.setup)).length
   const divergenceCount = loadedRows.filter((row) => filterDivergenceSetups(
     row.analysis.divergences, usesDivergenceRecency ? divergenceRecency : 'any',
   ).length > 0).length
   const failedCount = rows.filter((row) => row.feed.state === 'error').length
   const delayed = loadedRows.filter((row) => row.feed.updatedAt !== null && now - row.feed.updatedAt > DELAYED_AFTER_MS).length
-  const advancing = loadedRows.filter((row) => (candleChange(row.snapshot) ?? 0) > 0).length
-  const declining = loadedRows.filter((row) => (candleChange(row.snapshot) ?? 0) < 0).length
-  const activeFilterCount = Number(signal !== 'all') + Number(rsiState !== 'all') + Number(starredOnly)
-  const hasFilters = !!search || activeFilterCount > 0 || sort !== 'watchlist' || divergenceRecency !== DEFAULT_DIVERGENCE_RECENCY
+  const activeFilterCount = Number(signal === 'divergence') + Number(rsiState !== 'all') + Number(starredOnly)
+    + (signal === 'fib' ? Number(fibDirection !== 'any') + Number(fibStage !== 'any') + Number(fibConfluence !== 'any') : 0)
+  const hasFilters = !!search || activeFilterCount > 0 || sort !== 'watchlist'
   const rsiFilterLabel = RSI_FILTER_OPTIONS.find((option) => option.value === rsiState)!.label
   const feedLabel = universeStatus === 'loading' ? 'Loading TradFi markets'
     : universeStatus === 'error' ? 'Market list unavailable'
@@ -87,18 +90,15 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
     <section className="screener" ref={scrollRef} aria-label="Market screener">
       <div className="screener__content">
         {market === 'tradfi' && <p className="screener__market-description"><strong>TradFi</strong> USDT perpetual contracts tracking equities, ETFs, and commodities.</p>}
-        <div className="screener__overview" aria-label="Watchlist overview">
-          <Card size="small" className="screener-stat">
-            <span className="screener-stat__icon"><AppstoreOutlined /></span>
-            <Statistic title="Pairs tracked" value={rows.length} />
-            <div className="screener-stat__detail"><Tag>{loadedRows.length} loaded</Tag><span>{advancing} up <span aria-hidden="true">·</span> {declining} down this candle</span></div>
-          </Card>
-          <Card size="small" className="screener-stat">
-            <span className="screener-stat__icon"><SwapOutlined /></span>
-            <Statistic title="RSI divergences" value={divergenceCount} formatter={(value) => String(value).padStart(2, '0')} />
-            <div className="screener-stat__detail"><Tag className="screener__brand-tag">RSI 14</Tag><span>{usesDivergenceRecency && divergenceRecency !== 'any' ? `Active pairs · ${recencyLabel.toLowerCase()}` : 'Pairs with an active divergence'}</span></div>
-          </Card>
-        </div>
+        <nav className="screener__view-nav" aria-label="Screener indicator">
+          <Tabs
+            activeKey={activeTab}
+            onChange={(tab) => { if (tab === 'rsi' || tab === 'fib') setScreenerTab(tab) }}
+            items={[{ key: 'rsi', label: 'RSI' }, { key: 'fib', label: 'Fibs' }]}
+            tabBarExtraContent={<span className="screener__view-summary">{loadedRows.length} / {rows.length} pairs <span aria-hidden="true">·</span> <strong>{activeTab === 'fib' ? fibCount : divergenceCount}</strong> {activeTab === 'fib' ? 'setups' : 'divergences'}</span>}
+          />
+        </nav>
+        <p className="screener__view-description">{activeTab === 'fib' ? 'Follow the trend. Open a card for Fibonacci levels and the full trade plan.' : 'Track price and RSI. Open a card to explore the chart.'}</p>
 
         <Card className="screener__controls" size="small">
           <div className="screener__toolbar">
@@ -130,7 +130,7 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
         />}
 
         <div className="screener__results-bar">
-          <span className="screener__collection-label">{starredOnly ? <><StarOutlined /> Starred pairs</> : 'All pairs'} <span>{starredOnly ? starredSymbols.length : rows.length}</span></span>
+          <span className="screener__collection-label">{starredOnly ? <><StarOutlined /> Starred pairs</> : activeTab === 'fib' ? 'Fib trends' : 'All pairs'} <span>{starredOnly ? starredSymbols.length : activeTab === 'fib' ? fibCount : rows.length}</span></span>
           <div className="screener__result-controls">
             <span className="screener__result-count" role="status">{visibleRows.length} {visibleRows.length === 1 ? 'pair' : 'pairs'}</span>
             <Select<ScreenerSort> aria-label="Sort pairs" className="screener__sort" value={sort} onChange={(sort) => updateScreenerFilters({ sort })} options={SORT_OPTIONS} variant="borderless" />
@@ -142,7 +142,7 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
         </div>
         {hasFilters && (
           <div className="screener__active-filters">
-            <span>Showing {visibleRows.length} of {rows.length} pairs{usesDivergenceRecency ? ` · RSI divergences · ${recencyLabel.toLowerCase()}` : ''}{rsiState !== 'all' ? ` · ${rsiFilterLabel}` : ''}</span>
+            <span>Showing {visibleRows.length} of {rows.length} pairs{usesDivergenceRecency ? ` · RSI divergences · ${recencyLabel.toLowerCase()}` : ''}{signal === 'fib' ? ` · Fib system${fibDirection !== 'any' ? ` · ${fibDirection}` : ''}${fibStage !== 'any' ? ` · ${fibStage === 'waiting' ? 'awaiting entry' : fibStage === 'active' ? 'entry reached' : 'in golden pocket'}` : ''}${fibConfluence === 'aligned' ? ' · SMA 200 aligned' : ''}` : ''}{rsiState !== 'all' ? ` · ${rsiFilterLabel}` : ''}</span>
             <Button type="link" size="small" onClick={resetScreenerFilters}>Reset filters</Button>
           </div>
         )}
@@ -152,18 +152,20 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
           <Card className="screener__empty"><p role="status">Loading Binance TradFi contracts…</p></Card>
         ) : universeStatus === 'error' ? null : rows.length === 0 ? (
           <Card className="screener__empty"><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No active USDT TradFi contracts are currently available."><Button onClick={universe.retry}>Refresh markets</Button></Empty></Card>
+        ) : loadedRows.length === 0 && failedCount < rows.length && activeTab === 'fib' ? (
+          <Card className="screener__empty"><p role="status">Loading market charts…</p></Card>
         ) : visibleRows.length ? (
           <div className={`screener__grid is-${cardDensity}`}>
-            {visibleRows.map((row) => <ScreenerCard key={`${market}:${timeframe}:${row.symbol}`} row={row} timeframe={timeframe} starred={starredSymbols.includes(row.symbol)} stale={row.feed.updatedAt !== null && now - row.feed.updatedAt > DELAYED_AFTER_MS} matchingDivergences={usesDivergenceRecency ? filterDivergenceSetups(row.analysis.divergences, divergenceRecency) : undefined} />)}
+            {visibleRows.map((row) => <ScreenerCard key={`${market}:${timeframe}:${row.symbol}`} row={row} timeframe={timeframe} starred={starredSymbols.includes(row.symbol)} stale={row.feed.updatedAt !== null && now - row.feed.updatedAt > DELAYED_AFTER_MS} showFib={signal === 'fib'} matchingDivergences={usesDivergenceRecency ? filterDivergenceSetups(row.analysis.divergences, divergenceRecency) : undefined} />)}
           </div>
         ) : (
           <Card className="screener__empty">
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={
-              <><h2>{starredOnly && starredSymbols.length === 0 ? 'Keep your favorites close' : 'No pairs match these filters'}</h2><p>{starredOnly && starredSymbols.length === 0 ? 'Star a card to build your own focused watchlist.' : rsiState !== 'all' ? 'Try another RSI state or broaden your other filters.' : usesDivergenceRecency && divergenceRecency !== 'any' ? 'Try a wider candle window or Any age to find older active divergences.' : 'Try another pair or indicator.'}</p></>
-            }><Button onClick={() => setFiltersOpen(true)}>Edit filters</Button><Button type="primary" onClick={resetScreenerFilters}>Show all pairs</Button></Empty>
+              <><h2>{starredOnly && starredSymbols.length === 0 ? 'Keep your favorites close' : 'No pairs match these filters'}</h2><p>{starredOnly && starredSymbols.length === 0 ? 'Star a card to build your own focused watchlist.' : rsiState !== 'all' ? 'Try another RSI state or broaden your other filters.' : signal === 'fib' ? 'Wait for a fresh structure break and mature retracement, or broaden the Fib stage, direction, or trend filter.' : usesDivergenceRecency && divergenceRecency !== 'any' ? 'Try a wider candle window or Any age to find older active divergences.' : 'Try another pair or indicator.'}</p></>
+            }><Button onClick={() => setFiltersOpen(true)}>Edit filters</Button><Button type="primary" onClick={resetScreenerFilters}>{activeTab === 'fib' ? 'Reset filters' : 'Show all pairs'}</Button></Empty>
           </Card>
         )}
-        <footer className="screener__footer"><Badge status={universeStatus === 'error' || failedCount || delayed ? 'warning' : loadedRows.length ? 'success' : 'default'} text={feedLabel} /><span>Divergence setups update on candle closes</span><span>Live candles are provisional <span aria-hidden="true">·</span> All times UTC</span></footer>
+        <footer className="screener__footer"><Badge status={universeStatus === 'error' || failedCount || delayed ? 'warning' : loadedRows.length ? 'success' : 'default'} text={feedLabel} /><span>Setup states update on candle closes</span><span>Live candles are provisional <span aria-hidden="true">·</span> All times UTC</span></footer>
       </div>
     </section>
   )

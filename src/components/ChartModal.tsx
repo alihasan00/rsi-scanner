@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react'
-import { Empty, Modal, Tag } from 'antd'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Empty, Modal, Segmented, Tag } from 'antd'
 import { useShallow } from 'zustand/react/shallow'
 import { useSymbolData } from '../hooks/useSymbolData'
 import { useDivergences } from '../hooks/useDivergences'
@@ -10,6 +10,9 @@ import { formatQuotePrice } from '../lib/priceFormatting'
 import { getRsiState, RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_STATE_LABELS } from '../lib/rsiState'
 import { analyzeTugOfWar, previewTugOfWar } from '../lib/tugOfWar'
 import { useScannerStore } from '../store/scannerStore'
+import { getFibAnalysis } from '../lib/fibScreener'
+import { FibChart } from './FibChart'
+import { FibDetails } from './FibDetails'
 import './ChartModal.css'
 
 export function ChartModal() {
@@ -30,7 +33,11 @@ export function ChartModal() {
     })),
   )
   const open = symbol !== null
+  const [view, setView] = useState<'rsi' | 'fib'>(() => useScannerStore.getState().screenerFilters.signal === 'fib' ? 'fib' : 'rsi')
+  const [fibGrid, setFibGrid] = useState(false)
+  const fibSettings = useScannerStore((state) => state.fibSettings)
   const { price, series, bars } = useSymbolData(symbol ?? '', open)
+  const fib = useMemo(() => getFibAnalysis(symbol ?? '', bars, fibSettings), [symbol, bars, fibSettings])
   const divergences = useDivergences(bars, open, {
     includeHidden: showHiddenDivergences,
     requireBodyAgreement,
@@ -58,7 +65,7 @@ export function ChartModal() {
         { bars, signals: liveDivergences, showPricePanel: true, heikinAshiBars },
       )
     }
-  }, [series, bars, liveDivergences, heikinAshiBars, rsiColor, smaColor, midlineColor, lineWidth, width, height])
+  }, [series, bars, liveDivergences, heikinAshiBars, rsiColor, smaColor, midlineColor, lineWidth, width, height, view])
 
   const chartLabel = `${symbol}, ${timeframe}. Price, Heikin-Ashi candles, and RSI 14 on a shared UTC timeline. Heikin-Ashi uses averaged prices.${isLive ? ' The final Heikin-Ashi candle is hollow and still forming; current price and RSI are provisional.' : ''}${rsiState && currentRsi !== undefined ? ` RSI ${currentRsi.toFixed(2)}, ${RSI_STATE_LABELS[rsiState].toLowerCase()}.` : ' RSI unavailable.'} Overbought at ${RSI_OVERBOUGHT} or above; oversold at ${RSI_OVERSOLD} or below.`
 
@@ -81,14 +88,15 @@ export function ChartModal() {
         </div>
       }
     >
-      <div className="chart-modal__chart-area" ref={chartAreaRef}>
+      <div className="chart-modal__view"><Segmented<'rsi' | 'fib'> aria-label="Chart view" value={view} onChange={setView} options={[{ value: 'rsi', label: 'Price & RSI' }, { value: 'fib', label: 'Fib system' }]} />{view === 'fib' && <Segmented aria-label="Fib chart levels" value={fibGrid ? 'grid' : 'trade'} onChange={(value) => setFibGrid(value === 'grid')} options={[{ value: 'trade', label: 'Trade levels' }, { value: 'grid', label: 'Full grid' }]} />}</div>
+      {view === 'fib' ? <><FibChart symbol={symbol ?? ''} bars={bars} setup={fib.setup} showReferenceGrid={fibGrid} /><FibDetails analysis={fib} price={price} live={isLive} market={market} /></> : <div className="chart-modal__chart-area" ref={chartAreaRef}>
         <canvas ref={canvasRef} className="chart-modal__base-canvas" role="img" aria-label={chartLabel} />
         {!latestBar && (
           <div className="chart-modal__empty">
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Waiting for candles" />
           </div>
         )}
-      </div>
+      </div>}
     </Modal>
   )
 }

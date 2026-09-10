@@ -4,14 +4,18 @@ import type { DivergenceSetup } from './divergenceLifecycle'
 import type { FeedStatus } from '../store/feedStatusStore'
 import { getRsiState } from './rsiState'
 import type { RsiStateFilter } from './rsiState'
+import type { FibAnalysis } from './fibonacci'
+import { getFibLiveContext, isActiveFibSetup } from './fibonacci'
+import { matchesFibFilters } from './fibScreener'
+import type { FibRowFilters } from './fibScreener'
 
-export type SignalFilter = 'all' | 'divergence' | 'confirmed'
+export type SignalFilter = 'all' | 'divergence' | 'confirmed' | 'fib'
 export type DivergenceRecency = 1 | 3 | 5 | 'any'
 export const DEFAULT_DIVERGENCE_RECENCY: DivergenceRecency = 3
 export type ScreenerSort = 'watchlist' | 'signals' | 'change' | 'rsi-low' | 'rsi-high' | 'symbol'
 export type ScreenerSettings = Pick<ChartSettings, 'showHiddenDivergences' | 'requireBodyAgreement' | 'requireSameRsiCycle' | 'divergenceInvalidationAnchor'>
 export interface ScreenerAnalysis { divergences: DivergenceSetup[] }
-export interface ScreenerRow { symbol: string; snapshot: SymbolSnapshot; analysis: ScreenerAnalysis; feed: FeedStatus }
+export interface ScreenerRow { symbol: string; snapshot: SymbolSnapshot; analysis: ScreenerAnalysis; feed: FeedStatus; fib?: FibAnalysis }
 interface CacheEntry { closed: readonly RsiBar[]; settingsKey: string; analysis: ScreenerAnalysis }
 const analysisCache = new Map<string, CacheEntry>()
 
@@ -48,13 +52,13 @@ export function filterDivergenceSetups(
   return signals.filter((signal) => isLiveDivergence(signal)
     && (signal.state === 'forming' || recency === 'any' || signal.barsElapsed < recency))
 }
-export interface ScreenerFilters {
+export interface ScreenerFilters extends FibRowFilters {
   search: string; signal: SignalFilter
   starredOnly: boolean; starredSymbols: readonly string[]; sort: ScreenerSort
   divergenceRecency?: DivergenceRecency
   rsiState?: RsiStateFilter
 }
-/** Signal filtering and ranking describe live RSI setups within the selected age window. */
+/** Fib and RSI share search/favorites, with indicator-specific signal ranking. */
 export function filterScreenerRows(rows: readonly ScreenerRow[], filters: ScreenerFilters): ScreenerRow[] {
   const query = filters.search.trim().toUpperCase().replace(/[\s/-]/g, '')
   const recency = filters.signal === 'all' ? 'any' : filters.divergenceRecency ?? DEFAULT_DIVERGENCE_RECENCY
@@ -74,9 +78,16 @@ export function filterScreenerRows(rows: readonly ScreenerRow[], filters: Screen
     }
     if (filters.signal === 'all') return true
     if (!snapshot.bars.length) return false
+    if (filters.signal === 'fib') return matchesFibFilters(row.fib, snapshot.price, filters)
     return selectedDivergences(analysis).length > 0
   })
   const score = (row: ScreenerRow) => {
+    if (filters.signal === 'fib') {
+      const setup = row.fib?.setup
+      if (!setup || !isActiveFibSetup(setup)) return 0
+      return (getFibLiveContext(setup, row.snapshot.price)?.inGoldenPocket ? 4 : 0)
+        + (setup.status === 'watching' ? 1 : 2)
+    }
     const divergences = selectedDivergences(row.analysis)
     const rsiConfirmed = divergences.some((setup) => setup.state === 'confirmed')
     return (rsiConfirmed ? 4 : 0) + (divergences.length ? 2 : 0)

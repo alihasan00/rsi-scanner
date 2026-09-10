@@ -6,6 +6,8 @@ import { resetFeedStatus } from './feedStatusStore'
 import { DEFAULT_SCREENER_PREFERENCES, restoreScreenerPreferences } from '../lib/screenerPreferences'
 import type { ScreenerFilterPreferences, ScreenerPreferences } from '../lib/screenerPreferences'
 import type { ScreenerMarket } from '../lib/markets'
+import { DEFAULT_FIB_SETTINGS, restoreFibSettings } from '../lib/fibPreferences'
+import type { FibSettings } from '../lib/fibPreferences'
 import type {
   ChartSettings, SupportResistanceFilters, SupportResistanceSort, SupportResistanceView, Timeframe,
 } from '../types'
@@ -62,13 +64,16 @@ interface ScannerState {
   selectedSymbol: string | null
   settingsOpen: boolean
   settings: ChartSettings
+  fibSettings: FibSettings
   screenerFilters: ScreenerFilterPreferences
+  lastRsiSignal: 'all' | 'divergence'
   supportResistanceView: SupportResistanceView
   supportResistanceSort: SupportResistanceSort
   supportResistanceFilters: SupportResistanceFilters
   setMarket: (market: ScreenerMarket) => void
   toggleStarredSymbol: (symbol: string) => void
   setCardDensity: (density: 'comfortable' | 'compact') => void
+  setScreenerTab: (tab: 'rsi' | 'fib') => void
   updateScreenerFilters: (patch: Partial<ScreenerFilterPreferences>) => void
   resetScreenerFilters: () => void
   applyScreenerPreferences: (preferences: ScreenerPreferences) => void
@@ -84,6 +89,7 @@ interface ScannerState {
   openSettings: () => void
   closeSettings: () => void
   updateSettings: (patch: Partial<ChartSettings>) => void
+  updateFibSettings: (patch: Partial<FibSettings>) => void
 }
 
 const SORT_KEYS: readonly SupportResistanceSort[] = ['symbol', 'nearest', 'support', 'resistance']
@@ -97,8 +103,15 @@ function restoreChartSettings(saved?: Partial<ChartSettings>): ChartSettings {
   return settings
 }
 
-function pickScreenerFilters({ search, signal, divergenceRecency, rsiState, starredOnly, sort }: ScreenerPreferences): ScreenerFilterPreferences {
-  return { search, signal, divergenceRecency, rsiState, starredOnly, sort }
+function pickScreenerFilters({
+  search, signal, divergenceRecency, fibDirection, fibStage, fibConfluence, rsiState, starredOnly, sort,
+}: ScreenerPreferences): ScreenerFilterPreferences {
+  return { search, signal, divergenceRecency, fibDirection, fibStage, fibConfluence, rsiState, starredOnly, sort }
+}
+
+function restoreLastRsiSignal(signal: ScreenerFilterPreferences['signal'], saved: unknown): 'all' | 'divergence' {
+  if (signal !== 'fib') return signal
+  return saved === 'divergence' ? 'divergence' : 'all'
 }
 
 function restoreStarredSymbols(input: unknown): string[] {
@@ -152,7 +165,9 @@ export const createScannerStore = (storage?: StateStorage) => create<ScannerStat
       selectedSymbol: null,
       settingsOpen: false,
       settings: DEFAULT_SETTINGS,
+      fibSettings: { ...DEFAULT_FIB_SETTINGS },
       screenerFilters: pickScreenerFilters(DEFAULT_SCREENER_PREFERENCES),
+      lastRsiSignal: 'all',
       supportResistanceView: 'cards',
       supportResistanceSort: 'symbol',
       supportResistanceFilters: DEFAULT_SUPPORT_RESISTANCE_FILTERS,
@@ -173,10 +188,27 @@ export const createScannerStore = (storage?: StateStorage) => create<ScannerStat
         }
       }),
       setCardDensity: (cardDensity) => set({ cardDensity }),
-      updateScreenerFilters: (patch) => set((state) => ({
-        screenerFilters: pickScreenerFilters(restoreScreenerPreferences({ ...state.screenerFilters, ...patch })),
+      setScreenerTab: (tab) => set((state) => {
+        const lastRsiSignal = restoreLastRsiSignal(state.screenerFilters.signal, state.lastRsiSignal)
+        return {
+          lastRsiSignal,
+          screenerFilters: { ...state.screenerFilters, signal: tab === 'fib' ? 'fib' : lastRsiSignal },
+        }
+      }),
+      updateScreenerFilters: (patch) => set((state) => {
+        const screenerFilters = pickScreenerFilters(restoreScreenerPreferences({ ...state.screenerFilters, ...patch }))
+        return {
+          screenerFilters,
+          lastRsiSignal: restoreLastRsiSignal(screenerFilters.signal, state.lastRsiSignal),
+        }
+      }),
+      resetScreenerFilters: () => set((state) => ({
+        screenerFilters: {
+          ...pickScreenerFilters(DEFAULT_SCREENER_PREFERENCES),
+          signal: state.screenerFilters.signal === 'fib' ? 'fib' : 'all',
+        },
+        lastRsiSignal: state.screenerFilters.signal === 'fib' ? state.lastRsiSignal : 'all',
       })),
-      resetScreenerFilters: () => set({ screenerFilters: pickScreenerFilters(DEFAULT_SCREENER_PREFERENCES) }),
       applyScreenerPreferences: (preferences) => {
         const restored = restoreScreenerPreferences(preferences)
         const state = get()
@@ -190,8 +222,10 @@ export const createScannerStore = (storage?: StateStorage) => create<ScannerStat
           starredSymbols: state.starredSymbolsByMarket[restored.market],
           selectedSymbol: marketChanged ? null : state.selectedSymbol,
           screenerFilters: pickScreenerFilters(restored),
+          lastRsiSignal: restoreLastRsiSignal(restored.signal, state.lastRsiSignal),
           timeframe: restored.timeframe,
           cardDensity: restored.cardDensity,
+          fibSettings: restored.fibSettings,
         })
       },
       setSupportResistanceView: (supportResistanceView) => set({ supportResistanceView }),
@@ -221,21 +255,25 @@ export const createScannerStore = (storage?: StateStorage) => create<ScannerStat
       updateSettings: (patch) => set((state) => ({
         settings: { ...state.settings, ...patch },
       })),
+      updateFibSettings: (patch) => set((state) => ({
+        fibSettings: restoreFibSettings({ ...state.fibSettings, ...patch }),
+      })),
     }),
     {
       name: 'rsi-scanner-preferences',
       storage: createJSONStorage(() => safeStorage(storage)),
       partialize: ({
-        market, starredSymbolsByMarket, cardDensity, timeframe, cellSize, starredTimeframes, settings, screenerFilters,
+        market, starredSymbolsByMarket, cardDensity, timeframe, cellSize, starredTimeframes, settings, fibSettings, screenerFilters, lastRsiSignal,
         supportResistanceView, supportResistanceSort, supportResistanceFilters,
       }) => ({
-        market, starredSymbolsByMarket, cardDensity, timeframe, cellSize, starredTimeframes, settings, screenerFilters,
+        market, starredSymbolsByMarket, cardDensity, timeframe, cellSize, starredTimeframes, settings, fibSettings, screenerFilters, lastRsiSignal,
         supportResistanceView, supportResistanceSort, supportResistanceFilters,
       }),
       // Keep defaults for preferences added after a user's settings were saved.
       merge: (persisted, current) => {
         const saved = persisted as Partial<ScannerState> | undefined
         const { market, timeframe, cardDensity } = restoreScreenerPreferences(saved)
+        const screenerFilters = pickScreenerFilters(restoreScreenerPreferences(saved?.screenerFilters))
         const starredSymbolsByMarket = restoreStarredSymbolsByMarket(saved)
         return {
           ...current,
@@ -245,8 +283,10 @@ export const createScannerStore = (storage?: StateStorage) => create<ScannerStat
           starredSymbolsByMarket,
           timeframe,
           cardDensity,
-          screenerFilters: pickScreenerFilters(restoreScreenerPreferences(saved?.screenerFilters)),
+          screenerFilters,
+          lastRsiSignal: restoreLastRsiSignal(screenerFilters.signal, saved?.lastRsiSignal),
           settings: restoreChartSettings(saved?.settings),
+          fibSettings: restoreFibSettings(saved?.fibSettings),
           supportResistanceView: saved?.supportResistanceView === 'list' ? 'list' : 'cards',
           supportResistanceSort: SORT_KEYS.find((key) => key === saved?.supportResistanceSort) ?? 'symbol',
           supportResistanceFilters: restoreSupportResistanceFilters(saved?.supportResistanceFilters),

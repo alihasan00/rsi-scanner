@@ -1,14 +1,12 @@
 .screener { overflow-y: auto; flex: 1; min-height: 0; scrollbar-gutter: stable; }
-.screener__content { max-width: 1840px; margin: 0 auto; padding: 32px 36px 24px; }
-.screener__overview { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
-.screener-stat.ant-card { border-color: var(--color-hairline); border-radius: 10px; background: var(--color-surface); }
-.screener-stat.ant-card .ant-card-body { position: relative; padding: 18px 20px; }
-.screener-stat .ant-statistic-title { color: var(--color-ink-secondary); font-size: 12px; margin-bottom: 8px; }
-.screener-stat .ant-statistic-content { color: var(--color-ink); font-size: 29px; font-weight: 600; line-height: 1.1; letter-spacing: -.8px; }
-.screener-stat__icon { position: absolute; right: 18px; top: 17px; width: 33px; height: 33px; background: var(--color-brand-light); color: var(--color-brand); border-radius: 8px; display: grid; place-items: center; font-size: 15px; }
-.screener-stat__detail { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 13px; font-size: 11px; color: var(--color-ink-muted); }
-.screener-stat__detail .ant-tag { margin: 0; font-size: 10px; line-height: 20px; border-color: var(--color-hairline); background: var(--color-page); color: var(--color-ink-secondary); }
-.screener__brand-tag.ant-tag { color: var(--color-brand); background: var(--color-brand-light); border-color: transparent; }
+.screener__content { max-width: 1840px; margin: 0 auto; padding: 22px 36px 24px; }
+.screener__view-nav .ant-tabs-nav { margin: 0; }
+.screener__view-nav .ant-tabs-tab { padding: 8px 8px 14px; font-size: 16px; font-weight: 600; }
+.screener__view-nav .ant-tabs-content-holder { display: none; }
+.screener__view-summary { font-size: 11px; color: var(--color-ink-muted); }
+.screener__view-summary > span { margin: 0 7px; }
+.screener__view-summary strong { color: var(--color-ink-secondary); font-weight: 500; }
+.screener__view-description { margin: 12px 0 22px; font-size: 12px; line-height: 1.6; color: var(--color-ink-muted); }
 .screener__controls.ant-card { border-radius: 10px; box-shadow: 0 2px 5px rgb(15 15 15 / 2%); }
 .screener__controls.ant-card .ant-card-body { padding: 18px 20px; }
 .screener__toolbar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 18px; }
@@ -46,7 +44,7 @@
 .screener__footer span > span { padding: 0 5px; }
 @media (min-width: 1650px) { .screener__grid:not(.is-compact) { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 1200px) { .screener__timeframes { padding-left: 0; border-left: 0; flex-basis: 100%; display: flex; align-items: center; gap: 14px; } .screener__timeframes > span { margin-bottom: 0; } .screener__toolbar { gap: 14px; } }
-@media (max-width: 800px) { .screener__content { padding: 26px 22px 22px; } .screener__overview { gap: 10px; } .screener-stat.ant-card .ant-card-body { padding: 14px; } .screener-stat__icon { right: 12px; top: 13px; width: 25px; height: 25px; font-size: 12px; } .screener-stat .ant-statistic-title { font-size: 10px; padding-right: 22px; } .screener-stat .ant-statistic-content { font-size: 25px; } .screener-stat__detail { gap: 5px; font-size: 10px; } .screener__grid, .screener__grid.is-compact { gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); } .screener__result-count, .screener__density.ant-segmented { display: none; } .screener__footer { flex-wrap: wrap; } }
-@media (max-width: 560px) { .screener__content { padding: 23px 16px 20px; } .screener__overview { gap: 8px; margin-bottom: 18px; } .screener-stat.ant-card .ant-card-body { padding: 12px 10px; } .screener-stat__icon, .screener-stat__detail { display: none; } .screener-stat .ant-statistic-title { padding-right: 0; min-height: 30px; line-height: 15px; margin-bottom: 8px; } .screener-stat .ant-statistic-content { font-size: 25px; } .screener__controls.ant-card .ant-card-body { padding: 14px; } .screener__search { flex-basis: 160px; min-width: 0; } .screener__toolbar { gap: 12px; } .screener__timeframes { gap: 10px; flex-wrap: wrap; } .screener__timeframes > span { display: none; } .screener__results-bar { gap: 5px; min-height: 64px; } .screener__results-bar .ant-segmented { padding: 3px; } .screener__results-bar .ant-segmented-item-label { padding: 0 7px; font-size: 11px; } .screener__collection-label { gap: 5px; } .screener__sort.ant-select { width: 132px; font-size: 11px; } .screener__active-filters { align-items: flex-start; font-size: 11px; line-height: 1.6; } .screener__footer { flex-direction: column; align-items: flex-start; gap: 5px; font-size: 10px; } }
+@media (max-width: 800px) { .screener__content { padding: 26px 22px 22px; } .screener__grid, .screener__grid.is-compact { gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); } .screener__result-count, .screener__density.ant-segmented { display: none; } .screener__footer { flex-wrap: wrap; } }
+@media (max-width: 560px) { .screener__view-summary { font-size: 10px; } .screener__view-summary > span { margin: 0 4px; } .screener__view-description { font-size: 11px; margin-bottom: 16px; } .screener__content { padding: 23px 16px 20px; } .screener__controls.ant-card .ant-card-body { padding: 14px; } .screener__search { flex-basis: 160px; min-width: 0; } .screener__toolbar { gap: 12px; } .screener__timeframes { gap: 10px; flex-wrap: wrap; } .screener__timeframes > span { display: none; } .screener__results-bar { gap: 5px; min-height: 64px; } .screener__results-bar .ant-segmented { padding: 3px; } .screener__results-bar .ant-segmented-item-label { padding: 0 7px; font-size: 11px; } .screener__collection-label { gap: 5px; } .screener__sort.ant-select { width: 132px; font-size: 11px; } .screener__active-filters { align-items: flex-start; font-size: 11px; line-height: 1.6; } .screener__footer { flex-direction: column; align-items: flex-start; gap: 5px; font-size: 10px; } }
 .screener__market-description { margin: 0 0 18px; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
 .screener__market-description strong { color: var(--color-ink); margin-right: 8px; }
