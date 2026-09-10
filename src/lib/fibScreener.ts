@@ -1,5 +1,5 @@
 import type { RsiBar } from '../types'
-import { analyzeFibonacci, getFibLiveContext, isActiveFibSetup } from './fibonacci'
+import { analyzeFibonacci, fibPrice, getFibLiveContext, isActiveFibSetup } from './fibonacci'
 import type { FibAnalysis, FibSetup } from './fibonacci'
 import type { FibSettings } from './fibPreferences'
 
@@ -30,9 +30,11 @@ export const FIB_STATUS_LABELS: Record<FibSetup['status'], string> = {
   invalidated: 'Structure invalidated', superseded: 'New structure forming',
 }
 
+export type FibStage = 'any' | 'waiting' | 'near' | 'active' | 'pocket'
+
 export interface FibRowFilters {
   fibDirection?: 'any' | 'long' | 'short'
-  fibStage?: 'any' | 'waiting' | 'active' | 'pocket'
+  fibStage?: FibStage
   fibConfluence?: 'any' | 'aligned'
 }
 
@@ -42,6 +44,16 @@ export function matchesFibFilters(analysis: FibAnalysis | undefined, price: numb
   if (filters.fibDirection && filters.fibDirection !== 'any' && filters.fibDirection !== setup.direction) return false
   if (filters.fibConfluence === 'aligned' && analysis?.smaConfluence !== 'aligned') return false
   if (filters.fibStage === 'waiting' && setup.status !== 'watching') return false
+  if (filters.fibStage === 'near') {
+    if (setup.status !== 'watching' || !Number.isFinite(price) || price <= 0) return false
+    // Compare prices on the chosen scale so exact 0.600/0.618 boundaries stay stable.
+    const nearPrice = fibPrice(setup.start.price, setup.end.price, 0.6, setup.scale)
+    const entryPrice = setup.entries[0].price
+    const near = setup.direction === 'long'
+      ? price <= nearPrice && price > entryPrice
+      : price >= nearPrice && price < entryPrice
+    if (!near) return false
+  }
   if (filters.fibStage === 'active' && setup.status === 'watching') return false
   if (filters.fibStage === 'pocket' && !getFibLiveContext(setup, price)?.inGoldenPocket) return false
   return true

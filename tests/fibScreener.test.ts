@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import type { RsiBar } from '../src/types'
 import type { DivergenceSetup } from '../src/lib/divergenceLifecycle'
-import { analyzeFibonacci } from '../src/lib/fibonacci'
-import type { FibAnalysis, FibDirection, FibStatus } from '../src/lib/fibonacci'
+import { analyzeFibonacci, fibPrice } from '../src/lib/fibonacci'
+import type { FibAnalysis, FibDirection, FibScale, FibStatus } from '../src/lib/fibonacci'
 import { DEFAULT_FIB_SETTINGS } from '../src/lib/fibPreferences'
 import type { FibSettings } from '../src/lib/fibPreferences'
 import { getFibAnalysis, matchesFibFilters } from '../src/lib/fibScreener'
@@ -33,8 +33,9 @@ function fixture(
   status: FibStatus = 'watching',
   direction: FibDirection = 'long',
   smaConfluence: FibAnalysis['smaConfluence'] = 'unavailable',
+  scale: FibScale = 'linear',
 ): FibAnalysis {
-  const analysis = analyzeFibonacci(impulse(direction))
+  const analysis = analyzeFibonacci(impulse(direction), { scale })
   if (!analysis.setup) throw new Error('Synthetic impulse must produce a confirmed Fib setup')
   // Selection only depends on plan status; lifecycle transitions are engine-tested.
   const setup = { ...analysis.setup, status }
@@ -180,13 +181,15 @@ describe('Fib setup selection', () => {
     expect(matchesFibFilters(analysis, 114, { fibStage: 'any', fibDirection: 'any', fibConfluence: 'any' })).toBe(true)
     expect(matchesFibFilters(analysis, 114, { fibStage: 'waiting' })).toBe(status === 'watching')
     expect(matchesFibFilters(analysis, 114, { fibStage: 'active' })).toBe(status !== 'watching')
+    expect(matchesFibFilters(analysis, 101.5, { fibStage: 'near' })).toBe(status === 'watching')
   })
 
   test.each(['stopped', 'missed', 'invalidated', 'superseded'] as const)('never offers %s chart context as a fresh Fib signal', (status) => {
     const analysis = fixture(status, 'long', 'aligned')
-    for (const fibStage of ['any', 'waiting', 'active', 'pocket'] as const) {
-      expect(matchesFibFilters(analysis, 100, { fibStage, fibConfluence: 'aligned' })).toBe(false)
-      expect(symbols([row('TERMINAL', analysis, 100, 20, [divergence('confirmed')])], { fibStage })).toEqual([])
+    for (const fibStage of ['any', 'waiting', 'near', 'active', 'pocket'] as const) {
+      const price = fibStage === 'near' ? 101.5 : 100
+      expect(matchesFibFilters(analysis, price, { fibStage, fibConfluence: 'aligned' })).toBe(false)
+      expect(symbols([row('TERMINAL', analysis, price, 20, [divergence('confirmed')])], { fibStage })).toEqual([])
     }
   })
 
@@ -219,6 +222,39 @@ describe('Fib setup selection', () => {
     expect(analysis).toEqual(before)
   })
 
+  test.each([
+    { direction: 'long', scale: 'linear' },
+    { direction: 'short', scale: 'linear' },
+    { direction: 'long', scale: 'log' },
+    { direction: 'short', scale: 'log' },
+  ] as const)('Near entry includes 0.600 but excludes 0.618 for $direction on $scale scale', ({ direction, scale }) => {
+    const analysis = fixture('watching', direction, 'aligned', scale)
+    const setup = analysis.setup!
+    const before = structuredClone(analysis)
+    for (const ratio of [0.600, 0.609, 0.617999]) {
+      const price = fibPrice(setup.start.price, setup.end.price, ratio, scale)
+      expect(matchesFibFilters(analysis, price, { fibStage: 'near' })).toBe(true)
+      expect(matchesFibFilters(analysis, price, { fibStage: 'waiting' })).toBe(true)
+      expect(matchesFibFilters(analysis, price, { fibStage: 'pocket' })).toBe(false)
+    }
+    for (const ratio of [0.599999, 0.618, 0.666, 0.786]) {
+      const price = fibPrice(setup.start.price, setup.end.price, ratio, scale)
+      expect(matchesFibFilters(analysis, price, { fibStage: 'near' })).toBe(false)
+    }
+    expect(matchesFibFilters(analysis, setup.entries[0].price, { fibStage: 'near' })).toBe(false)
+    expect(matchesFibFilters(analysis, setup.entries[0].price, { fibStage: 'pocket' })).toBe(true)
+    expect(analysis).toEqual(before)
+  })
+
+  test('Near entry rejects unavailable or invalid live prices', () => {
+    const analysis = fixture()
+    for (const price of [0, -1, NaN, Infinity, -Infinity]) {
+      expect(matchesFibFilters(analysis, price, { fibStage: 'near' })).toBe(false)
+    }
+    expect(matchesFibFilters(undefined, 101.5, { fibStage: 'near' })).toBe(false)
+    expect(matchesFibFilters(analyzeFibonacci([]), 101.5, { fibStage: 'near' })).toBe(false)
+  })
+
   test.each(['aligned', 'against', 'unavailable', null] as const)('SMA confluence %s is accepted only when alignment is established', (smaConfluence) => {
     const analysis = fixture('entered', 'long', smaConfluence)
     expect(matchesFibFilters(analysis, 100, {})).toBe(true)
@@ -228,6 +264,21 @@ describe('Fib setup selection', () => {
 })
 
 describe('Fib screener integration', () => {
+  test('Near entry composes with direction and SMA alignment while excluding distant, pocket, and entered plans', () => {
+    const rows = [
+      row('LONG', fixture('watching', 'long', 'aligned'), 101.5),
+      row('SHORT', fixture('watching', 'short', 'aligned'), 138.5),
+      row('AGAINST', fixture('watching', 'long', 'against'), 101.5),
+      row('DISTANT', fixture('watching', 'long', 'aligned'), 114),
+      row('POCKET', fixture('watching', 'long', 'aligned'), 100),
+      row('ENTERED', fixture('entered', 'long', 'aligned'), 101.5),
+    ]
+    const filters: Partial<ScreenerFilters> = { fibStage: 'near', fibDirection: 'long', fibConfluence: 'aligned' }
+    expect(symbols(rows, filters)).toEqual(['LONG'])
+    expect(symbols(rows, { ...filters, fibDirection: 'short' })).toEqual(['SHORT'])
+    expect(symbols(rows, { ...filters, fibConfluence: 'any' })).toEqual(['LONG', 'AGAINST'])
+  })
+
   test('search, favorites, current RSI, direction, position stage, and SMA alignment compose independently', () => {
     const aligned = fixture('entered', 'long', 'aligned')
     const rows = [
@@ -261,8 +312,13 @@ describe('Fib screener integration', () => {
     const live = row('LIVE', analysis, 114)
     const before = structuredClone(analysis)
     expect(symbols([live], { fibStage: 'pocket' })).toEqual([])
+    expect(symbols([live], { fibStage: 'near' })).toEqual([])
+    const nearEntry = { ...live, snapshot: { ...live.snapshot, price: 101.5 } }
+    expect(symbols([nearEntry], { fibStage: 'near' })).toEqual(['LIVE'])
+    expect(symbols([nearEntry], { fibStage: 'pocket' })).toEqual([])
     const inPocket = { ...live, snapshot: { ...live.snapshot, price: 100 } }
     expect(symbols([inPocket], { fibStage: 'pocket' })).toEqual(['LIVE'])
+    expect(symbols([inPocket], { fibStage: 'near' })).toEqual([])
     expect(symbols([inPocket], { fibStage: 'active' })).toEqual([])
     const leftPocket = { ...live, snapshot: { ...live.snapshot, price: 98 } }
     expect(symbols([leftPocket], { fibStage: 'pocket' })).toEqual([])

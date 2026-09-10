@@ -88,6 +88,20 @@ describe('screener URL preferences', () => {
     expect(readScreenerPreferencesFromSearch('?q=&timeframe=15m')).toEqual(DEFAULT_SCREENER_PREFERENCES)
   })
 
+  test('a shared Near entry view preserves its direction, alignment, and Fib scale through saved preferences', () => {
+    const search = '?timeframe=4h&indicator=fib&fibSide=long&fibStage=near&fibTrend=aligned&fibScale=log'
+    const expected: ScreenerPreferences = {
+      ...DEFAULT_SCREENER_PREFERENCES,
+      timeframe: '4h', signal: 'fib', fibDirection: 'long', fibStage: 'near', fibConfluence: 'aligned',
+      fibSettings: { ...DEFAULT_FIB_SETTINGS, scale: 'log' },
+    }
+    const restored = restoreScreenerPreferences(JSON.parse(JSON.stringify(readScreenerPreferencesFromSearch(search))))
+    expect(restored).toEqual(expected)
+    const written = writeScreenerPreferencesToSearch('', restored)
+    expect(new URLSearchParams(written).get('fibStage')).toBe('near')
+    expect(readScreenerPreferencesFromSearch(written)).toEqual(expected)
+  })
+
   test('market-only URLs define a complete view, with Spot as the missing or invalid default', () => {
     expect(DEFAULT_SCREENER_PREFERENCES.market).toBe('spot')
     expect(readScreenerPreferencesFromSearch('?market=tradfi')).toEqual({ ...DEFAULT_SCREENER_PREFERENCES, market: 'tradfi' })
@@ -167,7 +181,7 @@ describe('canonical screener URL writing', () => {
       signal: ['all', 'divergence', 'fib'],
       divergenceRecency: [1, 3, 5, 'any'],
       fibDirection: ['any', 'long', 'short'],
-      fibStage: ['any', 'waiting', 'active', 'pocket'],
+      fibStage: ['any', 'waiting', 'near', 'active', 'pocket'],
       fibConfluence: ['any', 'aligned'],
       fibSettings: [DEFAULT_FIB_SETTINGS, { scale: 'log', stopRatio: 1.272, tp3Ratio: 0, tp4Ratio: -0.5, runnerRatio: -1 }],
       rsiState: ['all', 'overbought', 'oversold', 'either', 'neutral'],

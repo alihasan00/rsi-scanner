@@ -3,7 +3,7 @@ import { Button, Modal } from 'antd'
 import { CloseOutlined, SlidersOutlined } from '@ant-design/icons'
 import type { ScreenerFilterPreferences } from '../lib/screenerPreferences'
 import { RSI_OVERBOUGHT, RSI_OVERSOLD } from '../lib/rsiState'
-import { DIVERGENCE_RECENCY_OPTIONS, RSI_FILTER_OPTIONS } from '../lib/screenerFilterOptions'
+import { DIVERGENCE_RECENCY_OPTIONS, FIB_STAGE_OPTIONS, RSI_FILTER_OPTIONS } from '../lib/screenerFilterOptions'
 import './ScreenerFiltersModal.css'
 
 type ModalFilters = Pick<ScreenerFilterPreferences, 'signal' | 'divergenceRecency' | 'rsiState' | 'starredOnly' | 'fibDirection' | 'fibStage' | 'fibConfluence'>
@@ -76,8 +76,8 @@ export function ScreenerFiltersModal({ initialFilters, starredCount, onApply, on
             </fieldset>
             <fieldset className="screener-filters__group">
               <legend>Fib stage</legend>
-              <div className="screener-filters__options">{([['any', 'Any active setup'], ['waiting', 'Awaiting entry'], ['active', 'Entry reached'], ['pocket', 'In golden pocket']] as const).map(([value, label]) => <Button key={value} aria-pressed={draft.fibStage === value} onClick={() => update({ fibStage: value })}>{label}</Button>)}</div>
-              <p className="screener-filters__help">Structure and entry touches update on candle closes. Golden pocket proximity uses the current price and is provisional during a live candle. Used or invalidated setups are excluded.</p>
+              <div className="screener-filters__options">{FIB_STAGE_OPTIONS.map(({ value, label }) => <Button key={value} aria-pressed={draft.fibStage === value} onClick={() => update({ fibStage: value })}>{label}</Button>)}</div>
+              <p className="screener-filters__help">Near entry shows unfilled setups from Fib 0.600 up to, but not including, 0.618. Near entry and golden pocket use the live price. Structure and entry touches update on candle closes; ended setups are excluded.</p>
             </fieldset>
             <fieldset className="screener-filters__group">
               <legend>Trend confluence</legend>

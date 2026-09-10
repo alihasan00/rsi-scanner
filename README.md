@@ -61,9 +61,11 @@ in each card heading.
   Bullish and bearish setups are included together.
 - **Fib system:** on the Fibs tab, open **Filters** for direction, setup stage,
   and optional SMA200 alignment. Waiting setups have an unfilled plan; active
-  setups have one or more modeled entry touches. Golden pocket narrows the
-  results to prices inside the `0.618–0.666` zone. Open a matching card for its
-  scaled entries, stop, and targets.
+  setups have one or more modeled entry touches. **Near entry** shows only
+  waiting plans with live Fib ratios from `0.600` inclusive to `0.618` exclusive,
+  using the selected linear or logarithmic scale in either direction. Golden
+  pocket narrows the results to prices inside the `0.618–0.666` zone. Open a
+  matching card for its scaled entries, stop, and targets.
 - **Favorites:** star cards and switch to **Starred** for a focused collection.
   Crypto and TradFi have separate favorites; existing saved favorites belong
   to Crypto.
@@ -130,7 +132,7 @@ the current browser history entry.
 | `candles` | Latest `1`, `3`, or `5` closed candles, or `any` age |
 | `rsi` | `all`, `overbought`, `oversold`, `either`, or `neutral` |
 | `fibSide` | `any` (default), `long`, or `short` |
-| `fibStage` | `any` (default), `waiting`, `active`, or `pocket` |
+| `fibStage` | `any` (default), `waiting`, `near`, `active`, or `pocket` |
 | `fibTrend` | `any` (default) or `aligned` with SMA200 |
 | `fibScale` | `linear` (default) or `log` |
 | `fibStop` | Initial stop ratio: `0.92` (default), `1.04`, `1.14`, or `1.272` |
@@ -199,12 +201,19 @@ call, or depend on the CLI for its analysis.
 
 ## Fibonacci system
 
-Choose the **Fibs** tab. Open **Filters** and use long/short,
-waiting/active/golden-pocket, and optional SMA200 alignment to narrow the
-results. These filters combine with RSI state, pair search, and favorites.
+Choose the **Fibs** tab. Open **Filters** to select direction, stage, and
+optional SMA200 alignment. Stage choices include waiting, **Near entry**,
+active, and golden pocket. These combine with RSI state, pair search, and favorites.
 Closing the modal without applying discards edits; **Clear all** resets the
 filters while keeping the Fibs tab and your Fib template. Use **Apply** to
 save filter edits.
+
+**Near entry** selects unfilled plans approaching the first entry: the live
+retracement ratio must be `0.600 ≤ ratio < 0.618`. It excludes plans with
+modeled entries already reached and ended setups. This proximity band works
+for longs and shorts on the chosen linear or logarithmic scale; it is not a
+trade confirmation. The choice persists across reloads and in shared URLs as
+`fibStage=near`. Waiting and golden-pocket filters retain their existing scope.
 
 The main card shows the symbol, live price, star, **Uptrend** or **Downtrend**,
 and raw candles with the impulse trendline. Open it for the golden pocket,

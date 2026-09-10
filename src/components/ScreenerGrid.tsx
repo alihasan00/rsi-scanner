@@ -10,7 +10,7 @@ import type { ScreenerSort } from '../lib/screener'
 import { useScannerStore } from '../store/scannerStore'
 import { TimeframePicker } from './TimeframePicker'
 import { ScreenerCard } from './ScreenerCard'
-import { DIVERGENCE_RECENCY_OPTIONS, RSI_FILTER_OPTIONS } from '../lib/screenerFilterOptions'
+import { DIVERGENCE_RECENCY_OPTIONS, FIB_STAGE_OPTIONS, RSI_FILTER_OPTIONS } from '../lib/screenerFilterOptions'
 import { ScreenerFiltersModal } from './ScreenerFiltersModal'
 import { isActiveFibSetup } from '../lib/fibonacci'
 import './ScreenerGrid.css'
@@ -79,6 +79,7 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
     + (signal === 'fib' ? Number(fibDirection !== 'any') + Number(fibStage !== 'any') + Number(fibConfluence !== 'any') : 0)
   const hasFilters = !!search || activeFilterCount > 0 || sort !== 'watchlist'
   const rsiFilterLabel = RSI_FILTER_OPTIONS.find((option) => option.value === rsiState)!.label
+  const fibStageLabel = FIB_STAGE_OPTIONS.find((option) => option.value === fibStage)!.label
   const feedLabel = universeStatus === 'loading' ? 'Loading TradFi markets'
     : universeStatus === 'error' ? 'Market list unavailable'
       : rows.length === 0 ? 'No active markets'
@@ -142,7 +143,7 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
         </div>
         {hasFilters && (
           <div className="screener__active-filters">
-            <span>Showing {visibleRows.length} of {rows.length} pairs{usesDivergenceRecency ? ` · RSI divergences · ${recencyLabel.toLowerCase()}` : ''}{signal === 'fib' ? ` · Fib system${fibDirection !== 'any' ? ` · ${fibDirection}` : ''}${fibStage !== 'any' ? ` · ${fibStage === 'waiting' ? 'awaiting entry' : fibStage === 'active' ? 'entry reached' : 'in golden pocket'}` : ''}${fibConfluence === 'aligned' ? ' · SMA 200 aligned' : ''}` : ''}{rsiState !== 'all' ? ` · ${rsiFilterLabel}` : ''}</span>
+            <span>Showing {visibleRows.length} of {rows.length} pairs{usesDivergenceRecency ? ` · RSI divergences · ${recencyLabel.toLowerCase()}` : ''}{signal === 'fib' ? ` · Fib system${fibDirection !== 'any' ? ` · ${fibDirection}` : ''}${fibStage !== 'any' ? ` · ${fibStageLabel.toLowerCase()}` : ''}${fibConfluence === 'aligned' ? ' · SMA 200 aligned' : ''}` : ''}{rsiState !== 'all' ? ` · ${rsiFilterLabel}` : ''}</span>
             <Button type="link" size="small" onClick={resetScreenerFilters}>Reset filters</Button>
           </div>
         )}

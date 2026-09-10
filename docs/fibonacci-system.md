@@ -22,11 +22,21 @@ setup count. Golden-pocket shading, ratios, entry levels, targets, and stops
 appear inside the clicked card's detail view.
 
 Open **Filters** on Fibs to select long or short direction, waiting or active
-setups, or golden-pocket proximity. The optional SMA200 filter keeps setups
-aligned with that moving average. These choices combine with pair search, RSI
-state, favorites, market, and timeframe. The RSI tab instead offers **All RSI
-charts** or **RSI divergences**, with divergence recency when selected. Use the
-tabs to change systems; the filter modal stays within the selected tab.
+setups, **Near entry**, or golden-pocket proximity. The optional SMA200 filter
+keeps setups aligned with that moving average. These choices combine with pair
+search, RSI state, favorites, market, and timeframe. The RSI tab instead offers
+**All RSI charts** or **RSI divergences**, with divergence recency when selected.
+Use the tabs to change systems; the filter modal stays within the selected tab.
+
+**Near entry** keeps only waiting plans whose live price is at a retracement
+ratio of `0.600` or deeper, but has not reached the first entry at `0.618`:
+`0.600 ≤ ratio < 0.618`. It uses the selected linear or logarithmic scale for
+both long and short setups. Entered, managed, runner, and ended plans are
+excluded. **Waiting** still includes unfilled plans at any distance, while
+**Golden pocket** selects live prices inside `0.618–0.666`, including active
+positions. The Near entry band is a screener convention for proximity, not an
+additional lecture entry or a reversal confirmation. Save or share it with
+`indicator=fib&fibStage=near`; direction and SMA200 filters still apply.
 
 Clicking a Fib card opens **Fib system** detail, showing the anchors, golden
 pocket, three scaled entries, initial and current stop, targets, and remaining

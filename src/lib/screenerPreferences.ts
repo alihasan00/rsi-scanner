@@ -5,6 +5,7 @@ import type { RsiStateFilter } from './rsiState'
 import type { ScreenerMarket } from './markets'
 import { DEFAULT_FIB_SETTINGS, restoreFibSettings } from './fibPreferences'
 import type { FibSettings } from './fibPreferences'
+import type { FibStage } from './fibScreener'
 
 export interface ScreenerPreferences {
   market: ScreenerMarket
@@ -12,7 +13,7 @@ export interface ScreenerPreferences {
   signal: 'all' | 'divergence' | 'fib'
   divergenceRecency: DivergenceRecency
   fibDirection: 'any' | 'long' | 'short'
-  fibStage: 'any' | 'waiting' | 'active' | 'pocket'
+  fibStage: FibStage
   fibConfluence: 'any' | 'aligned'
   fibSettings: FibSettings
   rsiState: RsiStateFilter
@@ -44,7 +45,7 @@ export const DEFAULT_SCREENER_PREFERENCES: Readonly<ScreenerPreferences> = Objec
 const SIGNALS = ['all', 'divergence', 'fib'] as const
 const RECENCIES = [1, 3, 5, 'any'] as const
 const FIB_DIRECTIONS = ['any', 'long', 'short'] as const
-const FIB_STAGES = ['any', 'waiting', 'active', 'pocket'] as const
+const FIB_STAGES = ['any', 'waiting', 'near', 'active', 'pocket'] as const satisfies readonly FibStage[]
 const FIB_CONFLUENCES = ['any', 'aligned'] as const
 const RSI_STATES = ['all', 'overbought', 'oversold', 'either', 'neutral'] as const satisfies readonly RsiStateFilter[]
 const SORTS = ['watchlist', 'signals', 'change', 'rsi-low', 'rsi-high', 'symbol'] as const satisfies readonly ScreenerSort[]
