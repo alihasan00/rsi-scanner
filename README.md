@@ -6,7 +6,8 @@ A Vite + React + TypeScript app with **Crypto** and **TradFi** screeners for
 Binance USDT markets. Crypto uses Spot pairs; TradFi uses USDT perpetual
 contracts tracking equities, ETFs, and commodities. The **RSI** tab shows price
 and RSI charts; **Fibs** shows price candles with an impulse trendline;
-**Support & Resistance** maps calendar liquidity and recent swing failures.
+**Support & Resistance** maps calendar liquidity and recent swing failures;
+**Harmonic Patterns** screens Gartley, Bat, and Butterfly reversal areas.
 Each tab has its own signal filters. Binance REST seeds
 the candle history and combined kline WebSocket streams keep it current. Open
 any card for aligned price, Heikin-Ashi, and RSI charts or the Fib system view.
@@ -34,8 +35,8 @@ bun run build
 
 ## Screener
 
-Choose **Crypto** or **TradFi** in the header, then select **RSI**, **Fibs**, or
-**Support & Resistance**.
+Choose **Crypto** or **TradFi** in the header, then select **RSI**, **Fibs**,
+**Support & Resistance**, or **Harmonic Patterns**.
 RSI cards have a compact pair heading and favorite button above equally tall
 raw price and RSI(14) panels on a shared timeline. Selecting RSI divergences
 adds the matching setup's state and age. Fibs cards show the symbol, live price,
@@ -53,7 +54,8 @@ in each card heading.
 - **Search:** type a pair such as `BTC` or `BTC/USDT`; press `/` to focus search
   when no input or dialog is active.
 - **Tabs:** use **RSI** for price and oscillator charts, **Fibs** for Fib
-  trends, or **Support & Resistance** for calendar levels and sweeps.
+  trends, **Support & Resistance** for calendar levels and sweeps, or
+  **Harmonic Patterns** for XABCD reversal zones.
   Returning to RSI restores your last **All RSI charts** or
   **RSI divergences** choice.
 - **Divergence recency:** on the RSI tab, open **Filters → RSI divergences** for choices
@@ -71,7 +73,7 @@ in each card heading.
   matching card for its scaled entries, stop, and targets.
 - **Favorites:** star cards, then use **All pairs / Starred** to the right of
   sorting and card size above the results. The selection applies immediately
-  across all three tabs. Crypto and TradFi have separate favorites; existing
+  across all four tabs. Crypto and TradFi have separate favorites; existing
   saved favorites belong to Crypto.
 - **Sorting:** use watchlist order, active signals, candle change, RSI ascending
   or descending, or pair name. **Active signals** ranks RSI divergence setups
@@ -97,6 +99,8 @@ Heikin-Ashi prices are labeled as averaged, and the open candle updates live.
 A card opened from Support & Resistance starts with its nearby liquidity
 chart, completed calendar levels, and recent reactions; Price & RSI and
 Fib system remain available in the view control.
+A card opened from Harmonic Patterns starts with its XABC structure, D reversal zone,
+and reference levels; the other detail views remain available.
 
 ### Support & Resistance
 
@@ -134,6 +138,40 @@ and 4h boxes require discretionary selection and are not estimated here.
 **How to read this** and **Settings** explain this scope. Calendar liquidity
 is context, not an entry system. See [the lecture rules](docs/support-resistance.md).
 
+### Harmonic Patterns
+
+This tab screens bullish and bearish **Gartley**, **Bat**, and **Butterfly**
+patterns from lectures 17 and 18. It uses the exact saved ratios recovered
+from the original lecture videos, including the optional Butterfly B→C
+narrowing band and each pattern's target template. Harmonic calculations
+and charts use linear prices independently of the Fibs scale setting.
+
+Cards show XABC and the projected D zone. **Early setup** means the CD move
+has not closed beyond B; **Approaching D** means it has; **D zone reached**
+means a closed candle touched D within the latest three closed candles.
+Live proximity and provisional boundary breaches are labeled separately.
+A projected D is conditional: price may reverse **if it reaches the zone**;
+the pattern does not predict that it will reach D or confirm a reversal.
+
+Open **Filters** to select pattern family, direction, and stage. Default
+**Watchlist order** is stable as prices update; **Nearest D zone** and
+**Symbol** are available alternatives. Search, favorites, timeframe, and card
+density are shared with the other tabs, whose signal filters do not constrain
+harmonic results.
+
+The detector uses consecutive strict 3/3 wick pivots in the latest contiguous
+500 closed candles. C becomes observable after its third right-hand close;
+an earlier D touch is not reused as a fresh signal. Unfilled patterns expire
+60 candles after C, and closed D contacts remain recent for three candles.
+Boundary breaches retire the setup without implying any exchange execution.
+
+Details show the D zone, C invalidation, stop boundary, measurements, and
+target references. Before contact, targets use the D-zone midpoint; after
+contact, they use the first observed closed-candle D price. They are reference
+levels, not entry fills, a final D pivot, or a profit record. A stop buffer and
+reversal confluence remain manual. **How to read this** and **Settings**
+explain the method. See [harmonic rules and video evidence](docs/harmonic-patterns.md).
+
 ### Binance TradFi
 
 TradFi discovers active USDT-margined, USDT-quoted contracts directly from
@@ -160,7 +198,7 @@ from discovery and is not fixed in the app.
 
 ### Saved and shared views
 
-Market, search, the selected tab and its divergence, Fib, or liquidity filters, RSI
+Market, search, the selected tab and its divergence, Fib, liquidity, or harmonic filters, RSI
 state, **Starred**-only, sorting, timeframe, card density, and the Fib template
 persist in local storage and synchronize with the URL. Control changes replace
 the current browser history entry.
@@ -169,7 +207,7 @@ the current browser history entry.
 | --- | --- |
 | `market` | `spot` (Crypto, default) or `tradfi` |
 | `q` | Pair search |
-| `indicator` | `all` or `divergence` selects RSI; `fib` selects Fibs; `sr` selects Support & Resistance |
+| `indicator` | `all` or `divergence` selects RSI; `fib` selects Fibs; `sr` selects Support & Resistance; `harmonic` selects Harmonic Patterns |
 | `candles` | Latest `1`, `3`, or `5` closed candles, or `any` age |
 | `rsi` | `all`, `overbought`, `oversold`, `either`, or `neutral` |
 | `fibSide` | `any` (default), `long`, or `short` |
@@ -183,6 +221,10 @@ the current browser history entry.
 | `srSource` | `all` (default), `week`, `month`, or `monday` |
 | `srSignal` | `all` (default), `near` (within 0.5%), `sfp`, `bullish`, or `bearish` |
 | `srSort` | `watchlist` (default), `nearest`, `signals`, or `symbol` |
+| `harmonicPattern` | `all` (default), `gartley`, `bat`, or `butterfly` |
+| `harmonicDirection` | `any` (default), `bullish`, or `bearish` |
+| `harmonicStage` | `all` (default), `forming`, `approaching`, or `zone` |
+| `harmonicSort` | `watchlist` (default), `nearest`, or `symbol` |
 | `starred` | `1` for Starred-only; otherwise All pairs |
 | `sort` | `watchlist`, `signals`, `change`, `rsi-low`, `rsi-high`, or `symbol` |
 | `timeframe` | Selected candle timeframe, such as `15m` or `4h` |
@@ -209,8 +251,8 @@ shares both the screen and the default Fib template. Optional Fib template
 parameters can share a different stop, scale, or target configuration.
 
 **Reset filters** and **Clear all** retain the current tab. On RSI they select
-**All RSI charts**; on Fibs or Support & Resistance they retain that tab. They reset search,
-divergence recency, RSI state, Fib direction/stage/alignment, liquidity filters, Starred-only, and
+**All RSI charts**; on Fibs, Support & Resistance, or Harmonic Patterns they retain that tab. They reset search,
+divergence recency, RSI state, Fib direction/stage/alignment, liquidity and harmonic filters, Starred-only, and
 sorting to their defaults. They retain the Fib template, market, timeframe,
 card density, favorites, and chart settings. The favorite-symbol list and chart settings
 themselves stay local; a shared Starred-only view uses the recipient's favorites.
@@ -454,7 +496,7 @@ plus candle/RSI alignment and seed-to-stream handling.
 - `src/hooks/useRsiFeed.ts` connects the active market and timeframe to the
   REST/WebSocket lifecycle in `src/lib/rsiFeed.ts`, including cancellation,
   bounded concurrency, and automatic recovery.
-- `src/components/ScreenerGrid.tsx` renders the three tabs, contextual filters, and
+- `src/components/ScreenerGrid.tsx` renders the four tabs, contextual filters, and
   card grid; `src/components/ScreenerCard.tsx` presents each pair's compact
   heading with the RSI panels or Fib trend preview for the selected tab.
 - `src/hooks/useScreenerRows.ts` batches watchlist updates twice per second.
@@ -494,6 +536,12 @@ plus candle/RSI alignment and seed-to-stream handling.
   `liquidityScreener.ts` filters and sorts them. `srContextRest.ts`,
   `srContextFeed.ts`, and `srContextStore.ts` own daily data independently of RSI.
   `LiquidityScreener`, `LiquidityChart`, and `LiquidityDetails` render the tab.
+- `src/lib/harmonics.ts` detects closed-candle Gartley, Bat, and Butterfly
+  structures, applies the source video's templates, narrows Butterfly D where
+  BC overlaps, and calculates target references. `harmonicScreener.ts` caches
+  closed history; `harmonicRows.ts` applies independent filters and stable
+  sorting. `HarmonicScreener`, `HarmonicChart`, and `HarmonicDetails` render
+  the tab and detail view; `HarmonicGuide` explains the method in settings.
 
 Legacy pivot-based support/resistance and market-analysis helpers remain in the source tree,
 but their views are not mounted or used by the calendar-liquidity tab. The original standalone HTML

@@ -10,7 +10,7 @@ import type { FibStage } from './fibScreener'
 export interface ScreenerPreferences {
   market: ScreenerMarket
   search: string
-  signal: 'all' | 'divergence' | 'fib' | 'sr'
+  signal: 'all' | 'divergence' | 'fib' | 'sr' | 'harmonic'
   divergenceRecency: DivergenceRecency
   fibDirection: 'any' | 'long' | 'short'
   fibStage: FibStage
@@ -19,6 +19,10 @@ export interface ScreenerPreferences {
   srSource: 'all' | 'week' | 'month' | 'monday'
   srSignal: 'all' | 'near' | 'sfp' | 'bullish' | 'bearish'
   srSort: 'watchlist' | 'nearest' | 'signals' | 'symbol'
+  harmonicPattern: 'all' | 'gartley' | 'bat' | 'butterfly'
+  harmonicDirection: 'any' | 'bullish' | 'bearish'
+  harmonicStage: 'all' | 'forming' | 'approaching' | 'zone'
+  harmonicSort: 'watchlist' | 'nearest' | 'symbol'
   rsiState: RsiStateFilter
   starredOnly: boolean
   sort: ScreenerSort
@@ -27,7 +31,8 @@ export interface ScreenerPreferences {
 }
 
 export type ScreenerFilterPreferences = Pick<ScreenerPreferences,
-  'search' | 'signal' | 'divergenceRecency' | 'fibDirection' | 'fibStage' | 'fibConfluence' | 'srSource' | 'srSignal' | 'srSort' | 'rsiState' | 'starredOnly' | 'sort'>
+  'search' | 'signal' | 'divergenceRecency' | 'fibDirection' | 'fibStage' | 'fibConfluence' | 'srSource' | 'srSignal' | 'srSort'
+  | 'harmonicPattern' | 'harmonicDirection' | 'harmonicStage' | 'harmonicSort' | 'rsiState' | 'starredOnly' | 'sort'>
 
 export const DEFAULT_SCREENER_PREFERENCES: Readonly<ScreenerPreferences> = Object.freeze({
   market: 'spot',
@@ -41,6 +46,10 @@ export const DEFAULT_SCREENER_PREFERENCES: Readonly<ScreenerPreferences> = Objec
   srSource: 'all',
   srSignal: 'all',
   srSort: 'watchlist',
+  harmonicPattern: 'all',
+  harmonicDirection: 'any',
+  harmonicStage: 'all',
+  harmonicSort: 'watchlist',
   rsiState: 'all',
   starredOnly: false,
   sort: 'watchlist',
@@ -48,10 +57,14 @@ export const DEFAULT_SCREENER_PREFERENCES: Readonly<ScreenerPreferences> = Objec
   cardDensity: 'comfortable',
 })
 
-const SIGNALS = ['all', 'divergence', 'fib', 'sr'] as const
+const SIGNALS = ['all', 'divergence', 'fib', 'sr', 'harmonic'] as const
 const SR_SOURCES = ['all', 'week', 'month', 'monday'] as const
 const SR_SIGNALS = ['all', 'near', 'sfp', 'bullish', 'bearish'] as const
 const SR_SORTS = ['watchlist', 'nearest', 'signals', 'symbol'] as const
+const HARMONIC_PATTERNS = ['all', 'gartley', 'bat', 'butterfly'] as const
+const HARMONIC_DIRECTIONS = ['any', 'bullish', 'bearish'] as const
+const HARMONIC_STAGES = ['all', 'forming', 'approaching', 'zone'] as const
+const HARMONIC_SORTS = ['watchlist', 'nearest', 'symbol'] as const
 const RECENCIES = [1, 3, 5, 'any'] as const
 const FIB_DIRECTIONS = ['any', 'long', 'short'] as const
 const FIB_STAGES = ['any', 'waiting', 'near', 'active', 'pocket'] as const satisfies readonly FibStage[]
@@ -65,6 +78,7 @@ const SEARCH_KEYS = [
   'market', 'q', 'indicator', 'candles', 'rsi', 'starred', 'sort', 'timeframe', 'density',
   'fibSide', 'fibStage', 'fibTrend', 'fibScale', 'fibStop', 'fibTp3', 'fibTp4', 'fibRunner',
   'srSource', 'srSignal', 'srSort',
+  'harmonicPattern', 'harmonicDirection', 'harmonicStage', 'harmonicSort',
 ] as const
 
 function isChoice<T extends string | number>(value: unknown, choices: readonly T[]): value is T {
@@ -88,6 +102,10 @@ export function restoreScreenerPreferences(input: unknown): ScreenerPreferences 
     srSource: isChoice(saved.srSource, SR_SOURCES) ? saved.srSource : defaults.srSource,
     srSignal: isChoice(saved.srSignal, SR_SIGNALS) ? saved.srSignal : defaults.srSignal,
     srSort: isChoice(saved.srSort, SR_SORTS) ? saved.srSort : defaults.srSort,
+    harmonicPattern: isChoice(saved.harmonicPattern, HARMONIC_PATTERNS) ? saved.harmonicPattern : defaults.harmonicPattern,
+    harmonicDirection: isChoice(saved.harmonicDirection, HARMONIC_DIRECTIONS) ? saved.harmonicDirection : defaults.harmonicDirection,
+    harmonicStage: isChoice(saved.harmonicStage, HARMONIC_STAGES) ? saved.harmonicStage : defaults.harmonicStage,
+    harmonicSort: isChoice(saved.harmonicSort, HARMONIC_SORTS) ? saved.harmonicSort : defaults.harmonicSort,
     rsiState: isChoice(saved.rsiState, RSI_STATES) ? saved.rsiState : defaults.rsiState,
     starredOnly: typeof saved.starredOnly === 'boolean' ? saved.starredOnly : defaults.starredOnly,
     sort: isChoice(saved.sort, SORTS) ? saved.sort : defaults.sort,
@@ -118,6 +136,10 @@ export function readScreenerPreferencesFromSearch(search: string): ScreenerPrefe
     srSource: params.get('srSource'),
     srSignal: params.get('srSignal'),
     srSort: params.get('srSort'),
+    harmonicPattern: params.get('harmonicPattern'),
+    harmonicDirection: params.get('harmonicDirection'),
+    harmonicStage: params.get('harmonicStage'),
+    harmonicSort: params.get('harmonicSort'),
     fibSettings: {
       scale: params.get('fibScale'),
       stopRatio: readNumber(params.get('fibStop')),
@@ -151,6 +173,10 @@ export function writeScreenerPreferencesToSearch(search: string, prefs: Screener
   if (current.srSource !== defaults.srSource) params.set('srSource', current.srSource)
   if (current.srSignal !== defaults.srSignal) params.set('srSignal', current.srSignal)
   if (current.srSort !== defaults.srSort) params.set('srSort', current.srSort)
+  if (current.harmonicPattern !== defaults.harmonicPattern) params.set('harmonicPattern', current.harmonicPattern)
+  if (current.harmonicDirection !== defaults.harmonicDirection) params.set('harmonicDirection', current.harmonicDirection)
+  if (current.harmonicStage !== defaults.harmonicStage) params.set('harmonicStage', current.harmonicStage)
+  if (current.harmonicSort !== defaults.harmonicSort) params.set('harmonicSort', current.harmonicSort)
   if (current.fibSettings.scale !== defaults.fibSettings.scale) params.set('fibScale', current.fibSettings.scale)
   if (current.fibSettings.stopRatio !== defaults.fibSettings.stopRatio) params.set('fibStop', String(current.fibSettings.stopRatio))
   if (current.fibSettings.tp3Ratio !== defaults.fibSettings.tp3Ratio) params.set('fibTp3', String(current.fibSettings.tp3Ratio))

@@ -4,19 +4,23 @@ import { useShallow } from 'zustand/react/shallow'
 import { useScannerStore } from '../store/scannerStore'
 import { FibSettingsPanel } from './FibSettingsPanel'
 import { LiquidityGuide } from './LiquidityGuide'
+import { HarmonicGuide } from './HarmonicGuide'
 import './Liquidity.css'
 
 const { Text, Paragraph } = Typography
 
 export function SettingsDrawer() {
-  const { settings, closeSettings, updateSettings, isFib, isLiquidity } = useScannerStore(useShallow((state) => ({
+  const { settings, closeSettings, updateSettings, isFib, isLiquidity, isHarmonic } = useScannerStore(useShallow((state) => ({
     settings: state.settings,
     closeSettings: state.closeSettings,
     updateSettings: state.updateSettings,
     isFib: state.screenerFilters.signal === 'fib',
     isLiquidity: state.screenerFilters.signal === 'sr',
+    isHarmonic: state.screenerFilters.signal === 'harmonic',
   })))
   const [draftLineWidth, setDraftLineWidth] = useState(settings.lineWidth)
+
+  if (isHarmonic) return <Drawer title="Harmonic patterns" open onClose={closeSettings} size={480}><HarmonicGuide /></Drawer>
 
   if (isLiquidity) return <Drawer title="Support & resistance" open onClose={closeSettings} size={440}><LiquidityGuide /></Drawer>
 

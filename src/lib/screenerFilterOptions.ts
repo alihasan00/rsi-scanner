@@ -2,6 +2,27 @@ import type { DivergenceRecency } from './screener'
 import { RSI_OVERBOUGHT, RSI_OVERSOLD } from './rsiState'
 import type { RsiStateFilter } from './rsiState'
 import type { FibStage } from './fibScreener'
+import type { ScreenerFilterPreferences } from './screenerPreferences'
+
+export const HARMONIC_PATTERN_OPTIONS: { value: ScreenerFilterPreferences['harmonicPattern']; label: string }[] = [
+  { value: 'all', label: 'All patterns' },
+  { value: 'gartley', label: 'Gartley' },
+  { value: 'bat', label: 'Bat' },
+  { value: 'butterfly', label: 'Butterfly' },
+]
+
+export const HARMONIC_DIRECTION_OPTIONS: { value: ScreenerFilterPreferences['harmonicDirection']; label: string }[] = [
+  { value: 'any', label: 'Both directions' },
+  { value: 'bullish', label: 'Bullish' },
+  { value: 'bearish', label: 'Bearish' },
+]
+
+export const HARMONIC_STAGE_OPTIONS: { value: ScreenerFilterPreferences['harmonicStage']; label: string }[] = [
+  { value: 'all', label: 'All active patterns' },
+  { value: 'forming', label: 'Early setup' },
+  { value: 'approaching', label: 'Approaching D' },
+  { value: 'zone', label: 'D zone reached' },
+]
 
 export const FIB_STAGE_OPTIONS: { value: FibStage; label: string }[] = [
   { value: 'any', label: 'Any active setup' },

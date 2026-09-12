@@ -19,6 +19,7 @@ const DEFAULT_FILTERS = {
   search: '', signal: 'all', divergenceRecency: 3, rsiState: 'all', starredOnly: false, sort: 'watchlist',
   fibDirection: 'any', fibStage: 'any', fibConfluence: 'any',
   srSource: 'all', srSignal: 'all', srSort: 'watchlist',
+  harmonicPattern: 'all', harmonicDirection: 'any', harmonicStage: 'all', harmonicSort: 'watchlist',
 }
 const SELECTED: ScreenerPreferences = {
   ...DEFAULT_SCREENER_PREFERENCES,
@@ -101,6 +102,109 @@ afterEach(() => {
 })
 
 describe('screener store persistence', () => {
+  test('shared harmonic preferences override storage before rendering and restore on a bare URL', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    store.getState().applyScreenerPreferences(SELECTED)
+    store.getState().updateScreenerFilters({ harmonicPattern: 'butterfly', harmonicDirection: 'bearish', harmonicStage: 'forming' })
+    const browser = fakeBrowser('/screener?indicator=harmonic&market=tradfi&timeframe=1h&harmonicPattern=bat&harmonicDirection=bullish&harmonicStage=zone&harmonicSort=nearest')
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+    const expected: ScreenerPreferences = {
+      ...DEFAULT_SCREENER_PREFERENCES, signal: 'harmonic', market: 'tradfi', timeframe: '1h',
+      harmonicPattern: 'bat', harmonicDirection: 'bullish', harmonicStage: 'zone', harmonicSort: 'nearest',
+    }
+    expect(preferences(store)).toEqual(expected)
+    expect(store.getState().lastRsiSignal).toBe('divergence')
+    const restored = createScannerStore(storage)
+    const bareBrowser = fakeBrowser('/screener')
+    cleanups.push(startScreenerPreferenceSync(restored, bareBrowser))
+    expect(preferences(restored)).toEqual(expected)
+    const params = new URLSearchParams(bareBrowser.location.search)
+    expect(params.get('indicator')).toBe('harmonic')
+    expect(params.get('harmonicPattern')).toBe('bat')
+    expect(params.get('harmonicDirection')).toBe('bullish')
+    expect(params.get('harmonicStage')).toBe('zone')
+    expect(params.get('harmonicSort')).toBe('nearest')
+    restored.getState().setScreenerTab('rsi')
+    expect(restored.getState().screenerFilters.signal).toBe('divergence')
+  })
+
+  test('harmonic edits and tab switches retain other tab choices and the remembered RSI signal', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    store.getState().updateScreenerFilters({
+      signal: 'divergence', divergenceRecency: 5, rsiState: 'oversold', sort: 'rsi-low',
+      fibDirection: 'short', fibStage: 'near', fibConfluence: 'aligned',
+      srSource: 'month', srSignal: 'sfp', srSort: 'signals',
+    })
+    const prior = store.getState().screenerFilters
+    store.getState().setScreenerTab('harmonic')
+    store.getState().updateScreenerFilters({
+      harmonicPattern: 'gartley', harmonicDirection: 'bearish', harmonicStage: 'approaching', harmonicSort: 'symbol',
+    })
+    expect(store.getState().screenerFilters).toEqual({
+      ...prior, signal: 'harmonic', harmonicPattern: 'gartley', harmonicDirection: 'bearish',
+      harmonicStage: 'approaching', harmonicSort: 'symbol',
+    })
+    store.getState().setScreenerTab('fib')
+    store.getState().setScreenerTab('sr')
+    store.getState().setScreenerTab('harmonic')
+    const restored = createScannerStore(storage)
+    expect(restored.getState().screenerFilters).toEqual(store.getState().screenerFilters)
+    restored.getState().setScreenerTab('rsi')
+    expect(restored.getState().screenerFilters).toEqual({
+      ...prior, harmonicPattern: 'gartley', harmonicDirection: 'bearish', harmonicStage: 'approaching', harmonicSort: 'symbol',
+    })
+  })
+
+  test('harmonic reset retains its tab and personal preferences while clearing all filters and sort', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    store.getState().updateScreenerFilters({ signal: 'divergence' })
+    const browser = fakeBrowser('/screener?indicator=harmonic&market=tradfi&timeframe=4h&density=compact&harmonicPattern=butterfly&harmonicDirection=bearish&harmonicStage=approaching&harmonicSort=nearest&q=gold&starred=1&sort=signals&rsi=overbought&fibStage=near&srSource=week')
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+    store.getState().toggleStarredSymbol('XAUUSDT')
+    store.getState().updateFibSettings({ scale: 'log' })
+    store.getState().updateSettings({ showVolume: true })
+    const template = store.getState().fibSettings
+    store.getState().resetScreenerFilters()
+    expect(store.getState().screenerFilters).toEqual({ ...DEFAULT_FILTERS, signal: 'harmonic' })
+    expect(store.getState().lastRsiSignal).toBe('divergence')
+    expect(store.getState().starredSymbols).toEqual(['XAUUSDT'])
+    expect(store.getState().settings.showVolume).toBe(true)
+    expect(preferences(store)).toEqual({
+      ...DEFAULT_SCREENER_PREFERENCES, signal: 'harmonic', market: 'tradfi', timeframe: '4h',
+      cardDensity: 'compact', fibSettings: template,
+    })
+    const params = new URLSearchParams(browser.location.search)
+    expect(params.get('indicator')).toBe('harmonic')
+    for (const key of ['harmonicPattern', 'harmonicDirection', 'harmonicStage', 'harmonicSort', 'q', 'starred', 'sort', 'rsi', 'fibStage', 'srSource']) {
+      expect(params.has(key)).toBe(false)
+    }
+    expect(preferences(createScannerStore(storage))).toEqual(preferences(store))
+    store.getState().setScreenerTab('rsi')
+    expect(store.getState().screenerFilters.signal).toBe('divergence')
+  })
+
+  test('harmonic-only URL keys define a complete view and browser navigation resets omitted choices', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    store.getState().applyScreenerPreferences(SELECTED)
+    store.getState().updateScreenerFilters({ harmonicPattern: 'bat', harmonicDirection: 'bearish' })
+    const browser = fakeBrowser('/screener?harmonicStage=zone')
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+    expect(preferences(store)).toEqual({ ...DEFAULT_SCREENER_PREFERENCES, harmonicStage: 'zone' })
+    browser.navigate('/screener?indicator=harmonic&harmonicPattern=gartley&harmonicDirection=bullish&harmonicStage=forming&harmonicSort=symbol')
+    expect(preferences(store)).toEqual({
+      ...DEFAULT_SCREENER_PREFERENCES, signal: 'harmonic', harmonicPattern: 'gartley', harmonicDirection: 'bullish',
+      harmonicStage: 'forming', harmonicSort: 'symbol',
+    })
+    browser.navigate('/screener?indicator=harmonic&harmonicPattern=invalid&harmonicDirection=long&harmonicStage=confirmed&harmonicSort=signals')
+    expect(preferences(store)).toEqual({ ...DEFAULT_SCREENER_PREFERENCES, signal: 'harmonic' })
+    expect(browser.location.search).toBe('?timeframe=15m&indicator=harmonic')
+    expect(preferences(createScannerStore(storage))).toEqual(preferences(store))
+  })
+
   test('a shared SR view restores its own filters and survives reload with a canonical bare URL', () => {
     const { storage } = memoryStorage()
     const store = createScannerStore(storage)

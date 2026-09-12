@@ -1,0 +1,52 @@
+.harmonic-intro { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin: 4px 0 18px; }
+.harmonic-intro p { margin: 0; color: var(--color-ink-secondary); font-size: 13px; }
+.harmonic-card__price { color: var(--color-ink-secondary); font: 11px var(--font-numeric); }
+.harmonic-card__open { color: var(--color-ink-secondary); text-align: left; }
+.harmonic-card__pattern { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 1px 12px 3px; font-size: 10px; }
+.harmonic-card__pattern strong { font-size: 12px; }
+.harmonic-card__pattern > span:last-child { margin-left: auto; color: var(--color-ink-muted); }
+.harmonic-card__pattern .is-bullish { color: #63c69b; }
+.harmonic-card__pattern .is-bearish { color: #de8995; }
+.harmonic-chart { width: 100%; min-width: 0; }
+.harmonic-chart svg { display: block; width: 100%; height: auto; }
+.harmonic-chart__grid { stroke: var(--color-hairline); stroke-opacity: 0.55; }
+.harmonic-chart__muted { fill: var(--color-ink-muted); font: 10px var(--font-body); }
+.harmonic-chart__point { font: 600 11px var(--font-body); paint-order: stroke; stroke: var(--color-surface); stroke-width: 3px; stroke-linejoin: round; }
+.harmonic-chart--compact { min-height: 186px; }
+.harmonic-card__placeholder { height: 186px; }
+.harmonic-card__zone { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 5px; padding: 6px 12px 10px; font-size: 10px; }
+.harmonic-card__zone > span { color: var(--color-ink-muted); }
+.harmonic-card__zone strong { font: 11px var(--font-numeric); }
+.harmonic-card__status { display: flex; justify-content: space-between; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--color-hairline); color: var(--color-ink-muted); font-size: 10px; }
+.harmonic-card__status.is-warning { color: #e9a454; }
+.harmonic-card__status.is-zone { color: #63c69b; background: #63c69b08; }
+.harmonic-guide { color: var(--color-ink-secondary); font-size: 13px; line-height: 1.75; }
+.harmonic-guide p { margin: 0 0 14px; }
+.harmonic-guide ol { padding-left: 22px; }
+.harmonic-guide li { margin-bottom: 12px; }
+.harmonic-guide__note { color: var(--color-ink-muted); font-size: 12px; }
+.harmonic-table-wrap { overflow-x: auto; margin: 16px 0; }
+.harmonic-table { width: 100%; text-align: left; border-collapse: collapse; font-size: 12px; }
+.harmonic-table caption { text-align: left; color: var(--color-ink-secondary); font-weight: 600; margin-bottom: 8px; }
+.harmonic-table td, .harmonic-table th { border-bottom: 1px solid var(--color-hairline); padding: 10px 12px; }
+.harmonic-table th { font-weight: 500; color: var(--color-ink-secondary); }
+.harmonic-table td { font-variant-numeric: tabular-nums; }
+.harmonic-table thead th { color: var(--color-ink-muted); font-size: 11px; }
+.harmonic-details__heading, .harmonic-details__heading > div { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.harmonic-details__heading { justify-content: space-between; margin: 8px 0 16px; }
+.harmonic-details__heading .ant-tag { margin: 0; }
+.harmonic-details__levels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--color-hairline); border-radius: 8px; }
+.harmonic-details__levels > div { display: flex; flex-direction: column; gap: 7px; padding: 15px; }
+.harmonic-details__levels > div + div { border-left: 1px solid var(--color-hairline); }
+.harmonic-details__levels span { color: var(--color-ink-muted); font-size: 11px; }
+.harmonic-details__levels strong { color: var(--color-ink); font: 12px/1.7 var(--font-numeric); }
+.harmonic-details__levels small { color: var(--color-ink-muted); line-height: 1.6; }
+.harmonic-details__manual { color: var(--color-ink-secondary); font-size: 12px; line-height: 1.7; }
+.harmonic-details__method { border-top: 1px solid var(--color-hairline); margin-top: 16px; padding-top: 14px; }
+.harmonic-details__method summary { cursor: pointer; color: var(--color-ink-secondary); font-size: 12px; }
+.harmonic-details__method[open] summary { margin-bottom: 16px; }
+@media (max-width: 600px) {
+  .harmonic-details__levels { grid-template-columns: 1fr; }
+  .harmonic-details__levels > div + div { border-left: 0; border-top: 1px solid var(--color-hairline); }
+  .harmonic-table td, .harmonic-table th { padding: 8px 5px; }
+}

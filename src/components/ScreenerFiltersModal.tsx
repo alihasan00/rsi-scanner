@@ -3,10 +3,13 @@ import { Button, Modal } from 'antd'
 import { CloseOutlined, SlidersOutlined } from '@ant-design/icons'
 import type { ScreenerFilterPreferences } from '../lib/screenerPreferences'
 import { RSI_OVERBOUGHT, RSI_OVERSOLD } from '../lib/rsiState'
-import { DIVERGENCE_RECENCY_OPTIONS, FIB_STAGE_OPTIONS, RSI_FILTER_OPTIONS } from '../lib/screenerFilterOptions'
+import {
+  DIVERGENCE_RECENCY_OPTIONS, FIB_STAGE_OPTIONS, RSI_FILTER_OPTIONS,
+  HARMONIC_PATTERN_OPTIONS, HARMONIC_DIRECTION_OPTIONS, HARMONIC_STAGE_OPTIONS,
+} from '../lib/screenerFilterOptions'
 import './ScreenerFiltersModal.css'
 
-type ModalFilters = Pick<ScreenerFilterPreferences, 'signal' | 'divergenceRecency' | 'rsiState' | 'fibDirection' | 'fibStage' | 'fibConfluence' | 'srSource' | 'srSignal'>
+type ModalFilters = Pick<ScreenerFilterPreferences, 'signal' | 'divergenceRecency' | 'rsiState' | 'fibDirection' | 'fibStage' | 'fibConfluence' | 'srSource' | 'srSignal' | 'harmonicPattern' | 'harmonicDirection' | 'harmonicStage'>
 
 interface Props {
   initialFilters: ModalFilters
@@ -29,7 +32,7 @@ export function ScreenerFiltersModal({ initialFilters, onApply, onClear, onClose
       className="screener-filters"
       onCancel={() => setOpen(false)}
       afterClose={onClose}
-      title={<span className="screener-filters__title"><SlidersOutlined aria-hidden="true" /> {initialFilters.signal === 'sr' ? 'Support & resistance filters' : initialFilters.signal === 'fib' ? 'Fib filters' : 'RSI filters'}</span>}
+      title={<span className="screener-filters__title"><SlidersOutlined aria-hidden="true" /> {initialFilters.signal === 'harmonic' ? 'Harmonic pattern filters' : initialFilters.signal === 'sr' ? 'Support & resistance filters' : initialFilters.signal === 'fib' ? 'Fib filters' : 'RSI filters'}</span>}
       footer={
         <div className="screener-filters__footer">
           <Button type="text" icon={<CloseOutlined aria-hidden="true" />} onClick={() => { onClear(); setOpen(false) }}>Clear all</Button>
@@ -43,6 +46,9 @@ export function ScreenerFiltersModal({ initialFilters, onApply, onClear, onClose
               fibConfluence: draft.fibConfluence,
               srSource: draft.srSource,
               srSignal: draft.srSignal,
+              harmonicPattern: draft.harmonicPattern,
+              harmonicDirection: draft.harmonicDirection,
+              harmonicStage: draft.harmonicStage,
             })
             setOpen(false)
           }}>Apply</Button>
@@ -51,7 +57,7 @@ export function ScreenerFiltersModal({ initialFilters, onApply, onClear, onClose
     >
       <p className="screener-filters__intro">Choose the pairs and setups you want to see.</p>
       <div className="screener-filters__fields">
-        {draft.signal !== 'fib' && draft.signal !== 'sr' && <fieldset className="screener-filters__group">
+        {(draft.signal === 'all' || draft.signal === 'divergence') && <fieldset className="screener-filters__group">
           <legend>RSI signals</legend>
           <div className="screener-filters__options">
             <Button aria-pressed={draft.signal === 'all'} onClick={() => update({ signal: 'all' })}>All RSI charts</Button>
@@ -99,7 +105,23 @@ export function ScreenerFiltersModal({ initialFilters, onApply, onClear, onClose
           </fieldset>
         </>}
 
-        {draft.signal !== 'sr' && <fieldset className="screener-filters__group">
+        {draft.signal === 'harmonic' && <>
+          <fieldset className="screener-filters__group">
+            <legend>Pattern</legend>
+            <div className="screener-filters__options">{HARMONIC_PATTERN_OPTIONS.map(({ value, label }) => <Button key={value} aria-pressed={draft.harmonicPattern === value} onClick={() => update({ harmonicPattern: value })}>{label}</Button>)}</div>
+          </fieldset>
+          <fieldset className="screener-filters__group">
+            <legend>Direction</legend>
+            <div className="screener-filters__options">{HARMONIC_DIRECTION_OPTIONS.map(({ value, label }) => <Button key={value} aria-pressed={draft.harmonicDirection === value} onClick={() => update({ harmonicDirection: value })}>{label}</Button>)}</div>
+          </fieldset>
+          <fieldset className="screener-filters__group">
+            <legend>Pattern stage</legend>
+            <div className="screener-filters__options">{HARMONIC_STAGE_OPTIONS.map(({ value, label }) => <Button key={value} aria-pressed={draft.harmonicStage === value} onClick={() => update({ harmonicStage: value })}>{label}</Button>)}</div>
+            <p className="screener-filters__help">Early setups have not closed past B. Approaching setups have passed B toward D. D zone reached means a closed-candle touch in the latest three candles. Live proximity is shown separately; a touch does not confirm a reversal.</p>
+          </fieldset>
+        </>}
+
+        {draft.signal !== 'sr' && draft.signal !== 'harmonic' && <fieldset className="screener-filters__group">
           <legend>RSI state</legend>
           <div className="screener-filters__options">
             {RSI_FILTER_OPTIONS.map(({ value, label }) => (

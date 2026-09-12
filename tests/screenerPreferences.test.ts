@@ -22,6 +22,24 @@ const SELECTED: ScreenerPreferences = {
 }
 
 describe('stored screener preferences', () => {
+  test('restores harmonic preferences while malformed choices use independent defaults', () => {
+    const selected: ScreenerPreferences = {
+      ...SELECTED, signal: 'harmonic', harmonicPattern: 'butterfly', harmonicDirection: 'bearish',
+      harmonicStage: 'approaching', harmonicSort: 'nearest',
+    }
+    expect(restoreScreenerPreferences(JSON.parse(JSON.stringify(selected)))).toEqual(selected)
+    expect(restoreScreenerPreferences({
+      ...selected, harmonicPattern: 'crab', harmonicDirection: 'long', harmonicStage: 'confirmed', harmonicSort: 'signals',
+    })).toEqual({
+      ...selected, harmonicPattern: 'all', harmonicDirection: 'any', harmonicStage: 'all', harmonicSort: 'watchlist',
+    })
+    expect(restoreScreenerPreferences({
+      ...selected, harmonicPattern: ['bat'], harmonicDirection: null, harmonicStage: false, harmonicSort: 1,
+    })).toEqual({
+      ...selected, harmonicPattern: 'all', harmonicDirection: 'any', harmonicStage: 'all', harmonicSort: 'watchlist',
+    })
+  })
+
   test('restores the SR tab and validates its source, sweep filter, and sort independently', () => {
     const selected: ScreenerPreferences = {
       ...SELECTED, signal: 'sr', srSource: 'monday', srSignal: 'bullish', srSort: 'signals',
@@ -91,7 +109,8 @@ describe('screener URL preferences', () => {
   })
 
   test.each(['market', 'q', 'indicator', 'candles', 'rsi', 'starred', 'sort', 'timeframe', 'density',
-    'fibSide', 'fibStage', 'fibTrend', 'fibScale', 'fibStop', 'fibTp3', 'fibTp4', 'fibRunner'])('recognizes even an empty %s parameter as a complete default view', (key) => {
+    'fibSide', 'fibStage', 'fibTrend', 'fibScale', 'fibStop', 'fibTp3', 'fibTp4', 'fibRunner',
+    'harmonicPattern', 'harmonicDirection', 'harmonicStage', 'harmonicSort'])('recognizes even an empty %s parameter as a complete default view', (key) => {
     expect(readScreenerPreferencesFromSearch(`?${key}=`)).toEqual(DEFAULT_SCREENER_PREFERENCES)
   })
 
@@ -158,6 +177,37 @@ describe('screener URL preferences', () => {
 })
 
 describe('canonical screener URL writing', () => {
+  test('round trips a harmonic view and canonicalizes duplicate keys, including after reset', () => {
+    const selected: ScreenerPreferences = {
+      ...DEFAULT_SCREENER_PREFERENCES, signal: 'harmonic', market: 'tradfi', timeframe: '1h',
+      harmonicPattern: 'bat', harmonicDirection: 'bullish', harmonicStage: 'zone', harmonicSort: 'nearest',
+    }
+    const search = writeScreenerPreferencesToSearch(
+      '?campaign=shared&indicator=fib&harmonicPattern=gartley&harmonicPattern=butterfly&harmonicDirection=bearish&harmonicDirection=any&harmonicStage=forming&harmonicStage=all&harmonicSort=symbol&harmonicSort=watchlist',
+      selected,
+    )
+    const params = new URLSearchParams(search)
+    expect(params.get('indicator')).toBe('harmonic')
+    expect(params.getAll('harmonicPattern')).toEqual(['bat'])
+    expect(params.getAll('harmonicDirection')).toEqual(['bullish'])
+    expect(params.getAll('harmonicStage')).toEqual(['zone'])
+    expect(params.getAll('harmonicSort')).toEqual(['nearest'])
+    expect(params.get('campaign')).toBe('shared')
+    expect(readScreenerPreferencesFromSearch(search)).toEqual(selected)
+    expect(writeScreenerPreferencesToSearch(search, selected)).toBe(search)
+
+    const reset = new URLSearchParams(writeScreenerPreferencesToSearch(search, {
+      ...DEFAULT_SCREENER_PREFERENCES, signal: 'harmonic',
+    }))
+    expect(reset.get('indicator')).toBe('harmonic')
+    for (const key of ['harmonicPattern', 'harmonicDirection', 'harmonicStage', 'harmonicSort']) {
+      expect(reset.has(key)).toBe(false)
+    }
+    expect(readScreenerPreferencesFromSearch('?indicator=harmonic&harmonicPattern=invalid&harmonicPattern=bat&harmonicDirection=bearish&harmonicDirection=bullish')).toEqual({
+      ...DEFAULT_SCREENER_PREFERENCES, signal: 'harmonic', harmonicDirection: 'bearish',
+    })
+  })
+
   test('round trips a shared SR view and replaces duplicate SR keys with one canonical value', () => {
     const selected: ScreenerPreferences = {
       ...DEFAULT_SCREENER_PREFERENCES, market: 'tradfi', timeframe: '4h',
@@ -217,10 +267,14 @@ describe('canonical screener URL writing', () => {
     const choices: { [Key in keyof ScreenerPreferences]: readonly ScreenerPreferences[Key][] } = {
       market: ['spot', 'tradfi'],
       search: ['', 'SOL / USDT'],
-      signal: ['all', 'divergence', 'fib', 'sr'],
+      signal: ['all', 'divergence', 'fib', 'sr', 'harmonic'],
       srSource: ['all', 'week', 'month', 'monday'],
       srSignal: ['all', 'near', 'sfp', 'bullish', 'bearish'],
       srSort: ['watchlist', 'nearest', 'signals', 'symbol'],
+      harmonicPattern: ['all', 'gartley', 'bat', 'butterfly'],
+      harmonicDirection: ['any', 'bullish', 'bearish'],
+      harmonicStage: ['all', 'forming', 'approaching', 'zone'],
+      harmonicSort: ['watchlist', 'nearest', 'symbol'],
       divergenceRecency: [1, 3, 5, 'any'],
       fibDirection: ['any', 'long', 'short'],
       fibStage: ['any', 'waiting', 'near', 'active', 'pocket'],

@@ -14,6 +14,7 @@ import { DIVERGENCE_RECENCY_OPTIONS, FIB_STAGE_OPTIONS, RSI_FILTER_OPTIONS } fro
 import { ScreenerFiltersModal } from './ScreenerFiltersModal'
 import { isActiveFibSetup } from '../lib/fibonacci'
 import { LiquidityScreener } from './LiquidityScreener'
+import { HarmonicScreener } from './HarmonicScreener'
 import { PairCollectionPicker } from './PairCollectionPicker'
 import './ScreenerGrid.css'
 
@@ -41,7 +42,7 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
   })))
   const rows = useScreenerRows(symbols)
   const { search, signal, divergenceRecency, rsiState, starredOnly, sort, fibDirection, fibStage, fibConfluence } = screenerFilters
-  const activeTab = signal === 'sr' ? 'sr' : signal === 'fib' ? 'fib' : 'rsi'
+  const activeTab = signal === 'harmonic' ? 'harmonic' : signal === 'sr' ? 'sr' : signal === 'fib' ? 'fib' : 'rsi'
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const searchRef = useRef<InputRef>(null)
@@ -53,7 +54,7 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
   }, [])
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (activeTab === 'sr') return
+      if (activeTab === 'sr' || activeTab === 'harmonic') return
       if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return
       const target = event.target as HTMLElement
       if (target.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return
@@ -67,7 +68,7 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
   useEffect(() => { scrollRef.current?.scrollTo({ top: 0 }) }, [timeframe, activeTab])
 
   const visibleRows = useMemo(() => filterScreenerRows(rows, {
-    search, signal, divergenceRecency, rsiState, starredOnly, starredSymbols, sort, fibDirection, fibStage, fibConfluence,
+    search, signal: signal === 'harmonic' ? 'all' : signal, divergenceRecency, rsiState, starredOnly, starredSymbols, sort, fibDirection, fibStage, fibConfluence,
   }), [rows, search, signal, divergenceRecency, rsiState, starredOnly, starredSymbols, sort, fibDirection, fibStage, fibConfluence])
   const usesDivergenceRecency = signal === 'divergence'
   const recencyLabel = DIVERGENCE_RECENCY_OPTIONS.find((option) => option.value === divergenceRecency)!.label
@@ -97,12 +98,12 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
         <nav className="screener__view-nav" aria-label="Screener indicator">
           <Tabs
             activeKey={activeTab}
-            onChange={(tab) => { if (tab === 'rsi' || tab === 'fib' || tab === 'sr') setScreenerTab(tab) }}
-            items={[{ key: 'rsi', label: 'RSI' }, { key: 'fib', label: 'Fibs' }, { key: 'sr', label: 'Support & Resistance' }]}
-            tabBarExtraContent={<span className="screener__view-summary">{loadedRows.length} / {rows.length} pairs{activeTab !== 'sr' && <> <span aria-hidden="true">·</span> <strong>{activeTab === 'fib' ? fibCount : divergenceCount}</strong> {activeTab === 'fib' ? 'setups' : 'divergences'}</>}</span>}
+            onChange={(tab) => { if (tab === 'rsi' || tab === 'fib' || tab === 'sr' || tab === 'harmonic') setScreenerTab(tab) }}
+            items={[{ key: 'rsi', label: 'RSI' }, { key: 'fib', label: 'Fibs' }, { key: 'sr', label: 'Support & Resistance' }, { key: 'harmonic', label: 'Harmonic Patterns' }]}
+            tabBarExtraContent={<span className="screener__view-summary">{loadedRows.length} / {rows.length} pairs{(activeTab === 'rsi' || activeTab === 'fib') && <> <span aria-hidden="true">·</span> <strong>{activeTab === 'fib' ? fibCount : divergenceCount}</strong> {activeTab === 'fib' ? 'setups' : 'divergences'}</>}</span>}
           />
         </nav>
-        {activeTab === 'sr' ? <LiquidityScreener universe={universe} rows={rows} now={now} /> : <>
+        {activeTab === 'harmonic' ? <HarmonicScreener universe={universe} rows={rows} now={now} /> : activeTab === 'sr' ? <LiquidityScreener universe={universe} rows={rows} now={now} /> : <>
         <p className="screener__view-description">{activeTab === 'fib' ? 'Follow the trend. Open a card for Fibonacci levels and the full trade plan.' : 'Track price and RSI. Open a card to explore the chart.'}</p>
 
         <Card className="screener__controls" size="small">
