@@ -54,7 +54,7 @@ describe('production harmonic setup selection', () => {
     expect(candidates).toEqual(before)
   })
 
-  test.each(['invalidated', 'missed', 'expired', 'completed'] as const)('%s candidates cannot hide an older active setup', (status) => {
+  test.each(['invalidated', 'superseded', 'expired', 'completed'] as const)('%s candidates cannot hide an older active setup', (status) => {
     const analysis = analyzeHarmonics(pattern())
     const active = analysis.setups[0]
     const terminal = { ...active, id: status, status, confirmedAt: active.confirmedAt + 1 }
@@ -135,9 +135,16 @@ describe('production harmonic rows', () => {
     expect(symbols([closed])).toEqual([])
   })
 
-  test('missing histories and already missed zone contacts cannot produce cards', () => {
-    const missed = pattern()
-    missed[18] = { ...missed[18], low: 124 }
-    expect(symbols([row('MISSINGUSDT', 0, []), row('MISSEDUSDT', 160, missed)])).toEqual([])
+  test('missing histories and setups stopped out before confirmation cannot produce cards', () => {
+    const stopped = pattern()
+    stopped[18] = { ...stopped[18], low: 99 }
+    expect(symbols([row('MISSINGUSDT', 0, []), row('STOPPEDUSDT', 160, stopped)])).toEqual([])
+  })
+
+  test('a D touch inside the confirmation window produces a zone-stage card', () => {
+    const touched = pattern()
+    touched[18] = { ...touched[18], low: 124, high: 134, open: 132, close: 130 }
+    const rows = makeHarmonicRows([row('TOUCHEDUSDT', 130, touched)], filters(), [])
+    expect(rows.map((item) => [item.row.symbol, item.setup.stage, item.setup.d?.price])).toEqual([['TOUCHEDUSDT', 'zone', 124]])
   })
 })

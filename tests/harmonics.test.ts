@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { RsiBar } from '../src/types'
 import {
   analyzeHarmonics, getHarmonicLiveContext, getHarmonicTargets, HARMONIC_C_RANGE, HARMONIC_RATIOS,
-  HARMONIC_TARGET_RATIOS, narrowButterflyZone,
+  HARMONIC_TARGET_RATIOS, HARMONIC_TOUCH_RECENCY_BARS, narrowButterflyZone,
 } from '../src/lib/harmonics'
 import type { HarmonicKind, HarmonicSetup } from '../src/lib/harmonics'
 
@@ -88,6 +88,68 @@ describe('lecture harmonic geometry', () => {
       }
       for (const ratio of [0.343 - 1e-7, 0.974 + 1e-7]) expect(analyzeHarmonics(pattern(kind, IDEAL_B[kind], ratio)).setups).toEqual([])
     }
+  })
+
+  test('B is the deepest retracement before C even when a smaller pullback formed first (L18 chronology)', () => {
+    // X=100 (3), A=200 (7), shallow pullback to 170 (10) with a bounce to 185 (13), true B=138.2 (17), C (21), confirmed at 24.
+    const c = 138.2 + (200 - 138.2) * 0.618
+    const anchors: [number, number][] = [[0, 120], [3, 100], [7, 200], [10, 170], [13, 185], [17, 138.2], [21, c], [24, c - 10]]
+    const bars = Array.from({ length: 25 }, (_, index) => {
+      const right = anchors.findIndex(([time]) => time >= index)
+      const [endIndex, endPrice] = anchors[right]
+      if (endIndex === index) return bar(index, endPrice)
+      const [startIndex, startPrice] = anchors[right - 1]
+      return bar(index, startPrice + (endPrice - startPrice) * (index - startIndex) / (endIndex - startIndex))
+    })
+    const setups = analyzeHarmonics(bars).setups
+    expect(setups.map((setup) => [setup.kind, setup.x.index, setup.a.index, setup.b.index, setup.c.index]))
+      .toEqual([['gartley', 3, 7, 17, 21]])
+    expect(setups[0].bRatio).toBeCloseTo(0.618, 12)
+    expect(setups[0].status).toBe('active')
+  })
+
+  test('X is the extreme before A and A the extreme of the window; a higher high after A means no harmonic', () => {
+    const bars = pattern()
+    bars[5] = { ...bars[5], high: 201, open: 199, close: 199 }
+    expect(find(bars).a).toEqual({ index: 5, time: bars[5].openTime, price: 201 })
+    const deeper = pattern()
+    deeper[1] = { ...deeper[1], low: 90, open: 95, close: 95 }
+    expect(analyzeHarmonics(deeper).setups).toEqual([])
+    const higherHigh = pattern()
+    higherHigh[15] = { ...higherHigh[15], high: 200.5, open: 199, close: 199 }
+    expect(analyzeHarmonics(higherHigh).setups).toEqual([])
+  })
+
+  test('several dominant X can validate one A-B-C at different families, nearest first', () => {
+    // Bat X=100 (3) and a nearer Butterfly X=~137 (11) share A=200 (15), B=150 (19), C=~181 (23).
+    const anchors: [number, number][] = [[0, 130], [3, 100], [7, 160], [11, 200 - 50 / 0.786], [15, 200], [19, 150], [23, 150 + 50 * 0.618], [26, 170]]
+    const bars = Array.from({ length: 27 }, (_, index) => {
+      const right = anchors.findIndex(([time]) => time >= index)
+      const [endIndex, endPrice] = anchors[right]
+      if (endIndex === index) return bar(index, endPrice)
+      const [startIndex, startPrice] = anchors[right - 1]
+      return bar(index, startPrice + (endPrice - startPrice) * (index - startIndex) / (endIndex - startIndex))
+    })
+    const setups = analyzeHarmonics(bars).setups.filter((setup) => setup.status === 'active')
+    expect(setups.map((setup) => [setup.kind, setup.x.index])).toEqual([['butterfly', 11], ['bat', 3]])
+    expect(setups[1].bRatio).toBeCloseTo(0.5, 12)
+    expect(setups[0].bRatio).toBeCloseTo(0.786, 12)
+  })
+
+  test('a later higher C inside the band supersedes the earlier drawing of the same X-A family', () => {
+    const bars = pattern()
+    const first = find(bars)
+    append(bars, 150, 155, 152)
+    append(bars, 178, 182, 180)
+    append(bars, 160, 165, 162)
+    append(bars, 150, 156, 153)
+    append(bars, 150, 156, 153)
+    const setups = analyzeHarmonics(bars).setups
+    expect(setups.map((setup) => setup.status)).toEqual(['superseded', 'active'])
+    expect(setups[0].id).toBe(first.id)
+    expect(setups[0].endedAt).toBe(setups[1].confirmedAt)
+    expect(setups[1]).toMatchObject({ kind: 'gartley', x: first.x, a: first.a, b: first.b })
+    expect(setups[1].c.price).toBe(182)
   })
 
   test('uses wick anchors instead of candle closes', () => {
@@ -200,24 +262,53 @@ describe('confirmation and harmonic lifecycle', () => {
     expect(find(transform())).toMatchObject({ stage: 'zone', status: 'completed', endedAt: bars[22].closeTime, d: setup.d })
   })
 
-  test.each([16, 17, 18])('contact on preconfirmation bar %i is missed and never backdated', (index) => {
+  test.each([16, 17, 18])('contact on confirmation-window bar %i is reported as the observed D, not hidden', (index) => {
     const bars = pattern()
-    bars[index] = { ...bars[index], low: 124 }
+    bars[index] = { ...bars[index], low: 124, close: 130, open: 132, high: 134 }
+    for (let later = index + 1; later <= 18; later++) bars[later] = bar(later, 132, { low: 130, high: 134 })
     const setup = find(bars)
-    expect(setup).toMatchObject({ status: 'missed', d: null, endedAt: bars[18].closeTime })
+    expect(setup).toMatchObject({ status: 'active', stage: 'zone', confirmedAt: bars[18].closeTime })
+    expect(setup.d).toEqual({ index, time: bars[index].openTime, price: 124 })
     append(bars, 125, 130)
-    expect(find(bars)).toEqual(setup)
+    expect(find(bars).d).toEqual(setup.d)
   })
 
-  test.each([false, true])('same-candle C invalidation wins contact and far-D breaches invalidate (bearish=%p)', (bearish) => {
+  test('a touch that instantly reaches the first target inside the confirmation window is not a fresh setup', () => {
+    const bars = pattern()
+    bars[16] = { ...bars[16], low: 124 }
+    expect(analyzeHarmonics(bars).setups).toEqual([])
+  })
+
+  test.each([false, true])('same-candle C invalidation wins contact and a wick beyond X invalidates (bearish=%p)', (bearish) => {
     const bars = pattern()
     const original = find(bars)
     append(bars, 120, original.cInvalidation + 0.01, 140)
     const invalidC = find(bearish ? mirror(bars) : bars)
     expect(invalidC).toMatchObject({ status: 'invalidated', d: null, endedAt: bars[19].closeTime })
     const beyond = pattern()
-    append(beyond, original.zone.low - 0.01, 135, 125)
+    append(beyond, original.stopReference - 0.01, 135, 125)
     expect(find(bearish ? mirror(beyond) : beyond)).toMatchObject({ status: 'invalidated', d: null })
+  })
+
+  test.each(['gartley', 'bat'] as const)('%s survives a wick past the far edge of D until X is breached (L18 stop, L16 pocket)', (kind) => {
+    const bars = pattern(kind)
+    const setup = find(bars, kind)
+    expect(setup.stopReference).toBe(100)
+    append(bars, setup.zone.low - 0.5, setup.zone.high - 1, setup.zone.high - 2)
+    const touched = find(bars, kind)
+    expect(touched).toMatchObject({ status: 'active', stage: 'zone' })
+    expect(touched.d?.price).toBeCloseTo(setup.zone.low, 12)
+    append(bars, 100.5, setup.zone.low, setup.zone.low)
+    expect(find(bars, kind).status).toBe('active')
+    append(bars, 99.99, setup.zone.low, setup.zone.low)
+    expect(find(bars, kind)).toMatchObject({ status: 'invalidated', endedAt: bars.at(-1)!.closeTime })
+  })
+
+  test('a Butterfly stop sits at the far edge of its established D range', () => {
+    const bars = pattern('butterfly')
+    const setup = find(bars, 'butterfly')
+    append(bars, setup.zone.low - 0.01, setup.zone.high, setup.zone.high)
+    expect(find(bars, 'butterfly')).toMatchObject({ status: 'invalidated', d: null })
   })
 
   test('C outer boundary allows equality but invalidates a wick before B is crossed', () => {
@@ -229,14 +320,36 @@ describe('confirmation and harmonic lifecycle', () => {
     expect(find(bars)).toMatchObject({ status: 'invalidated', stage: 'forming', d: null })
   })
 
-  test('D far edge is included, while gap jumps beyond it cannot be a touch', () => {
+  test('D far edge is included, while a gap between D and X is neither a touch nor a stop', () => {
     const bars = pattern()
     const setup = find(bars)
     append(bars, setup.zone.low, setup.zone.high)
     expect(find(bars)).toMatchObject({ status: 'active', stage: 'zone' })
     const gap = pattern()
     append(gap, setup.zone.low - 2, setup.zone.low - 1)
+    expect(find(gap)).toMatchObject({ status: 'active', stage: 'approaching', d: null })
+    append(gap, 98, 99)
     expect(find(gap)).toMatchObject({ status: 'invalidated', d: null })
+  })
+
+  test('a touched zone stays active while price holds D, completes at the first target, or goes stale after leaving', () => {
+    const bars = pattern()
+    append(bars, 124, 130)
+    const setup = find(bars)
+    const [first] = getHarmonicTargets(setup)
+    for (let count = 0; count < HARMONIC_TOUCH_RECENCY_BARS + 3; count++) append(bars, 120, 128)
+    expect(find(bars)).toMatchObject({ status: 'active', stage: 'zone', d: setup.d, lastTouchIndex: bars.length - 1 })
+    const target = structuredClone(bars)
+    append(target, 135, first.price)
+    expect(find(target)).toMatchObject({ status: 'completed', endedAt: target.at(-1)!.closeTime })
+    const stale = structuredClone(bars)
+    for (let count = 0; count < HARMONIC_TOUCH_RECENCY_BARS - 1; count++) append(stale, 132, 136)
+    expect(find(stale).status).toBe('active')
+    append(stale, 132, 136)
+    expect(find(stale)).toMatchObject({ status: 'expired', endedAt: stale.at(-1)!.closeTime })
+    const rally = structuredClone(bars)
+    append(rally, 132, setup.cInvalidation + 5, first.price - 1)
+    expect(find(rally).status).toBe('completed')
   })
 
   test('unfilled opportunities expire 60 closed bars after C and cannot reactivate', () => {
@@ -294,7 +407,9 @@ describe('history integrity and live context', () => {
     }
     const approach = bearish ? low - 1 : high + 1
     expect(getHarmonicLiveContext(setup, approach)).toEqual({ inZone: false, distancePercent: 1 / approach * 100, invalidated: false })
-    const beyond = bearish ? high + 0.01 : low - 0.01
+    const pocket = bearish ? high + 0.01 : low - 0.01
+    expect(getHarmonicLiveContext(setup, pocket)).toMatchObject({ inZone: false, invalidated: false })
+    const beyond = setup.stopReference + (bearish ? 0.01 : -0.01)
     expect(getHarmonicLiveContext(setup, beyond)).toMatchObject({ inZone: false, invalidated: true })
     const outsideC = setup.cInvalidation + (bearish ? -0.01 : 0.01)
     expect(getHarmonicLiveContext(setup, outsideC)).toMatchObject({ inZone: false, invalidated: true })
@@ -317,8 +432,8 @@ describe('history integrity and live context', () => {
   test.each([false, true])('a provisional wick violation remains visible after price recedes (bearish=%p)', (bearish) => {
     const setup = find(bearish ? mirror(pattern()) : pattern())
     const price = (setup.zone.low + setup.zone.high) / 2
-    const high = bearish ? setup.zone.high + 1 : setup.cInvalidation + 1
-    const low = bearish ? setup.cInvalidation - 1 : setup.zone.low - 1
+    const high = bearish ? setup.stopReference + 1 : setup.cInvalidation + 1
+    const low = bearish ? setup.cInvalidation - 1 : setup.stopReference - 1
     const before = structuredClone(setup)
     expect(getHarmonicLiveContext(setup, price, { high, low: price, isClosed: false }))
       .toMatchObject({ inZone: false, invalidated: true })

@@ -24,10 +24,13 @@ with the frontend.
 | Tolerance | `l-17:111–117` | The lecture motivates its bands with ±10%; detection uses the literal values in its saved on-screen templates. |
 | Invalid B | `l-18:45–47` | A B pivot between the accepted family bands is not a valid pattern. |
 | A/C structure | `l-18:91–105` | Bullish A/C form lower highs; bearish A/C form higher lows. C must reach its accepted retracement band. |
-| Chronology | `l-18:111` | C follows the actual B extremum; do not ignore an intervening more extreme B to fit a pattern. |
+| Chronology | `l-18:111` | B is the deepest retracement between A and C; an earlier shallower pullback is not B. |
+| Scan trick | `l-18:91–99` | Bullish patterns need a lower high from A to C; bearish patterns need a higher low. A higher high or lower low means no harmonic. |
 | Conditional D | `l-18:135` | The analysis says what may happen if D is reached, not where price must go. |
 | C invalidation | `l-18:141–143` | A wick through C's outer boundary invalidates the pattern, in either direction. |
 | Early discovery | `l-18:147` | Prefer CD already beyond B: below B for bullish patterns, above B for bearish patterns. Earlier patterns remain early. |
+| Stops | `l-18:165–167` | Bat and Gartley stops go beyond X; Butterfly stops go beyond the established D range. |
+| Liquidity pocket | `l-16` | Conventional stops just past an obvious level are hunted; the creative trader adds there and stops out further away. The area between D and X is therefore not an invalidation. |
 | Price scale | `l-18:51`, `l-18:183` | Harmonics use linear price ratios, not logarithmic calculations. |
 | Timeframe | `l-18:197` | The trader may choose the timeframe; there is no required single interval. |
 
@@ -98,28 +101,40 @@ lecture rules:
 - A strict **3/3 wick pivot** must be more extreme than the three closed
   candles on each side. Its pivot time and its availability time differ:
   it is available only when the third right-hand candle closes. Equal
-  neighboring extremes do not qualify as strict pivots.
-- Build consecutive alternating pivots. When consecutive candidates are on
-  the same side, retain the more extreme one. Do not search arbitrary
-  combinations of nonadjacent pivots until ratios happen to fit.
-- Freeze the first accepted C for each XAB triple and consume that triple.
-  A later C retest cannot revive an expired, missed, completed, or invalidated
-  setup. A candle that is simultaneously a strict high and strict low pivot
-  is skipped because its intrabar high/low order is unknown.
-- X, A, B, and C must all be available before the setup can report a D touch.
-  A touch before or on C's confirmation candle is marked missed, not reused
-  as a new entry signal. D records the first subsequent observed contact;
-  it is not an assumed future pivot or an executed fill.
-- An unfilled pattern expires on the **60th closed candle after C**. D
-  touches stay recent for the latest **three closed candles**, including the
-  touch candle; the setup then becomes completed and leaves the active
-  results rather than remaining actionable indefinitely.
+  neighboring extremes do not qualify as strict pivots. A candle that is
+  simultaneously a strict high and strict low pivot is skipped because its
+  intrabar high/low order is unknown.
+- Legs are selected the way the lecture draws them, not as four consecutive
+  small swings. Each newly available pivot is tried as **C**. **A** is a
+  pivot on the same side that is the most extreme price of the whole X..C
+  window. **B** is the deepest wick between A and C, so an earlier shallower
+  pullback is never mistaken for B. **C** must be the most extreme price
+  after B. **X** is a pivot on the opposite side that is the most extreme
+  price between X and C. Several dominant X can validate the same A-B-C at
+  different ratio bands; the nearest X for each family is kept.
+- A later, more extreme C inside the accepted band for the same X, A, and
+  family **supersedes** the earlier drawing, mirroring how the lecturer
+  redraws a pattern. A rejected candidate is never revived.
+- D records the first observed closed-candle contact after C, including
+  contact during C's three-candle confirmation window; a pattern that is
+  already at D when it becomes visible is reported in the D zone, as the
+  lecturer trades it. A candidate that has already been stopped out or has
+  already reached its first target by confirmation is dropped. D is not an
+  assumed future pivot or an executed fill.
+- An unfilled pattern expires on the **60th closed candle after C**. Once D
+  is touched, the setup stays active while price keeps touching D. It is
+  **completed** when a closed candle reaches the first target reference and
+  becomes **expired** after **12 closed candles** without a D touch.
 - Candle wicks determine zone contact and structural violations. When a
   candle both reaches D and breaches a boundary, the violation takes
   precedence; OHLC data cannot establish which happened first.
-- A wick past D's far edge retires the scanner setup. This conservative
-  convention does not imply that the lecture's stop beyond D or X was
-  executed. Nonpositive or nonfinite projected D prices omit a candidate.
+- The stop boundary follows lecture 18: **X** for Gartley and Bat, the far
+  edge of the established D range for Butterfly. A wick beyond it invalidates
+  the setup. A wick past D's far edge but short of X is a D touch, not an
+  invalidation, for Gartley and Bat; lecture 16 treats that pocket as where
+  conventional stops are hunted. C's outer boundary only invalidates before D
+  is touched; a rally through it after a touch is the reversal, not a
+  failure. Nonpositive or nonfinite projected D prices omit a candidate.
 
 The stages distinguish structure from live proximity:
 
@@ -127,7 +142,7 @@ The stages distinguish structure from live proximity:
 | --- | --- |
 | Early setup (`forming`) | XABC is valid, but no CD candle has closed strictly beyond B toward D. This is the lecture's early catch. |
 | Approaching D (`approaching`) | A CD candle has closed strictly beyond B toward D, but no eligible closed candle has touched D. |
-| D zone reached (`zone`) | An eligible closed candle touched D within the latest three closed candles, without invalidating the setup. This is contact, not reversal confirmation. |
+| D zone reached (`zone`) | A closed candle has touched D and the setup has neither reached its first target, been stopped out, nor spent 12 closed candles outside D. This is contact, not reversal confirmation. |
 
 A forming market candle may update live distance to the D zone, indicate
 that price is currently in the zone, or flag a provisional boundary breach.
@@ -146,7 +161,8 @@ distant X boundary (`l-18:165–167`). No tick allowance, percentage, ATR buffer
 position sizing, or execution rule is provided. A displayed boundary therefore
 needs an independently chosen buffer before it could be used as an order.
 The application uses X as the reference for Gartley and Bat, and D's far
-edge as the reference for Butterfly.
+edge as the reference for Butterfly, and the same boundary decides when the
+scanner retires a setup.
 
 The lecture describes the take-profit anchors at `l-18:169–175`; the original
 L17 video supplies their exact saved ratios:

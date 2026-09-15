@@ -148,7 +148,8 @@ and charts use linear prices independently of the Fibs scale setting.
 
 Cards show XABC and the projected D zone. **Early setup** means the CD move
 has not closed beyond B; **Approaching D** means it has; **D zone reached**
-means a closed candle touched D within the latest three closed candles.
+means a closed candle touched D and price has not yet reached the first
+target, breached the stop boundary, or spent 12 candles outside D.
 Live proximity and provisional boundary breaches are labeled separately.
 A projected D is conditional: price may reverse **if it reaches the zone**;
 the pattern does not predict that it will reach D or confirm a reversal.
@@ -159,11 +160,14 @@ Open **Filters** to select pattern family, direction, and stage. Default
 density are shared with the other tabs, whose signal filters do not constrain
 harmonic results.
 
-The detector uses consecutive strict 3/3 wick pivots in the latest contiguous
-500 closed candles. C becomes observable after its third right-hand close;
-an earlier D touch is not reused as a fresh signal. Unfilled patterns expire
-60 candles after C, and closed D contacts remain recent for three candles.
-Boundary breaches retire the setup without implying any exchange execution.
+The detector uses strict 3/3 wick pivots in the latest contiguous 500 closed
+candles and selects legs the way the lectures draw them: A is the extreme of
+the window, B is the deepest retracement between A and C, C is the extreme
+after B, and X is the extreme before A. C becomes observable after its third
+right-hand close; a later higher C supersedes the earlier drawing. Unfilled
+patterns expire 60 candles after C. The stop boundary is X for Gartley and
+Bat and the far edge of D for Butterfly; a wick beyond it retires the setup
+without implying any exchange execution.
 
 Details show the D zone, C invalidation, stop boundary, measurements, and
 target references. Before contact, targets use the D-zone midpoint; after
