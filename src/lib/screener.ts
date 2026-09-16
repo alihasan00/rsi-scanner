@@ -8,8 +8,9 @@ import type { FibAnalysis } from './fibonacci'
 import { getFibLiveContext, isActiveFibSetup } from './fibonacci'
 import { matchesFibFilters } from './fibScreener'
 import type { FibRowFilters } from './fibScreener'
+import { getRsiTrendlineAnalysis } from './rsiTrendlineAnalysis'
 
-export type SignalFilter = 'all' | 'divergence' | 'confirmed' | 'fib' | 'sr'
+export type SignalFilter = 'all' | 'divergence' | 'trendline' | 'confirmed' | 'fib' | 'sr'
 export type DivergenceRecency = 1 | 3 | 5 | 'any'
 export const DEFAULT_DIVERGENCE_RECENCY: DivergenceRecency = 3
 export type ScreenerSort = 'watchlist' | 'signals' | 'change' | 'rsi-low' | 'rsi-high' | 'symbol'
@@ -66,6 +67,15 @@ export function filterScreenerRows(rows: readonly ScreenerRow[], filters: Screen
     const signals = filterDivergenceSetups(analysis.divergences, recency)
     return filters.signal === 'confirmed' ? signals.filter((signal) => signal.state === 'confirmed') : signals
   }
+  const trendlines = new Map<ScreenerRow, ReturnType<typeof getRsiTrendlineAnalysis>['displayed']>()
+  const selectedTrendlines = (row: ScreenerRow) => {
+    let displayed = trendlines.get(row)
+    if (!displayed) {
+      displayed = getRsiTrendlineAnalysis(row.symbol, row.snapshot.bars).displayed
+      trendlines.set(row, displayed)
+    }
+    return displayed
+  }
   const filtered = rows.filter((row) => {
     const { symbol, snapshot, analysis } = row
     if (query && !symbol.includes(query)) return false
@@ -80,9 +90,14 @@ export function filterScreenerRows(rows: readonly ScreenerRow[], filters: Screen
     if (filters.signal === 'all' || filters.signal === 'sr') return true
     if (!snapshot.bars.length) return false
     if (filters.signal === 'fib') return matchesFibFilters(row.fib, snapshot.price, filters)
+    if (filters.signal === 'trendline') return selectedTrendlines(row).length > 0
     return selectedDivergences(analysis).length > 0
   })
   const score = (row: ScreenerRow) => {
+    if (filters.signal === 'trendline') {
+      return Math.max(0, ...selectedTrendlines(row).map((line) =>
+        line.state === 'broken' ? 6 : line.state === 'approaching' ? 4 : 2))
+    }
     if (filters.signal === 'fib') {
       const setup = row.fib?.setup
       if (!setup || !isActiveFibSetup(setup)) return 0

@@ -1,0 +1,36 @@
+.rsi-trendlines__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-height: 34px;
+  margin-top: 10px;
+  color: var(--color-ink-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.rsi-trendlines__status.is-compact {
+  margin-top: 0;
+  padding: 7px 12px 9px;
+  min-height: 36px;
+  background: #1a1a1a;
+  font-size: 10px;
+}
+
+.rsi-trendlines__badge {
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.rsi-trendlines__badge.is-resistance { color: #fbbf24; }
+.rsi-trendlines__badge.is-support { color: #7dd3fc; }
+.rsi-trendlines__warning { color: #f28b8b; font-weight: 600; }
+.rsi-trendlines__empty { color: var(--color-ink-muted); }
+.rsi-trendlines__guide { color: var(--color-ink-secondary); font-size: 12px; line-height: 1.7; }
+.rsi-trendlines__guide p { margin: 8px 0; }
+.rsi-trendlines__disclosure { margin-top: 8px; }
+.rsi-trendlines__disclosure summary { cursor: pointer; color: var(--color-ink-muted); font-size: 12px; }
+.rsi-trendlines__disclosure summary:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 3px; }

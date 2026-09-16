@@ -4,7 +4,7 @@ import { CloseOutlined, SlidersOutlined } from '@ant-design/icons'
 import type { ScreenerFilterPreferences } from '../lib/screenerPreferences'
 import { RSI_OVERBOUGHT, RSI_OVERSOLD } from '../lib/rsiState'
 import {
-  DIVERGENCE_RECENCY_OPTIONS, FIB_STAGE_OPTIONS, RSI_FILTER_OPTIONS,
+  DIVERGENCE_RECENCY_OPTIONS, FIB_STAGE_OPTIONS, RSI_FILTER_OPTIONS, RSI_SIGNAL_OPTIONS,
   HARMONIC_PATTERN_OPTIONS, HARMONIC_DIRECTION_OPTIONS, HARMONIC_STAGE_OPTIONS,
 } from '../lib/screenerFilterOptions'
 import './ScreenerFiltersModal.css'
@@ -57,12 +57,14 @@ export function ScreenerFiltersModal({ initialFilters, onApply, onClear, onClose
     >
       <p className="screener-filters__intro">Choose the pairs and setups you want to see.</p>
       <div className="screener-filters__fields">
-        {(draft.signal === 'all' || draft.signal === 'divergence') && <fieldset className="screener-filters__group">
+        {(draft.signal === 'all' || draft.signal === 'divergence' || draft.signal === 'trendline') && <fieldset className="screener-filters__group">
           <legend>RSI signals</legend>
           <div className="screener-filters__options">
-            <Button aria-pressed={draft.signal === 'all'} onClick={() => update({ signal: 'all' })}>All RSI charts</Button>
-            <Button aria-pressed={draft.signal === 'divergence'} onClick={() => update({ signal: 'divergence' })}>RSI divergences</Button>
+            {RSI_SIGNAL_OPTIONS.map(({ value, label }) => (
+              <Button key={value} aria-pressed={draft.signal === value} onClick={() => update({ signal: value })}>{label}</Button>
+            ))}
           </div>
+          {draft.signal === 'trendline' && <p className="screener-filters__help">Shows formed lines, approaching breaks, and recent closed-candle breaks. Trendlines replace divergence drawings in this view. A break adds confluence; it is not an entry signal.</p>}
           {draft.signal === 'divergence' && (
             <fieldset className="screener-filters__group screener-filters__recency">
               <legend>Divergence age</legend>

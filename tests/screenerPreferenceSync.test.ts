@@ -102,6 +102,48 @@ afterEach(() => {
 })
 
 describe('screener store persistence', () => {
+  test('the trendline choice survives every tab and reload, while RSI reset returns to all', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    store.getState().updateScreenerFilters({ signal: 'trendline', divergenceRecency: 5, search: 'BTC', rsiState: 'neutral', sort: 'signals' })
+    for (const tab of ['fib', 'sr', 'harmonic'] as const) {
+      store.getState().setScreenerTab(tab)
+      expect(store.getState().lastRsiSignal).toBe('trendline')
+      const restored = createScannerStore(storage)
+      expect(restored.getState().lastRsiSignal).toBe('trendline')
+      restored.getState().setScreenerTab('rsi')
+      expect(restored.getState().screenerFilters.signal).toBe('trendline')
+      expect(restored.getState().screenerFilters.divergenceRecency).toBe(5)
+    }
+    store.getState().setScreenerTab('rsi')
+    store.getState().resetScreenerFilters()
+    expect(store.getState().screenerFilters).toEqual(DEFAULT_FILTERS)
+    expect(store.getState().lastRsiSignal).toBe('all')
+    store.getState().setScreenerTab('fib')
+    store.getState().setScreenerTab('rsi')
+    expect(store.getState().screenerFilters.signal).toBe('all')
+  })
+
+  test('shared trendline preferences override storage and synchronize navigation and reset', () => {
+    const { storage } = memoryStorage({ screenerFilters: { signal: 'divergence' }, lastRsiSignal: 'divergence' })
+    const store = createScannerStore(storage)
+    const browser = fakeBrowser('/screener?indicator=trendline&timeframe=4h&candles=1&rsi=neutral&sort=signals')
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+    expect(store.getState().screenerFilters).toEqual({ ...DEFAULT_FILTERS, signal: 'trendline', divergenceRecency: 1, rsiState: 'neutral', sort: 'signals' })
+    expect(store.getState().lastRsiSignal).toBe('trendline')
+    expect(preferences(createScannerStore(storage))).toEqual(preferences(store))
+    store.getState().setScreenerTab('fib')
+    store.getState().setScreenerTab('rsi')
+    expect(new URLSearchParams(browser.location.search).get('indicator')).toBe('trendline')
+    browser.navigate('/screener?indicator=divergence&candles=5')
+    expect(store.getState().lastRsiSignal).toBe('divergence')
+    browser.navigate('/screener?indicator=trendline')
+    expect(store.getState().lastRsiSignal).toBe('trendline')
+    store.getState().resetScreenerFilters()
+    expect(store.getState().screenerFilters).toEqual(DEFAULT_FILTERS)
+    expect(new URLSearchParams(browser.location.search).has('indicator')).toBe(false)
+  })
+
   test('shared harmonic preferences override storage before rendering and restore on a bare URL', () => {
     const { storage } = memoryStorage()
     const store = createScannerStore(storage)
@@ -319,7 +361,7 @@ describe('screener store persistence', () => {
   )
 
   test('an active saved RSI signal takes precedence over stale tab memory', () => {
-    for (const signal of ['all', 'divergence'] as const) {
+    for (const signal of ['all', 'divergence', 'trendline'] as const) {
       const store = createScannerStore(memoryStorage({
         screenerFilters: { signal }, lastRsiSignal: signal === 'all' ? 'divergence' : 'all',
       }).storage)

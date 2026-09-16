@@ -3,6 +3,7 @@ import { Empty, Modal, Segmented, Tag } from 'antd'
 import { useShallow } from 'zustand/react/shallow'
 import { useSymbolData } from '../hooks/useSymbolData'
 import { useDivergences } from '../hooks/useDivergences'
+import { useRsiTrendlines } from '../hooks/useRsiTrendlines'
 import { useElementSize } from '../hooks/useElementSize'
 import { drawDetailRsiChart } from '../lib/drawRsiChart'
 import { isLiveDivergence } from '../lib/divergenceLifecycle'
@@ -15,6 +16,7 @@ import { FibChart } from './FibChart'
 import { FibDetails } from './FibDetails'
 import { LiquidityDetails } from './LiquidityDetails'
 import { HarmonicDetails } from './HarmonicDetails'
+import { RsiTrendlineGuide, RsiTrendlineStatus } from './RsiTrendlineStatus'
 import './ChartModal.css'
 
 export function ChartModal() {
@@ -37,6 +39,7 @@ export function ChartModal() {
   const open = symbol !== null
   const liquidityTab = useScannerStore((state) => state.screenerFilters.signal === 'sr')
   const harmonicTab = useScannerStore((state) => state.screenerFilters.signal === 'harmonic')
+  const showTrendlines = useScannerStore((state) => state.screenerFilters.signal === 'trendline')
   const [view, setView] = useState<'rsi' | 'fib' | 'sr' | 'harmonic'>(() => {
     const signal = useScannerStore.getState().screenerFilters.signal
     return signal === 'sr' || signal === 'fib' || signal === 'harmonic' ? signal : 'rsi'
@@ -44,8 +47,9 @@ export function ChartModal() {
   const [fibGrid, setFibGrid] = useState(false)
   const fibSettings = useScannerStore((state) => state.fibSettings)
   const { price, series, bars } = useSymbolData(symbol ?? '', open)
+  const trendlineAnalysis = useRsiTrendlines(symbol ?? '', bars, open && showTrendlines && view === 'rsi')
   const fib = useMemo(() => getFibAnalysis(symbol ?? '', bars, fibSettings), [symbol, bars, fibSettings])
-  const divergences = useDivergences(bars, open, {
+  const divergences = useDivergences(bars, open && !showTrendlines, {
     includeHidden: showHiddenDivergences,
     requireBodyAgreement,
     requireSameRsiCycle,
@@ -69,12 +73,13 @@ export function ChartModal() {
     if (canvas && width > 0 && height > 0) {
       drawDetailRsiChart(
         canvas, series, { rsiColor, smaColor, midlineColor, lineWidth },
-        { bars, signals: liveDivergences, showPricePanel: true, heikinAshiBars },
+        { bars, signals: liveDivergences, showPricePanel: true, heikinAshiBars,
+          rsiMode: showTrendlines ? 'trendlines' : 'divergence', trendlines: trendlineAnalysis.displayed },
       )
     }
-  }, [series, bars, liveDivergences, heikinAshiBars, rsiColor, smaColor, midlineColor, lineWidth, width, height, view])
+  }, [series, bars, liveDivergences, heikinAshiBars, showTrendlines, trendlineAnalysis, rsiColor, smaColor, midlineColor, lineWidth, width, height, view])
 
-  const chartLabel = `${symbol}, ${timeframe}. Price, Heikin-Ashi candles, and RSI 14 on a shared UTC timeline. Heikin-Ashi uses averaged prices.${isLive ? ' The final Heikin-Ashi candle is hollow and still forming; current price and RSI are provisional.' : ''}${rsiState && currentRsi !== undefined ? ` RSI ${currentRsi.toFixed(2)}, ${RSI_STATE_LABELS[rsiState].toLowerCase()}.` : ' RSI unavailable.'} Overbought at ${RSI_OVERBOUGHT} or above; oversold at ${RSI_OVERSOLD} or below.`
+  const chartLabel = `${symbol}, ${timeframe}. Price, Heikin-Ashi candles, and RSI 14 on a shared UTC timeline. ${showTrendlines ? 'RSI trendline overlays.' : 'RSI divergence overlays.'} Heikin-Ashi uses averaged prices.${isLive ? ' The final Heikin-Ashi candle is hollow and still forming; current price and RSI are provisional.' : ''}${rsiState && currentRsi !== undefined ? ` RSI ${currentRsi.toFixed(2)}, ${RSI_STATE_LABELS[rsiState].toLowerCase()}.` : ' RSI unavailable.'} Overbought at ${RSI_OVERBOUGHT} or above; oversold at ${RSI_OVERSOLD} or below.`
 
   return (
     <Modal
@@ -104,6 +109,13 @@ export function ChartModal() {
           </div>
         )}
       </div>}
+      {view === 'rsi' && showTrendlines && <>
+        <RsiTrendlineStatus analysis={trendlineAnalysis} />
+        <details className="rsi-trendlines__disclosure">
+          <summary>How to read RSI trendlines</summary>
+          <RsiTrendlineGuide />
+        </details>
+      </>}
     </Modal>
   )
 }

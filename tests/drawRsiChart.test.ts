@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { drawDetailRsiChart, drawMiniRsiChart } from '../src/lib/drawRsiChart'
 import { drawScreenerChart } from '../src/lib/drawScreenerChart'
+import { drawRsiTrendlines, RSI_TRENDLINE_COLORS } from '../src/lib/drawRsiTrendlines'
+import type { RsiTrendline } from '../src/lib/rsiTrendlines'
+import type { DivergenceSetup } from '../src/lib/divergenceLifecycle'
 import { analyzeTugOfWar, previewTugOfWar } from '../src/lib/tugOfWar'
 import type { RsiBar } from '../src/types'
 
@@ -63,6 +66,29 @@ function candle(index: number, isClosed = true): RsiBar {
 
 const settings = { rsiColor: '#8B46F2', smaColor: '#D97706', midlineColor: '#888888', lineWidth: 2 }
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+
+function trendline(overrides: Partial<RsiTrendline> = {}): RsiTrendline {
+  return {
+    id: 'resistance', kind: 'resistance',
+    start: { time: 0, rsi: 80 }, end: { time: 120_000, rsi: 78 },
+    formedAt: 300_000 - 1, state: 'formed',
+    brokenAt: null, breakTime: null, breakRsi: null, breakGrade: null,
+    touches: 2, barsSinceBreak: null, warningActive: false,
+    resolvedAt: null, reclaimedAt: null, breakId: null, slopePerBar: -1,
+    ...overrides,
+  }
+}
+
+function divergence(bars: RsiBar[]): DivergenceSetup {
+  return {
+    id: 'divergence', kind: 'regular-bullish', state: 'confirmed',
+    start: { time: bars[0].openTime, rsi: bars[0].rsi, price: bars[0].low },
+    end: { time: bars[2].openTime, rsi: bars[2].rsi, price: bars[2].low },
+    detectedAt: bars[2].closeTime, confirmedAt: bars[3].closeTime,
+    resolvedAt: null, confirmation: 'ordinary', barsElapsed: 2, expiryBars: 14,
+    invalidationAnchor: 'second', invalidationRsi: bars[2].rsi, resolutionReason: null,
+  }
+}
 
 beforeEach(() => {
   Object.defineProperty(globalThis, 'window', { configurable: true, value: { devicePixelRatio: 2 } })
@@ -228,5 +254,115 @@ describe('detail chart Heikin-Ashi panel', () => {
     expect(calls.some((call) => call.args[0] === 'No Heikin-Ashi candles')).toBe(true)
     expect(calls.some((call) => call.args[0] === 'LIVE')).toBe(false)
     expect(drawDetailRsiChart(canvas, [], settings, { bars: [], signals: [], heikinAshiBars: [] })).toBeNull()
+  })
+})
+
+describe('exclusive RSI chart modes', () => {
+  test('detail mode switches overlays without adding a pane or leaving divergences on price', () => {
+    const bars = Array.from({ length: 16 }, (_, index) => candle(index, index < 15))
+    const { canvas, calls } = recordingCanvas()
+    const context = { bars, signals: [divergence(bars)], heikinAshiBars: analyzeTugOfWar(bars).heikinAshi, trendlines: [trendline()] }
+    const divergenceLayout = drawDetailRsiChart(canvas, bars.map((bar) => bar.rsi), settings, context)!
+    expect(calls.filter((call) => call.method === 'arc' && call.strokeStyle === '#34D399')).toHaveLength(4)
+    expect(calls.some((call) => call.strokeStyle === RSI_TRENDLINE_COLORS.resistance)).toBe(false)
+    expect(calls.some((call) => call.method === 'stroke' && call.strokeStyle === settings.smaColor)).toBe(true)
+
+    calls.length = 0
+    const trendlineLayout = drawDetailRsiChart(canvas, bars.map((bar) => bar.rsi), settings, { ...context, rsiMode: 'trendlines' })!
+    expect(trendlineLayout).toEqual(divergenceLayout)
+    expect(calls.filter((call) => call.method === 'fillRect' && String(call.fillStyle).endsWith(', 0.07)'))).toHaveLength(2)
+    expect(calls.some((call) => call.args[0] === 'RSI · Trendlines')).toBe(true)
+    expect(calls.some((call) => call.method === 'arc' && ['#34D399', '#EF4444'].includes(String(call.strokeStyle)))).toBe(false)
+    const trendlineAnchors = calls.filter((call) => call.method === 'arc' && call.strokeStyle === RSI_TRENDLINE_COLORS.resistance)
+    expect(trendlineAnchors).toHaveLength(2)
+    expect(trendlineAnchors.every((call) => Number(call.args[1]) >= trendlineLayout.chartTop)).toBe(true)
+    expect(calls.some((call) => call.method === 'stroke' && call.strokeStyle === settings.smaColor)).toBe(false)
+    const rsiStrokes = calls.filter((call) => call.method === 'stroke' && call.strokeStyle === settings.rsiColor)
+    expect(rsiStrokes.at(-1)?.lineDash).toEqual([2, 2])
+  })
+
+  test('card mode replaces both divergence overlays and preserves a single live RSI pane', () => {
+    const bars = Array.from({ length: 8 }, (_, index) => candle(index, index < 7))
+    const { canvas, calls } = recordingCanvas(340, 240)
+    const data = { bars, divergences: [divergence(bars)], trendlines: [trendline()], timeframe: '1m' as const, settings }
+    drawScreenerChart(canvas, data)
+    expect(calls.filter((call) => call.method === 'arc' && call.args[2] === 2.1)).toHaveLength(4)
+    expect(calls.some((call) => call.strokeStyle === RSI_TRENDLINE_COLORS.resistance)).toBe(false)
+    const originalBands = calls.filter((call) => call.method === 'fillRect' && String(call.fillStyle).endsWith(', 0.07)')).map((call) => call.args)
+
+    calls.length = 0
+    drawScreenerChart(canvas, { ...data, rsiMode: 'trendlines' })
+    expect(calls.filter((call) => call.method === 'fillRect' && String(call.fillStyle).endsWith(', 0.07)')).map((call) => call.args)).toEqual(originalBands)
+    expect(calls.filter((call) => call.method === 'arc' && call.args[2] === 2.1)).toHaveLength(0)
+    expect(calls.filter((call) => call.method === 'arc' && call.strokeStyle === RSI_TRENDLINE_COLORS.resistance)).toHaveLength(2)
+    const rsiStrokes = calls.filter((call) => call.method === 'stroke' && call.strokeStyle === settings.rsiColor)
+    expect(rsiStrokes.at(-1)?.lineDash).toEqual([2, 2])
+  })
+
+  test('an empty trendline collection says no qualifying line in the existing RSI pane', () => {
+    const bars = [candle(0), candle(1)]
+    const { canvas, calls } = recordingCanvas(340, 240)
+    drawScreenerChart(canvas, { bars, divergences: [], trendlines: [], rsiMode: 'trendlines', timeframe: '1m' })
+    expect(calls.filter((call) => call.args[0] === 'No qualifying line')).toHaveLength(1)
+    calls.length = 0
+    drawDetailRsiChart(canvas, bars.map((bar) => bar.rsi), settings, { bars, signals: [], trendlines: [], rsiMode: 'trendlines' })
+    expect(calls.filter((call) => call.args[0] === 'No qualifying line')).toHaveLength(1)
+  })
+})
+
+describe('RSI trendline ray projection', () => {
+  test('draws an off-screen ray at its projected values without false edge anchors', () => {
+    const { canvas, calls } = recordingCanvas()
+    const drawn = drawRsiTrendlines(canvas.getContext('2d')!, [trendline()], {
+      region: { left: 20, right: 220, top: 100, bottom: 300 },
+      visibleTimes: [600_000, 660_000, 720_000],
+      toX: (time) => 20 + (time - 600_000) / 600,
+      toY: (rsi) => 300 - rsi * 2,
+    })
+    expect(drawn).toBe(1)
+    expect(calls.filter((call) => call.method === 'arc')).toHaveLength(0)
+    expect(calls.find((call) => call.method === 'moveTo')?.args).toEqual([20, 160])
+    expect(calls.filter((call) => call.method === 'lineTo').at(-1)?.args).toEqual([220, 164])
+    expect(calls.filter((call) => call.method === 'stroke').map((call) => call.lineDash)).toEqual([[5, 3]])
+  })
+
+  test('detail projection uses visible candle timestamps across gaps and marks the observed break RSI', () => {
+    const bars = Array.from({ length: 14 }, (_, index) => candle(index)).filter((_, index) => index !== 11)
+    const visibleBars = bars.slice(-3)
+    const { canvas, calls } = recordingCanvas()
+    const line = trendline({
+      state: 'broken', breakTime: candle(12).openTime, brokenAt: candle(12).closeTime,
+      breakRsi: 74, breakGrade: 'same-side', barsSinceBreak: 1,
+    })
+    const layout = drawDetailRsiChart(canvas, visibleBars.map((bar) => bar.rsi), settings, {
+      bars, signals: [], trendlines: [line], rsiMode: 'trendlines',
+    })!
+    const toY = (rsi: number) => layout.chartBottom - rsi / 100 * (layout.chartBottom - layout.chartTop)
+    const geometry = calls.filter((call) => call.strokeStyle === RSI_TRENDLINE_COLORS.resistance)
+    const first = geometry.find((call) => call.method === 'moveTo')!
+    expect(first.args[0]).toBe(layout.chartLeft)
+    expect(Number(first.args[1])).toBeCloseTo(toY(70))
+    const last = geometry.filter((call) => call.method === 'lineTo').at(-1)!
+    expect(Number(last.args[0])).toBeCloseTo((layout.chartLeft + layout.chartRight) / 2)
+    expect(Number(last.args[1])).toBeCloseTo(toY(68))
+    const markers = geometry.filter((call) => call.method === 'arc')
+    expect(markers).toHaveLength(1)
+    expect(Number(markers[0].args[0])).toBeCloseTo((layout.chartLeft + layout.chartRight) / 2)
+    expect(Number(markers[0].args[1])).toBeCloseTo(toY(74))
+    expect(markers[0].args[2]).toBe(4)
+  })
+
+  test('clips a ray at the fixed RSI boundary instead of drawing into adjoining panes', () => {
+    const { canvas, calls } = recordingCanvas()
+    const line = trendline({ start: { time: 0, rsi: 10 }, end: { time: 120_000, rsi: 12 }, kind: 'support' })
+    drawRsiTrendlines(canvas.getContext('2d')!, [line], {
+      region: { left: 20, right: 220, top: 100, bottom: 300 },
+      visibleTimes: [4_800_000, 6_000_000],
+      toX: (time) => 20 + (time - 4_800_000) / 6_000,
+      toY: (rsi) => 300 - rsi * 2,
+    })
+    expect(calls.find((call) => call.method === 'moveTo')?.args).toEqual([20, 120])
+    expect(calls.find((call) => call.method === 'lineTo')?.args).toEqual([120, 100])
+    expect(calls.filter((call) => call.method === 'arc')).toHaveLength(0)
   })
 })

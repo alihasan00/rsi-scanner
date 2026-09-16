@@ -13,6 +13,7 @@ import { ScreenerCard } from './ScreenerCard'
 import { DIVERGENCE_RECENCY_OPTIONS, FIB_STAGE_OPTIONS, RSI_FILTER_OPTIONS } from '../lib/screenerFilterOptions'
 import { ScreenerFiltersModal } from './ScreenerFiltersModal'
 import { isActiveFibSetup } from '../lib/fibonacci'
+import { getRsiTrendlineAnalysis } from '../lib/rsiTrendlineAnalysis'
 import { LiquidityScreener } from './LiquidityScreener'
 import { HarmonicScreener } from './HarmonicScreener'
 import { PairCollectionPicker } from './PairCollectionPicker'
@@ -77,9 +78,14 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
   const divergenceCount = loadedRows.filter((row) => filterDivergenceSetups(
     row.analysis.divergences, usesDivergenceRecency ? divergenceRecency : 'any',
   ).length > 0).length
+  const trendlineCount = signal === 'trendline'
+    ? loadedRows.filter((row) => getRsiTrendlineAnalysis(row.symbol, row.snapshot.bars).displayed.length > 0).length
+    : 0
+  const rsiSignalCount = signal === 'trendline' ? trendlineCount : divergenceCount
+  const rsiSignalLabel = signal === 'trendline' ? 'trendlines' : 'divergences'
   const failedCount = rows.filter((row) => row.feed.state === 'error').length
   const delayed = loadedRows.filter((row) => row.feed.updatedAt !== null && now - row.feed.updatedAt > DELAYED_AFTER_MS).length
-  const activeFilterCount = Number(signal === 'divergence') + Number(rsiState !== 'all')
+  const activeFilterCount = Number(signal === 'divergence' || signal === 'trendline') + Number(rsiState !== 'all')
     + (signal === 'fib' ? Number(fibDirection !== 'any') + Number(fibStage !== 'any') + Number(fibConfluence !== 'any') : 0)
   const hasFilters = !!search || activeFilterCount > 0 || starredOnly || sort !== 'watchlist'
   const rsiFilterLabel = RSI_FILTER_OPTIONS.find((option) => option.value === rsiState)!.label
@@ -100,11 +106,11 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
             activeKey={activeTab}
             onChange={(tab) => { if (tab === 'rsi' || tab === 'fib' || tab === 'sr' || tab === 'harmonic') setScreenerTab(tab) }}
             items={[{ key: 'rsi', label: 'RSI' }, { key: 'fib', label: 'Fibs' }, { key: 'sr', label: 'Support & Resistance' }, { key: 'harmonic', label: 'Harmonic Patterns' }]}
-            tabBarExtraContent={<span className="screener__view-summary">{loadedRows.length} / {rows.length} pairs{(activeTab === 'rsi' || activeTab === 'fib') && <> <span aria-hidden="true">·</span> <strong>{activeTab === 'fib' ? fibCount : divergenceCount}</strong> {activeTab === 'fib' ? 'setups' : 'divergences'}</>}</span>}
+            tabBarExtraContent={<span className="screener__view-summary">{loadedRows.length} / {rows.length} pairs{(activeTab === 'rsi' || activeTab === 'fib') && <> <span aria-hidden="true">·</span> <strong>{activeTab === 'fib' ? fibCount : rsiSignalCount}</strong> {activeTab === 'fib' ? 'setups' : rsiSignalLabel}</>}</span>}
           />
         </nav>
         {activeTab === 'harmonic' ? <HarmonicScreener universe={universe} rows={rows} now={now} /> : activeTab === 'sr' ? <LiquidityScreener universe={universe} rows={rows} now={now} /> : <>
-        <p className="screener__view-description">{activeTab === 'fib' ? 'Follow the trend. Open a card for Fibonacci levels and the full trade plan.' : 'Track price and RSI. Open a card to explore the chart.'}</p>
+        <p className="screener__view-description">{activeTab === 'fib' ? 'Follow the trend. Open a card for Fibonacci levels and the full trade plan.' : signal === 'trendline' ? 'Track RSI trendlines and closed-candle breaks. Open a card to inspect the anchors.' : 'Track price and RSI. Open a card to explore the chart.'}</p>
 
         <Card className="screener__controls" size="small">
           <div className="screener__toolbar">
@@ -148,7 +154,7 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
         </div>
         {hasFilters && (
           <div className="screener__active-filters">
-            <span>Showing {visibleRows.length} of {rows.length} pairs{usesDivergenceRecency ? ` · RSI divergences · ${recencyLabel.toLowerCase()}` : ''}{signal === 'fib' ? ` · Fib system${fibDirection !== 'any' ? ` · ${fibDirection}` : ''}${fibStage !== 'any' ? ` · ${fibStageLabel.toLowerCase()}` : ''}${fibConfluence === 'aligned' ? ' · SMA 200 aligned' : ''}` : ''}{rsiState !== 'all' ? ` · ${rsiFilterLabel}` : ''}</span>
+            <span>Showing {visibleRows.length} of {rows.length} pairs{usesDivergenceRecency ? ` · RSI divergences · ${recencyLabel.toLowerCase()}` : signal === 'trendline' ? ' · RSI trendlines' : ''}{signal === 'fib' ? ` · Fib system${fibDirection !== 'any' ? ` · ${fibDirection}` : ''}${fibStage !== 'any' ? ` · ${fibStageLabel.toLowerCase()}` : ''}${fibConfluence === 'aligned' ? ' · SMA 200 aligned' : ''}` : ''}{rsiState !== 'all' ? ` · ${rsiFilterLabel}` : ''}</span>
             <Button type="link" size="small" onClick={resetScreenerFilters}>Reset filters</Button>
           </div>
         )}
@@ -162,12 +168,12 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
           <Card className="screener__empty"><p role="status">Loading market charts…</p></Card>
         ) : visibleRows.length ? (
           <div className={`screener__grid is-${cardDensity}`}>
-            {visibleRows.map((row) => <ScreenerCard key={`${market}:${timeframe}:${row.symbol}`} row={row} timeframe={timeframe} starred={starredSymbols.includes(row.symbol)} stale={row.feed.updatedAt !== null && now - row.feed.updatedAt > DELAYED_AFTER_MS} showFib={signal === 'fib'} matchingDivergences={usesDivergenceRecency ? filterDivergenceSetups(row.analysis.divergences, divergenceRecency) : undefined} />)}
+            {visibleRows.map((row) => <ScreenerCard key={`${market}:${timeframe}:${row.symbol}`} row={row} timeframe={timeframe} starred={starredSymbols.includes(row.symbol)} stale={row.feed.updatedAt !== null && now - row.feed.updatedAt > DELAYED_AFTER_MS} showFib={signal === 'fib'} showTrendlines={signal === 'trendline'} matchingDivergences={usesDivergenceRecency ? filterDivergenceSetups(row.analysis.divergences, divergenceRecency) : undefined} />)}
           </div>
         ) : (
           <Card className="screener__empty">
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={
-              <><h2>{starredOnly && starredSymbols.length === 0 ? 'Keep your favorites close' : 'No pairs match these filters'}</h2><p>{starredOnly && starredSymbols.length === 0 ? 'Star a card to build your own focused watchlist.' : rsiState !== 'all' ? 'Try another RSI state or broaden your other filters.' : signal === 'fib' ? 'Wait for a fresh structure break and mature retracement, or broaden the Fib stage, direction, or trend filter.' : usesDivergenceRecency && divergenceRecency !== 'any' ? 'Try a wider candle window or Any age to find older active divergences.' : 'Try another pair or indicator.'}</p></>
+              <><h2>{starredOnly && starredSymbols.length === 0 ? 'Keep your favorites close' : 'No pairs match these filters'}</h2><p>{starredOnly && starredSymbols.length === 0 ? 'Star a card to build your own focused watchlist.' : rsiState !== 'all' ? 'Try another RSI state or broaden your other filters.' : signal === 'fib' ? 'Wait for a fresh structure break and mature retracement, or broaden the Fib stage, direction, or trend filter.' : signal === 'trendline' ? 'Wait for mature anchors to form a valid line, or try another timeframe.' : usesDivergenceRecency && divergenceRecency !== 'any' ? 'Try a wider candle window or Any age to find older active divergences.' : 'Try another pair or indicator.'}</p></>
             }><Button onClick={() => setFiltersOpen(true)}>Edit filters</Button><Button type="primary" onClick={resetScreenerFilters}>{activeTab === 'fib' ? 'Reset filters' : 'Show all pairs'}</Button></Empty>
           </Card>
         )}

@@ -1,11 +1,15 @@
 import type { ChartSettings, RsiBar, Timeframe } from '../types'
 import type { DivergenceSetup } from './divergenceLifecycle'
 import { drawRsiZones, syncCanvasResolution } from './drawRsiChart'
+import { drawRsiTrendlines } from './drawRsiTrendlines'
 import { getRsiState, RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_STATE_LABELS } from './rsiState'
+import type { RsiTrendline } from './rsiTrendlines'
 
 interface ScreenerChartData {
   bars: readonly RsiBar[]
   divergences: readonly DivergenceSetup[]
+  rsiMode?: 'divergence' | 'trendlines'
+  trendlines?: readonly RsiTrendline[]
   timeframe: Timeframe
   settings?: Pick<ChartSettings, 'rsiColor' | 'lineWidth' | 'midlineColor'>
 }
@@ -99,6 +103,7 @@ export function drawScreenerChart(canvas: HTMLCanvasElement, data: ScreenerChart
   const rsiColor = data.settings?.rsiColor ?? RSI_COLOR
   const rsiLineWidth = data.settings?.lineWidth ?? 1.35
   const midlineColor = data.settings?.midlineColor ?? '#888888'
+  const trendlineMode = data.rsiMode === 'trendlines'
   ctx.clearRect(0, 0, width, height)
   if (data.bars.length === 0 || width < 80 || height < 100) return
   ctx.fillStyle = BACKGROUND
@@ -214,7 +219,9 @@ export function drawScreenerChart(canvas: HTMLCanvasElement, data: ScreenerChart
     }
   }
   ctx.restore()
-  drawDivergences(ctx, bars, data.divergences, { left, right, top: priceTop, bottom: priceBottom }, toX, priceToY, 'price')
+  if (!trendlineMode) {
+    drawDivergences(ctx, bars, data.divergences, { left, right, top: priceTop, bottom: priceBottom }, toX, priceToY, 'price')
+  }
 
   ctx.strokeStyle = GRID_COLOR
   ctx.beginPath()
@@ -224,8 +231,9 @@ export function drawScreenerChart(canvas: HTMLCanvasElement, data: ScreenerChart
 
   ctx.fillStyle = rsiColor
   ctx.font = '500 9px Inter, system-ui, sans-serif'
-  ctx.fillText('RSI 14', left, rsiTop - 4)
-  const titleWidth = ctx.measureText('RSI 14').width
+  const title = trendlineMode ? 'RSI · Trendlines' : 'RSI 14'
+  ctx.fillText(title, left, rsiTop - 4)
+  const titleWidth = ctx.measureText(title).width
   const rsiState = getRsiState(latest.rsi)!
   ctx.fillStyle = rsiState === 'overbought' ? '#F28B8B' : rsiState === 'oversold' ? '#73C9AA' : AXIS_COLOR
   ctx.textAlign = 'right'
@@ -273,7 +281,23 @@ export function drawScreenerChart(canvas: HTMLCanvasElement, data: ScreenerChart
   ctx.arc(toX(latest.openTime), rsiToY(latest.rsi), 1.8, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
-  drawDivergences(ctx, bars, data.divergences, { left, right, top: rsiTop, bottom: rsiBottom }, toX, rsiToY, 'rsi')
+  if (trendlineMode) {
+    const drawn = drawRsiTrendlines(ctx, data.trendlines ?? [], {
+      region: { left, right, top: rsiTop, bottom: rsiBottom },
+      visibleTimes: bars.map((bar) => bar.openTime),
+      toX,
+      toY: rsiToY,
+    })
+    if (drawn === 0) {
+      ctx.font = '9px Inter, system-ui, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillStyle = '#A3A3A3'
+      ctx.fillText('No qualifying line', (left + right) / 2, rsiTop + 10)
+      ctx.textAlign = 'left'
+    }
+  } else {
+    drawDivergences(ctx, bars, data.divergences, { left, right, top: rsiTop, bottom: rsiBottom }, toX, rsiToY, 'rsi')
+  }
 
   const daily = data.timeframe.endsWith('d') || data.timeframe.endsWith('w')
   ctx.font = '9px Inter, system-ui, sans-serif'

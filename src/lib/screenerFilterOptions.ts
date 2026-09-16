@@ -2,7 +2,13 @@ import type { DivergenceRecency } from './screener'
 import { RSI_OVERBOUGHT, RSI_OVERSOLD } from './rsiState'
 import type { RsiStateFilter } from './rsiState'
 import type { FibStage } from './fibScreener'
-import type { ScreenerFilterPreferences } from './screenerPreferences'
+import type { RsiSignalFilter, ScreenerFilterPreferences } from './screenerPreferences'
+
+export const RSI_SIGNAL_OPTIONS: { value: RsiSignalFilter; label: string }[] = [
+  { value: 'all', label: 'All RSI charts' },
+  { value: 'divergence', label: 'RSI divergences' },
+  { value: 'trendline', label: 'RSI trendlines' },
+]
 
 export const HARMONIC_PATTERN_OPTIONS: { value: ScreenerFilterPreferences['harmonicPattern']; label: string }[] = [
   { value: 'all', label: 'All patterns' },

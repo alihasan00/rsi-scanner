@@ -1,5 +1,7 @@
 import { computeSma } from './rsi'
+import { drawRsiTrendlines } from './drawRsiTrendlines'
 import { getRsiState, RSI_OVERBOUGHT, RSI_OVERSOLD, RSI_STATE_LABELS } from './rsiState'
+import type { RsiTrendline } from './rsiTrendlines'
 import type { DivergenceSignal } from './divergence'
 import type { DivergenceSetup } from './divergenceLifecycle'
 import type { HeikinAshiBar, TugOfWarPreview } from './tugOfWar'
@@ -18,6 +20,9 @@ export interface DetailRsiChartContext extends RsiDivergenceChartContext {
   showPricePanel?: boolean
   /** Closed HA history plus its optional live preview, aligned by open time. */
   heikinAshiBars?: readonly (HeikinAshiBar | TugOfWarPreview['heikinAshi'])[]
+  /** Selects mutually exclusive RSI overlays in the existing oscillator pane. */
+  rsiMode?: 'divergence' | 'trendlines'
+  trendlines?: readonly RsiTrendline[]
 }
 
 interface VisibleDivergence {
@@ -425,6 +430,7 @@ export function drawDetailRsiChart(
   if (data.length === 0) return null
 
   const visibleBars = context?.bars.slice(-data.length) ?? []
+  const trendlineMode = context?.rsiMode === 'trendlines'
   const showPricePanel = context !== undefined && context.showPricePanel !== false
   const showHeikinAshiPanel = context?.heikinAshiBars !== undefined
   const offset = data.length - visibleBars.length
@@ -438,7 +444,7 @@ export function drawDetailRsiChart(
   })
   const timeAxisHeight = visibleBars.length > 0 ? 48 : 0
   const plotHeight = height - timeAxisHeight
-  const divergences = context ? visibleDivergences(context, data.length) : []
+  const divergences = context && !trendlineMode ? visibleDivergences(context, data.length) : []
   const priceScale = computePriceScale(visibleBars)
   const heikinAshiScale = computePriceScale(heikinAshiCandles.map(({ bar }) => bar))
   ctx.font = '12px Inter, system-ui, sans-serif'
@@ -542,8 +548,9 @@ export function drawDetailRsiChart(
   ctx.font = '600 11px Inter, system-ui, sans-serif'
   ctx.textAlign = 'left'
   ctx.fillStyle = '#F9F9F9'
-  ctx.fillText('RSI (14)', chartLeft, chartTop - 12)
-  const titleWidth = ctx.measureText('RSI (14)').width
+  const title = trendlineMode ? 'RSI · Trendlines' : 'RSI (14)'
+  ctx.fillText(title, chartLeft, chartTop - 12)
+  const titleWidth = ctx.measureText(title).width
   const latestRsi = data.at(-1)!
   const rsiState = getRsiState(latestRsi)
   if (rsiState) {
@@ -573,21 +580,35 @@ export function drawDetailRsiChart(
     ctx.fillText(v.toFixed(0), width - margin - 8, y)
   }
 
-  ctx.beginPath()
   ctx.strokeStyle = settings.rsiColor
   ctx.lineWidth = settings.lineWidth
   ctx.lineJoin = 'round'
-  for (let i = 0; i < data.length; i++) {
-    const x = chartLeft + i * stepX
-    const y = chartBottom - (data[i] - minRsi) * scaleY
-    if (i === 0) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
+  if (trendlineMode) {
+    for (let index = 1; index < data.length; index++) {
+      const previous = visibleBars[index - 1 - offset]
+      const current = visibleBars[index - offset]
+      if (previous && current && previous.closeTime + 1 !== current.openTime) continue
+      ctx.setLineDash(current?.isClosed === false ? [2, 2] : [])
+      ctx.beginPath()
+      ctx.moveTo(chartLeft + (index - 1) * stepX, chartBottom - data[index - 1] * scaleY)
+      ctx.lineTo(chartLeft + index * stepX, chartBottom - data[index] * scaleY)
+      ctx.stroke()
+    }
+    ctx.setLineDash([])
+  } else {
+    ctx.beginPath()
+    for (let i = 0; i < data.length; i++) {
+      const x = chartLeft + i * stepX
+      const y = chartBottom - (data[i] - minRsi) * scaleY
+      if (i === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    }
+    ctx.stroke()
   }
-  ctx.stroke()
 
   const smaLength = 14
   const smaValues = computeSma(data, smaLength)
-  if (smaValues.length > 0) {
+  if (!trendlineMode && smaValues.length > 0) {
     ctx.beginPath()
     ctx.strokeStyle = settings.smaColor
     ctx.lineWidth = 1.5
@@ -602,7 +623,7 @@ export function drawDetailRsiChart(
     ctx.setLineDash([])
   }
 
-  if (context) {
+  if (context && !trendlineMode) {
     drawDivergences(
       ctx,
       divergences,
@@ -613,6 +634,33 @@ export function drawDetailRsiChart(
       true,
       rsiZoneLabelBoxes,
     )
+  }
+
+  if (trendlineMode) {
+    // The detail chart uses candle indexes. Interpolate timestamps against
+    // its visible candles, never against the full retained history's length.
+    const toX = (time: number) => {
+      if (visibleBars.length < 2) return chartLeft + offset * stepX
+      let afterIndex = visibleBars.findIndex((bar) => bar.openTime >= time)
+      if (afterIndex < 0) afterIndex = visibleBars.length - 1
+      if (afterIndex === 0) afterIndex = 1
+      const before = visibleBars[afterIndex - 1]
+      const after = visibleBars[afterIndex]
+      const fraction = (time - before.openTime) / (after.openTime - before.openTime)
+      return chartLeft + (offset + afterIndex - 1 + fraction) * stepX
+    }
+    const drawn = drawRsiTrendlines(ctx, context?.trendlines ?? [], {
+      region: { left: chartLeft, right: chartRight, top: chartTop, bottom: chartBottom },
+      visibleTimes: visibleBars.map((bar) => bar.openTime),
+      toX,
+      toY: (rsi) => chartBottom - rsi * scaleY,
+    })
+    if (drawn === 0) {
+      ctx.font = '11px Inter, system-ui, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillStyle = '#A3A3A3'
+      ctx.fillText('No qualifying line', (chartLeft + chartRight) / 2, chartTop + 12)
+    }
   }
 
   drawTimeAxis(ctx, visibleBars, data.length, stepX, chartLeft, chartRight, chartBottom, width - margin - 8)

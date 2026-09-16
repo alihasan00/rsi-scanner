@@ -7,10 +7,12 @@ import { DEFAULT_FIB_SETTINGS, restoreFibSettings } from './fibPreferences'
 import type { FibSettings } from './fibPreferences'
 import type { FibStage } from './fibScreener'
 
+export type RsiSignalFilter = 'all' | 'divergence' | 'trendline'
+
 export interface ScreenerPreferences {
   market: ScreenerMarket
   search: string
-  signal: 'all' | 'divergence' | 'fib' | 'sr' | 'harmonic'
+  signal: RsiSignalFilter | 'fib' | 'sr' | 'harmonic'
   divergenceRecency: DivergenceRecency
   fibDirection: 'any' | 'long' | 'short'
   fibStage: FibStage
@@ -57,7 +59,7 @@ export const DEFAULT_SCREENER_PREFERENCES: Readonly<ScreenerPreferences> = Objec
   cardDensity: 'comfortable',
 })
 
-const SIGNALS = ['all', 'divergence', 'fib', 'sr', 'harmonic'] as const
+const SIGNALS = ['all', 'divergence', 'trendline', 'fib', 'sr', 'harmonic'] as const
 const SR_SOURCES = ['all', 'week', 'month', 'monday'] as const
 const SR_SIGNALS = ['all', 'near', 'sfp', 'bullish', 'bearish'] as const
 const SR_SORTS = ['watchlist', 'nearest', 'signals', 'symbol'] as const

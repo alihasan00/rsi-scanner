@@ -11,6 +11,7 @@ import {
 } from '../src/lib/screener'
 import type { ScreenerAnalysis, ScreenerFilters, ScreenerRow, ScreenerSettings } from '../src/lib/screener'
 import { analyzeTugOfWar, previewTugOfWar } from '../src/lib/tugOfWar'
+import { getRsiTrendlineAnalysis } from '../src/lib/rsiTrendlineAnalysis'
 
 const SETTINGS: ScreenerSettings = {
   showHiddenDivergences: false,
@@ -42,6 +43,15 @@ function bullishDivergence(): RsiBar[] {
 
 function neutralHistory(): RsiBar[] {
   return Array.from({ length: 21 }, (_, index) => bar(index))
+}
+
+function trendlineHistory(stage: 'formed' | 'approaching' | 'broken' = 'formed'): RsiBar[] {
+  // A known above-50 cycle, with mature highs at 6 and 16. The ray descends
+  // one RSI point per candle and becomes observable at the close of bar 21.
+  const values = [50, 55, 60, 65, 70, 75, 80, 75, 72, 69, 66, 63, 62, 63, 66, 69, 70, 67, 64, 61, 59, 58]
+  if (stage !== 'formed') values.push(63)
+  if (stage === 'broken') values.push(65)
+  return values.map((rsi, index) => bar(index, { rsi }))
 }
 
 function pendingTowHistory(): RsiBar[] {
@@ -157,6 +167,81 @@ describe('screener analysis cache', () => {
     expect(excluded.divergences).toEqual([])
     expect(included).not.toBe(excluded)
     expect(included.divergences.map((item) => item.kind)).toEqual(['hidden-bullish'])
+  })
+})
+
+describe('RSI trendline filter', () => {
+  test('matches formed, approaching, and recent broken lines independently of divergence', () => {
+    const candidates = (['formed', 'approaching', 'broken'] as const)
+      .map((stage) => row(stage.toUpperCase(), analysis(), trendlineHistory(stage)))
+    for (const candidate of candidates) {
+      expect(getRsiTrendlineAnalysis(candidate.symbol, candidate.snapshot.bars).displayed[0].state)
+        .toBe(candidate.symbol.toLowerCase())
+    }
+    candidates.push(row('DIVERGENCE-ONLY', analysis([confirmedSignal(0)])), row('QUIET'))
+    expect(symbols(candidates, { signal: 'trendline' })).toEqual(['FORMED', 'APPROACHING', 'BROKEN'])
+    expect(symbols(candidates, { signal: 'divergence' })).toEqual(['DIVERGENCE-ONLY'])
+    expect(symbols(candidates)).toEqual(candidates.map((candidate) => candidate.symbol))
+  })
+
+  test('ignores divergence age and ranks breaks ahead of approaching and formed lines', () => {
+    const candidates = [
+      row('FORMED', analysis([confirmedSignal(0)]), trendlineHistory()),
+      row('APPROACHING', analysis(), trendlineHistory('approaching')),
+      row('BROKEN', analysis(), trendlineHistory('broken')),
+    ]
+    const original = [...candidates]
+    for (const divergenceRecency of [1, 3, 5, 'any'] as const) {
+      expect(symbols(candidates, { signal: 'trendline', sort: 'signals', divergenceRecency }))
+        .toEqual(['BROKEN', 'APPROACHING', 'FORMED'])
+      expect(symbols(candidates, { signal: 'trendline', divergenceRecency }))
+        .toEqual(['FORMED', 'APPROACHING', 'BROKEN'])
+    }
+    expect(candidates).toEqual(original)
+  })
+
+  test('a live candle cannot complete anchor maturity, break a line, or expire its relevance', () => {
+    const formed = trendlineHistory()
+    const provisionalAnchor = [...formed.slice(0, -1), { ...formed.at(-1)!, isClosed: false }]
+    expect(symbols([row('IMMATURE', analysis(), provisionalAnchor)], { signal: 'trendline' })).toEqual([])
+    const preview = bar(formed.length, { rsi: 90, isClosed: false })
+    const live = row('LIVE-BREAK', analysis(), [...formed, preview])
+    expect(symbols([live], { signal: 'trendline' })).toEqual(['LIVE-BREAK'])
+    expect(getRsiTrendlineAnalysis(live.symbol, live.snapshot.bars).displayed[0].state).toBe('formed')
+
+    const broken = trendlineHistory('broken')
+    const age11 = [...broken, ...Array.from({ length: 11 }, (_, offset) => bar(broken.length + offset, { rsi: 65 }))]
+    const stillRecent = row('RECENT', analysis(), [...age11, bar(age11.length, { rsi: 65, isClosed: false })])
+    expect(symbols([stillRecent], { signal: 'trendline' })).toEqual(['RECENT'])
+    const expired = row('EXPIRED', analysis(), [...age11, bar(age11.length, { rsi: 65 })])
+    expect(symbols([expired], { signal: 'trendline' })).toEqual([])
+  })
+
+  test('combines trendlines with search, favorites, and the latest RSI state', () => {
+    const base = trendlineHistory()
+    const overbought = [...base, bar(base.length, { rsi: 75, isClosed: false })]
+    const candidates = [
+      row('BTCUSDT', analysis(), overbought),
+      row('WBTCUSDT', analysis(), overbought),
+      row('ETHUSDT', analysis(), overbought),
+      row('BTC-NEUTRAL', analysis(), base),
+      row('BTC-QUIET', analysis(), [bar(0, { rsi: 75 })]),
+    ]
+    const selected = {
+      signal: 'trendline' as const, search: 'btc/usdt', starredOnly: true,
+      starredSymbols: ['BTCUSDT', 'ETHUSDT'], rsiState: 'overbought' as const,
+    }
+    expect(symbols(candidates, selected)).toEqual(['BTCUSDT'])
+    expect(symbols(candidates, { ...selected, starredOnly: false })).toEqual(['BTCUSDT', 'WBTCUSDT'])
+    expect(symbols(candidates, { ...selected, rsiState: 'oversold' })).toEqual([])
+  })
+
+  test('excludes broken lines interrupted by a data gap and handles missing history', () => {
+    const broken = trendlineHistory('broken')
+    const interrupted = [...broken, bar(broken.length + 1, { rsi: 65 })]
+    expect(symbols([
+      row('INTERRUPTED', analysis(), interrupted), row('LOADING', analysis(), []),
+    ], { signal: 'trendline' })).toEqual([])
   })
 })
 

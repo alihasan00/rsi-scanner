@@ -22,6 +22,12 @@ const SELECTED: ScreenerPreferences = {
 }
 
 describe('stored screener preferences', () => {
+  test('restores the trendline filter with independent RSI state and divergence age preferences', () => {
+    const selected: ScreenerPreferences = { ...SELECTED, signal: 'trendline', rsiState: 'neutral', divergenceRecency: 1 }
+    expect(restoreScreenerPreferences(JSON.parse(JSON.stringify(selected)))).toEqual(selected)
+    expect(restoreScreenerPreferences({ ...selected, signal: 'trendlines' })).toEqual({ ...selected, signal: 'all' })
+  })
+
   test('restores harmonic preferences while malformed choices use independent defaults', () => {
     const selected: ScreenerPreferences = {
       ...SELECTED, signal: 'harmonic', harmonicPattern: 'butterfly', harmonicDirection: 'bearish',
@@ -104,6 +110,14 @@ describe('stored screener preferences', () => {
 })
 
 describe('screener URL preferences', () => {
+  test('round trips a shared trendline view without discarding other selections', () => {
+    const selected: ScreenerPreferences = { ...SELECTED, signal: 'trendline', divergenceRecency: 5, rsiState: 'overbought' }
+    const search = writeScreenerPreferencesToSearch('?campaign=course', selected)
+    expect(new URLSearchParams(search).get('indicator')).toBe('trendline')
+    expect(new URLSearchParams(search).get('campaign')).toBe('course')
+    expect(readScreenerPreferencesFromSearch(search)).toEqual(selected)
+  })
+
   test.each(['', '?', '?utm_source=friend', '?direction=bullish', '?other=1&other=2'])('ignores searches without recognized keys (%s)', (search) => {
     expect(readScreenerPreferencesFromSearch(search)).toBeNull()
   })
@@ -267,7 +281,7 @@ describe('canonical screener URL writing', () => {
     const choices: { [Key in keyof ScreenerPreferences]: readonly ScreenerPreferences[Key][] } = {
       market: ['spot', 'tradfi'],
       search: ['', 'SOL / USDT'],
-      signal: ['all', 'divergence', 'fib', 'sr', 'harmonic'],
+      signal: ['all', 'divergence', 'trendline', 'fib', 'sr', 'harmonic'],
       srSource: ['all', 'week', 'month', 'monday'],
       srSignal: ['all', 'near', 'sfp', 'bullish', 'bearish'],
       srSort: ['watchlist', 'nearest', 'signals', 'symbol'],

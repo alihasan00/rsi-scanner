@@ -17,9 +17,10 @@ interface Props {
   row: ScreenerRow; timeframe: Timeframe; starred: boolean; stale: boolean
   matchingDivergences?: readonly DivergenceSetup[]
   showFib?: boolean
+  showTrendlines?: boolean
 }
 
-function ScreenerCardImpl({ row, timeframe, starred, stale, matchingDivergences, showFib = false }: Props) {
+function ScreenerCardImpl({ row, timeframe, starred, stale, matchingDivergences, showFib = false, showTrendlines = false }: Props) {
   const { symbol, snapshot, analysis, feed } = row
   const { ref, isNearViewport } = useNearViewport<HTMLElement>()
   const selectSymbol = useScannerStore((state) => state.selectSymbol)
@@ -67,7 +68,7 @@ function ScreenerCardImpl({ row, timeframe, starred, stale, matchingDivergences,
             />
           </Tooltip>
         </div>
-        {!showFib && latestDivergence && (
+        {!showFib && !showTrendlines && latestDivergence && (
           <div className="screener-card__divergence" aria-label="Matching RSI divergence">
             <span className={latestDivergence.kind.endsWith('bullish') ? 'is-bullish' : 'is-bearish'}>
               {DIVERGENCE_LABELS[latestDivergence.kind]}
@@ -79,7 +80,7 @@ function ScreenerCardImpl({ row, timeframe, starred, stale, matchingDivergences,
         )}
         {showFib && fibTrend && <div className={`fib-card-trend ${fib?.direction === 'long' ? 'is-uptrend' : 'is-downtrend'}`}>{fibTrend}</div>}
         <button type="button" className="screener-card__chart-button" aria-label={`Open ${base} ${showFib ? 'Fib details' : 'chart'}. ${showFib ? fibDescription : rsiDescription}`} onClick={() => selectSymbol(symbol)}>
-          {showFib ? <FibChart symbol={symbol} bars={snapshot.bars} setup={fib} compact active={isNearViewport} /> : <ScreenerChart symbol={symbol} timeframe={timeframe} bars={snapshot.bars} divergences={analysis.divergences} active={isNearViewport} />}
+          {showFib ? <FibChart symbol={symbol} bars={snapshot.bars} setup={fib} compact active={isNearViewport} /> : <ScreenerChart symbol={symbol} timeframe={timeframe} bars={snapshot.bars} divergences={analysis.divergences} rsiMode={showTrendlines ? 'trendlines' : 'divergence'} active={isNearViewport} />}
           <span className="screener-card__chart-hint">Explore chart <ArrowRightOutlined /></span>
         </button>
       </Card>

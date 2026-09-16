@@ -64,6 +64,12 @@ in each card heading.
   the same modal. This preference applies only to the RSI divergence filter;
   **All RSI charts** includes active divergences of any age.
   Bullish and bearish setups are included together.
+- **RSI trendlines:** select **Filters → RSI trendlines → Apply** for a separate
+  trendline view. Cards and details show only trendline overlays in the existing
+  RSI panel. Mature same-cycle anchors produce formed/approaching lines and
+  recent closed-candle breaks, with ideal/non-ideal grading and a recent bearish
+  breakdown warning. Search, favorites, and RSI state still apply. Switch to
+  **RSI divergences** for divergence overlays. See [rules and conventions](docs/rsi-trendlines.md).
 - **Fib system:** on the Fibs tab, open **Filters** for direction, setup stage,
   and optional SMA200 alignment. Waiting setups have an unfilled plan; active
   setups have one or more modeled entry touches. **Near entry** shows only
@@ -77,7 +83,8 @@ in each card heading.
   saved favorites belong to Crypto.
 - **Sorting:** use watchlist order, active signals, candle change, RSI ascending
   or descending, or pair name. **Active signals** ranks RSI divergence setups
-  with confirmed setups before forming setups. In the Fib view it ranks pairs
+  with confirmed setups before forming setups. The RSI trendline view ranks
+  recent breaks before approaching lines, then formed lines. In the Fib view it ranks pairs
   in the golden pocket first, then entered setups before waiting plans.
 - **Layout and timeframe:** choose comfortable or compact cards and a common
   candle timeframe. The selected view is saved across reloads and reflected in

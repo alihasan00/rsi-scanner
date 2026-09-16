@@ -5,6 +5,7 @@ import { useScannerStore } from '../store/scannerStore'
 import { FibSettingsPanel } from './FibSettingsPanel'
 import { LiquidityGuide } from './LiquidityGuide'
 import { HarmonicGuide } from './HarmonicGuide'
+import { RsiTrendlineGuide } from './RsiTrendlineStatus'
 import './Liquidity.css'
 
 const { Text, Paragraph } = Typography
@@ -33,7 +34,7 @@ export function SettingsDrawer() {
     <Drawer title="Screener settings" open onClose={closeSettings} size={360}>
       <Space orientation="vertical" size="large" style={{ width: '100%' }}>
         <Paragraph type="secondary" style={{ margin: 0, fontSize: 13 }}>
-          Adjust the chart and divergence rules for your screener.
+          Adjust the chart and divergence rules for your screener. Select RSI trendlines in Filters for the separate trendline view.
         </Paragraph>
         <div>
           <Text strong>RSI line color</Text>
@@ -148,6 +149,11 @@ export function SettingsDrawer() {
               and a historical replay using these settings.
             </Text>
           </Space>
+        </div>
+        <div>
+          <Divider />
+          <Text strong>RSI trendlines</Text>
+          <RsiTrendlineGuide />
         </div>
         <div>
           <Divider />

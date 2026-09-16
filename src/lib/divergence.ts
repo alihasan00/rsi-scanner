@@ -1,4 +1,5 @@
 import type { RsiBar } from '../types'
+import { strictRsiPivot } from './rsiPivots'
 
 export type DivergenceKind =
   | 'regular-bullish'
@@ -181,15 +182,7 @@ export function findRsiDivergences(
 
     const pivot = confirmation - rightBars
     if (pivot - leftBars < segmentStart) continue
-    const pivotRsi = bars[pivot].rsi
-    let isLow = true
-    let isHigh = true
-    for (let neighbor = pivot - leftBars; neighbor <= confirmation; neighbor++) {
-      if (neighbor === pivot) continue
-      isLow = isLow && pivotRsi < bars[neighbor].rsi
-      isHigh = isHigh && pivotRsi > bars[neighbor].rsi
-      if (!isLow && !isHigh) break
-    }
+    const { low: isLow, high: isHigh } = strictRsiPivot(bars, pivot, leftBars, rightBars)
 
     if (isLow) {
       comparePivots(previousLow, pivot, true, current.closeTime)

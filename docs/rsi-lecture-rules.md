@@ -146,7 +146,10 @@ The supported changes are optional wick/body agreement and same-RSI50-cycle filt
 
 ## Implemented in the scanner
 
-RSI divergence detection and live chart overlays are always enabled. Under
+RSI divergence detection runs automatically; its chart overlays appear in
+**All RSI charts** and **RSI divergences**. The separate **RSI trendlines** filter
+replaces those overlays with automatic trendlines on cards and in the detail
+chart; see [trendline rules and conventions](rsi-trendlines.md). Under
 **Settings**, **Require wick and body agreement** and **Keep pivots in one RSI
 50 cycle** are enabled by default and can each be disabled for comparison. The
 **RSI invalidation anchor** defaults to the second pivot. All choices persist.

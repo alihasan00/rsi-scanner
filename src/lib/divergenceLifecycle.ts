@@ -5,6 +5,7 @@ import {
 } from './divergence'
 import type { DivergenceKind, DivergenceOptions, DivergencePoint } from './divergence'
 import type { RsiBar } from '../types'
+import { strictRsiPivot } from './rsiPivots'
 
 export type DivergenceState =
   | 'forming' | 'confirmed' | 'completed' | 'harmonised'
@@ -229,24 +230,13 @@ export function findRsiDivergenceSetups(
     // Only now can the historical first pivot use this closed right-hand bar.
     const pivot = index - rightBars
     if (pivot - leftBars >= segmentStart) {
-      let low = true
-      let high = true
-      for (let neighbor = pivot - leftBars; neighbor <= index; neighbor++) {
-        if (neighbor === pivot) continue
-        low = low && bars[pivot].rsi < bars[neighbor].rsi
-        high = high && bars[pivot].rsi > bars[neighbor].rsi
-      }
+      const { low, high } = strictRsiPivot(bars, pivot, leftBars, rightBars)
       if (low) previousLow = pivot
       if (high) previousHigh = pivot
     }
 
     if (index - provisionalBars + 1 < segmentStart) continue
-    let low = true
-    let high = true
-    for (let neighbor = index - provisionalBars + 1; neighbor < index; neighbor++) {
-      low = low && current.rsi < bars[neighbor].rsi
-      high = high && current.rsi > bars[neighbor].rsi
-    }
+    const { low, high } = strictRsiPivot(bars, index, provisionalBars - 1, 0)
     if (low) formSetup(previousLow, index, true)
     if (high) formSetup(previousHigh, index, false)
   }
