@@ -9,6 +9,7 @@ import type { ScreenerRow } from '../lib/screener'
 import type { LiquidityLevel } from '../lib/liquidityLevels'
 import { filterLiquidityRows, levelDistancePercent, liquidityEventLabel, makeLiquidityRow, nearbyLiquidityLevels } from '../lib/liquidityScreener'
 import type { LiquidityRow } from '../lib/liquidityScreener'
+import { getNormalizedDistance } from '../lib/volatility'
 import { formatQuotePrice } from '../lib/priceFormatting'
 import type { ScreenerFilterPreferences } from '../lib/screenerPreferences'
 import { useScannerStore } from '../store/scannerStore'
@@ -20,12 +21,12 @@ import { LiquidityGuide } from './LiquidityGuide'
 import { PairCollectionPicker } from './PairCollectionPicker'
 import './Liquidity.css'
 
-function LevelReadout({ level, side, price, loading }: { level: LiquidityLevel | null; side: 'support' | 'resistance'; price: number; loading: string | null }) {
+function LevelReadout({ level, side, price, loading, atr }: { atr: number | null; level: LiquidityLevel | null; side: 'support' | 'resistance'; price: number; loading: string | null }) {
   return <div className={`liquidity-level is-${side}`}>
     <span className="liquidity-level__side">{side === 'support' ? 'Support below' : 'Resistance above'}</span>
     <strong>{loading ? 'Loading…' : level ? formatQuotePrice(level.price) : '—'}</strong>
     <span className="liquidity-level__source">{loading ?? (level ? level.label : 'No level in this history')}</span>
-    <span className="liquidity-level__distance">{level && Number.isFinite(levelDistancePercent(level, price)) ? `${levelDistancePercent(level, price).toFixed(2)}% away` : ' '}</span>
+    <span className="liquidity-level__distance">{level && Number.isFinite(levelDistancePercent(level, price)) ? `${levelDistancePercent(level, price).toFixed(2)}% · ${getNormalizedDistance(price, level.price, atr).atr?.toFixed(2) ?? "—"} ATR` : ' '}</span>
   </div>
 }
 
@@ -48,8 +49,8 @@ const LiquidityCard = memo(function LiquidityCard({ data, starred, delayed }: { 
       <button type="button" className="screener-card__chart-button liquidity-card__open" aria-label={`Open ${row.symbol} support and resistance details`} onClick={() => selectSymbol(row.symbol)}>
         {isNearViewport ? <LiquidityChart bars={row.snapshot.bars} levels={nearbyLiquidityLevels(context)} price={row.snapshot.price} compact /> : <div className="liquidity-card__chart-placeholder" />}
         <div className="liquidity-card__levels">
-          <LevelReadout side="support" level={context.support} price={row.snapshot.price} loading={loading} />
-          <LevelReadout side="resistance" level={context.resistance} price={row.snapshot.price} loading={loading} />
+          <LevelReadout side="support" level={context.support} price={row.snapshot.price} loading={loading} atr={data.atr ?? null} />
+          <LevelReadout side="resistance" level={context.resistance} price={row.snapshot.price} loading={loading} atr={data.atr ?? null} />
         </div>
         {context.atPrice.length > 0 && <div className="liquidity-card__at-price">At {context.atPrice.map((level) => level.label).join(' / ')}</div>}
         <div className={`liquidity-card__reaction is-${dataError || delayed ? 'forming' : status.tone}`}>
@@ -110,7 +111,7 @@ export function LiquidityScreener({ universe, rows, now }: { universe: MarketUni
       <p>Find the next level. Watch for a sweep and a close back inside.</p>
       <Button type="text" size="small" icon={<InfoCircleOutlined />} onClick={() => setGuideOpen(true)}>How to read this</Button>
     </div>
-    <div className="liquidity-scope"><span>Calendar liquidity</span> Monday body · previous week · previous month <span className="liquidity-scope__manual">Fib & volume-profile confluence requires manual review.</span></div>
+    <div className="liquidity-scope"><span>Calendar liquidity</span> Monday body · previous week · previous month <span className="liquidity-scope__manual">Open a pair for swing levels, retests and combined signal context.</span></div>
     <Card className="screener__controls" size="small">
       <div className="screener__toolbar">
         <div className="screener__search"><label htmlFor="liquidity-search">Find a pair</label><Input id="liquidity-search" ref={searchRef} value={filters.search} onChange={(event) => updateFilters({ search: event.target.value })} prefix={<SearchOutlined />} suffix={!filters.search && <kbd>/</kbd>} allowClear placeholder={universe.market === 'tradfi' ? 'Search TSLA, NVDA, XAU…' : 'Search BTC, ETH, SOL…'} aria-label="Search support and resistance pairs" /></div>
@@ -122,12 +123,12 @@ export function LiquidityScreener({ universe, rows, now }: { universe: MarketUni
     <div className="screener__results-bar">
       <span className="screener__collection-label">{filters.starredOnly ? <><StarOutlined /> Starred pairs</> : 'Liquidity map'} <span>{visible.length}</span><Tag className="liquidity-sweep-count">{confirmed} with recent sweeps</Tag></span>
       <div className="screener__result-controls">
-        <Select<ScreenerFilterPreferences['srSort']> aria-label="Sort liquidity pairs" className="screener__sort" value={filters.srSort} onChange={(srSort) => updateFilters({ srSort })} options={[{ value: 'watchlist', label: 'Watchlist order' }, { value: 'nearest', label: 'Nearest level' }, { value: 'signals', label: 'Recent sweeps' }, { value: 'symbol', label: 'Name: A to Z' }]} variant="borderless" />
+        <Select<ScreenerFilterPreferences['srSort']> aria-label="Sort liquidity pairs" className="screener__sort" value={filters.srSort} onChange={(srSort) => updateFilters({ srSort })} options={[{ value: 'watchlist', label: 'Watchlist order' }, { value: 'nearest', label: 'Nearest level (%)' }, { value: 'atr', label: 'Nearest level (ATR)' }, { value: 'signals', label: 'Recent sweeps' }, { value: 'symbol', label: 'Name: A to Z' }]} variant="borderless" />
         <Segmented className="screener__density" aria-label="Card size" value={density} onChange={setDensity} options={[{ value: 'comfortable', label: <Tooltip title="Comfortable cards"><AppstoreOutlined aria-label="Comfortable cards" /></Tooltip> }, { value: 'compact', label: <Tooltip title="Compact cards"><BarsOutlined aria-label="Compact cards" /></Tooltip> }]} />
         <PairCollectionPicker starredOnly={filters.starredOnly} starredCount={starredSymbols.length} onChange={(starredOnly) => updateFilters({ starredOnly })} />
       </div>
     </div>
-    {(activeFilterCount > 0 || filters.starredOnly || filters.search || filters.srSort !== 'watchlist') && <div className="screener__active-filters"><span>Showing {visible.length} of {rows.length} pairs{filters.srSignal === 'near' ? ' · within 0.5% of a level' : filters.srSignal !== 'all' ? ' · sweeps in the latest 3 closed candles' : ''}{filters.srSource !== 'all' ? ` · ${filters.srSource === 'monday' ? 'Monday body' : `previous ${filters.srSource}`}` : ''}</span><Button type="link" size="small" onClick={resetFilters}>Reset filters</Button></div>}
+    {(activeFilterCount > 0 || filters.starredOnly || filters.search || filters.srSort !== 'watchlist') && <div className="screener__active-filters"><span>Showing {visible.length} of {rows.length} pairs{filters.srSignal === 'near' ? ' · within 0.5% of a level' : filters.srSignal === 'near-atr' ? ' · within 1 closed-candle ATR of a level' : filters.srSignal !== 'all' ? ' · sweeps in the latest 3 closed candles' : ''}{filters.srSource !== 'all' ? ` · ${filters.srSource === 'monday' ? 'Monday body' : `previous ${filters.srSource}`}` : ''}</span><Button type="link" size="small" onClick={resetFilters}>Reset filters</Button></div>}
     {!intraday && <p className="liquidity-timeframe-note">Monday’s body range is an intraday level. Choose an hourly or minute timeframe to see it.</p>}
     {universe.status === 'error' && <Alert className="screener__notice" type="error" showIcon title="TradFi market list unavailable" description={universe.error} action={<Button onClick={universe.retry}>Retry</Button>} />}
     {failed > 0 && <Alert className="screener__notice" type="warning" showIcon title={`Data interrupted for ${failed} ${failed === 1 ? 'pair' : 'pairs'}`} description="Retrying automatically. Confirmed-sweep filters exclude pairs with interrupted data." />}

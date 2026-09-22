@@ -4,6 +4,7 @@ import { advanceLiquidityMap, analyzeLiquidity, visibleLiquidityLevels } from '.
 import type { LiquidityContext, LiquidityLevel, LiquidityMap } from './liquidityLevels'
 import type { SrContextSnapshot } from '../store/srContextStore'
 import type { Timeframe } from '../types'
+import { analyzeVolatility, getNormalizedDistance } from './volatility'
 
 export const NEAR_LIQUIDITY_PERCENT = 0.5
 export const LIQUIDITY_SOURCE_LABELS = { month: 'Previous month', week: 'Previous week', monday: 'Monday body' } as const
@@ -14,6 +15,7 @@ export interface LiquidityRow {
   map: LiquidityMap | null
   levels: readonly LiquidityLevel[]
   context: LiquidityContext
+  atr?: number | null
 }
 
 export function makeLiquidityRow(
@@ -27,7 +29,7 @@ export function makeLiquidityRow(
     levels: history.map.levels.filter((level) => source === 'all' || level.source === source),
   }, row.snapshot.bars, timeframe) : null
   return {
-    row, history, map,
+    row, history, map, atr: analyzeVolatility(row.snapshot.bars).atr,
     levels: map ? visibleLiquidityLevels(map, timeframe) : [],
     context: map ? analyzeLiquidity(map, row.snapshot.bars, row.snapshot.price, timeframe)
       : { support: null, resistance: null, atPrice: [], events: [] },
@@ -43,6 +45,13 @@ export function nearestLiquidityDistance(row: LiquidityRow): number {
   return Math.min(...[support, resistance, ...atPrice]
     .filter((level): level is LiquidityLevel => level !== null)
     .map((level) => levelDistancePercent(level, row.row.snapshot.price)))
+}
+
+export function nearestLiquidityAtrDistance(row: LiquidityRow): number {
+  const { support, resistance, atPrice } = row.context
+  return Math.min(...[support, resistance, ...atPrice]
+    .filter((level): level is LiquidityLevel => level !== null)
+    .map((level) => getNormalizedDistance(row.row.snapshot.price, level.price, row.atr ?? null).atr ?? Infinity))
 }
 
 /** Live price controls proximity; only finalized candles qualify as sweeps. */
@@ -61,6 +70,7 @@ export function filterLiquidityRows(
     if (filters.srSignal === 'all') return true
     if (row.history.status !== 'ready' || row.row.feed.state !== 'ready') return false
     if (filters.srSignal === 'near') return nearestLiquidityDistance(row) <= NEAR_LIQUIDITY_PERCENT
+    if (filters.srSignal === 'near-atr') return nearestLiquidityAtrDistance(row) <= 1
     return confirmed(row).some((event) => filters.srSignal === 'sfp' || event.direction === filters.srSignal)
   }).sort((a, b) => {
     if (filters.srSort === 'watchlist') return 0
@@ -70,8 +80,9 @@ export function filterLiquidityRows(
       const difference = score(b) - score(a)
       if (difference) return difference
     }
-    const aDistance = nearestLiquidityDistance(a)
-    const bDistance = nearestLiquidityDistance(b)
+    const distance = filters.srSort === 'atr' ? nearestLiquidityAtrDistance : nearestLiquidityDistance
+    const aDistance = distance(a)
+    const bDistance = distance(b)
     return aDistance === bDistance ? a.row.symbol.localeCompare(b.row.symbol) : aDistance - bDistance
   })
 }

@@ -29,7 +29,7 @@ export type FibStatus = 'watching' | 'entered' | 'managing' | 'runner'
   | 'stopped' | 'missed' | 'invalidated' | 'superseded'
 
 export interface FibAnchor {
-  /** Index in the analyzed, contiguous closed suffix (at most 500 candles). */
+  /** Stable ordinal in the uninterrupted replay, even after discovery history rolls. */
   index: number
   time: number
   price: number
@@ -100,6 +100,10 @@ export interface FibAnalysis {
   smaConfluence: 'aligned' | 'against' | 'unavailable' | null
   historyIssue: 'gap' | 'invalid' | null
   pendingDirection: FibDirection | null
+  /** A restored checkpoint or an explicit loss of older lifecycle evidence. */
+  continuity?: { state: 'restored' | 'reset'; detail: string; previousSetupId: string | null }
+  /** Browser storage failed; in-memory lifecycle tracking still continues. */
+  persistenceIssue?: 'unavailable'
 }
 
 export interface FibLiveContext {
@@ -112,7 +116,7 @@ export interface FibLiveContext {
 }
 
 const PIVOT_BARS = 3
-const MAX_HISTORY = 500
+export const FIB_DISCOVERY_BARS = 500
 const ENTRY_RATIOS = [0.618, 0.786, 0.886] as const
 const ENTRY_WEIGHTS = [20, 30, 50] as const
 
@@ -171,29 +175,6 @@ function validBar(bar: FibBar): boolean {
     && bar.low <= Math.min(bar.open, bar.close) && bar.high >= Math.max(bar.open, bar.close)
 }
 
-function closedSuffix(bars: readonly FibBar[]): {
-  closed: FibBar[]; issue: FibAnalysis['historyIssue']
-} {
-  let end = bars.length
-  // Preview changes, even malformed prices, must have no effect on confirmed analysis.
-  while (end > 0 && !bars[end - 1].isClosed) end--
-  let closed: FibBar[] = []
-  let issue: FibAnalysis['historyIssue'] = null
-  for (let i = Math.max(0, end - MAX_HISTORY); i < end; i++) {
-    const bar = bars[i]
-    if (!bar.isClosed || !validBar(bar)) {
-      closed = []
-      issue = bar.isClosed ? 'invalid' : 'gap'
-      continue
-    }
-    if (closed.length && bar.openTime !== closed[closed.length - 1].closeTime + 1) {
-      closed = []
-      issue = 'gap'
-    }
-    closed.push(bar)
-  }
-  return { closed, issue }
-}
 
 function pivotAt(bars: readonly FibBar[], index: number, kind: 'high' | 'low'): boolean {
   if (index < PIVOT_BARS || index + PIVOT_BARS >= bars.length) return false
@@ -205,8 +186,8 @@ function pivotAt(bars: readonly FibBar[], index: number, kind: 'high' | 'low'): 
   return true
 }
 
-function anchorAt(bars: readonly FibBar[], index: number, kind: 'high' | 'low', confirmedAt: number): FibAnchor {
-  return { index, time: bars[index].openTime, price: bars[index][kind], confirmedAt }
+function anchorAt(bars: readonly FibBar[], index: number, kind: 'high' | 'low', confirmedAt: number, offset = 0): FibAnchor {
+  return { index: index + offset, time: bars[index].openTime, price: bars[index][kind], confirmedAt }
 }
 
 function entryTouched(direction: FibDirection, bar: FibBar, price: number): boolean {
@@ -240,16 +221,18 @@ interface Impulse {
   start: FibAnchor
   endIndex: number
   breakAt: number
+  durableOrigin?: boolean
 }
 
 function originKey(direction: FibDirection, start: FibAnchor): string {
   return `${direction}:${start.time}`
 }
 
-function createSetup(impulse: Impulse, bars: readonly FibBar[], index: number, options: FibOptions): FibSetup | null {
+function createSetup(impulse: Impulse, bars: readonly FibBar[], index: number, options: FibOptions, offset = 0): FibSetup | null {
   const time = bars[index].closeTime
-  const end = anchorAt(bars, impulse.endIndex, impulse.direction === 'long' ? 'high' : 'low',
-    bars[impulse.endIndex + PIVOT_BARS].closeTime)
+  const endIndex = impulse.endIndex - offset
+  const end = anchorAt(bars, endIndex, impulse.direction === 'long' ? 'high' : 'low',
+    bars[endIndex + PIVOT_BARS].closeTime, offset)
   const price = (ratio: number) => fibPrice(impulse.start.price, end.price, ratio, options.scale)
   const entries: FibEntry[] = ENTRY_RATIOS.map((ratio, i) => ({
     ratio, price: price(ratio), weight: ENTRY_WEIGHTS[i], touchedAt: null, filledAt: null, status: 'pending',
@@ -276,7 +259,7 @@ function createSetup(impulse: Impulse, bars: readonly FibBar[], index: number, o
     plannedAverage: average(entries), actualAverage: null, remainingPercent: 100, events: [],
   }
   event(setup, time, 'detected', 'Structure break and three closed right-side candles confirm the impulse endpoint.')
-  for (let i = impulse.endIndex + 1; i <= index; i++) {
+  for (let i = endIndex + 1; i <= index; i++) {
     for (const entry of setup.entries) {
       if (entry.touchedAt === null && entryTouched(setup.direction, bars[i], entry.price)) {
         entry.touchedAt = bars[i].closeTime
@@ -357,119 +340,181 @@ function advanceSetup(setup: FibSetup, bar: FibBar): void {
 }
 
 /**
- * Bounded, causal interpretation of the lecture's discretionary structure rules.
- * Strict 3/3 swings replace same-type anchors after >= 0.5 retracement of the
- * intervening accepted leg. New extremes extend an unentered impulse; entry
- * freezes it. A closed structure break and mature retracing endpoint are both
- * required. Filled or missed origins cannot be traded again in this history.
- * Live bars are ignored; missing/invalid interior data starts a fresh suffix.
- * This is an OHLC scenario model, not evidence of exchange order execution.
+ * Serializable replay state. Discovery uses at most 500 candles; a plan's
+ * lifecycle, frozen anchors and consumed origin are independent of that window.
+ * Callers must clone a checkpoint before advancing it or exposing its analysis.
  */
-export function analyzeFibonacci(bars: readonly FibBar[], options: Partial<FibOptions> = {}): FibAnalysis {
+export interface FibReplayCheckpoint {
+  version: 1
+  options: FibOptions
+  history: FibBar[]
+  startedAt: number | null
+  offset: number
+  setups: FibSetup[]
+  consumedOrigins: string[]
+  brokenHighs: number[]
+  brokenLows: number[]
+  high: FibAnchor | null
+  low: FibAnchor | null
+  pending: Impulse | null
+  structure: FibAnalysis['structure']
+  historyIssue: FibAnalysis['historyIssue']
+}
+
+export function createFibReplay(options: Partial<FibOptions> = {}): FibReplayCheckpoint {
   const settings = { ...DEFAULT_FIB_OPTIONS, ...options }
   validateOptions(settings)
-  const { closed, issue } = closedSuffix(bars)
-  const setups: FibSetup[] = []
-  const consumedOrigins = new Set<string>()
-  const brokenHighs = new Set<number>()
-  const brokenLows = new Set<number>()
-  let high: FibAnchor | null = null
-  let low: FibAnchor | null = null
-  let pending: Impulse | null = null
-  let current: FibSetup | null = null
-  let structure: FibAnalysis['structure'] = 'insufficient'
+  return {
+    version: 1, options: settings, history: [], startedAt: null, offset: 0, setups: [],
+    consumedOrigins: [], brokenHighs: [], brokenLows: [], high: null, low: null,
+    pending: null, structure: 'insufficient', historyIssue: null,
+  }
+}
 
-  for (let i = 0; i < closed.length; i++) {
-    const bar = closed[i]
-    const time = bar.closeTime
-    let resolvedThisBar = false
-    if (current && isActiveFibSetup(current)) {
-      advanceSetup(current, bar)
-      if (current.actualAverage !== null || current.status === 'missed') {
-        consumedOrigins.add(originKey(current.direction, current.start))
-      }
-      if (!isActiveFibSetup(current)) resolvedThisBar = true
-      else if (current.status === 'watching'
-        && (current.direction === 'long' ? bar.high > current.end.price : bar.low < current.end.price)) {
-        pending = { direction: current.direction, start: current.start, endIndex: i, breakAt: current.breakAt }
-        event(current, time, 'superseded', 'Unentered impulse extended; wait for its new endpoint to mature.')
-        finish(current, 'superseded', time)
-      }
+/** Mutates only the supplied private checkpoint, never a candle or prior result. */
+export function advanceFibReplay(state: FibReplayCheckpoint, bar: FibBar): void {
+  const last = state.history.at(-1)
+  if (!bar.isClosed || !validBar(bar) || (last && bar.openTime !== last.closeTime + 1)) {
+    const issue = bar.isClosed && !validBar(bar) ? 'invalid' : 'gap'
+    Object.assign(state, createFibReplay(state.options), { historyIssue: issue })
+    if (!bar.isClosed || !validBar(bar)) return
+  }
+  state.startedAt ??= bar.openTime
+  state.history.push({
+    openTime: bar.openTime, closeTime: bar.closeTime, open: bar.open, high: bar.high,
+    low: bar.low, close: bar.close, volume: bar.volume, isClosed: bar.isClosed,
+  })
+  if (state.history.length > FIB_DISCOVERY_BARS) {
+    state.history.shift()
+    state.offset++
+  }
+  const closed = state.history
+  const offset = state.offset
+  const i = closed.length - 1
+  const ordinal = i + offset
+  const time = bar.closeTime
+  const settings = state.options
+  let { high, low, pending, structure } = state
+  const current = state.setups.at(-1) ?? null
+  // Old structure cannot discover new plans. An existing plan still advances.
+  if (high && high.index < offset + PIVOT_BARS) high = null
+  if (low && low.index < offset + PIVOT_BARS) low = null
+  if (!high || !low) structure = 'insufficient'
+  if (pending && ((!pending.durableOrigin && pending.start.index < offset + PIVOT_BARS)
+    || pending.endIndex < offset + PIVOT_BARS)) pending = null
+  const firstTime = closed[0].openTime
+  const consumedOrigins = new Set(state.consumedOrigins.filter((key) => Number(key.split(':')[1]) >= firstTime))
+  const brokenHighs = new Set(state.brokenHighs.filter((value) => value >= firstTime))
+  const brokenLows = new Set(state.brokenLows.filter((value) => value >= firstTime))
+  let resolvedThisBar = false
+  if (current && isActiveFibSetup(current)) {
+    advanceSetup(current, bar)
+    if (current.actualAverage !== null || current.status === 'missed') {
+      consumedOrigins.add(originKey(current.direction, current.start))
     }
-
-    if (pending) {
-      if (pending.direction === 'long' ? bar.close < pending.start.price : bar.close > pending.start.price) pending = null
-      else if (pending.direction === 'long'
-        ? bar.high > closed[pending.endIndex].high : bar.low < closed[pending.endIndex].low) pending.endIndex = i
-    }
-
-    const pivotIndex = i - PIVOT_BARS
-    // pivotIndex + rightBars is exactly i; pivotAt cannot inspect future candles.
-    const isHigh = pivotAt(closed, pivotIndex, 'high')
-    const isLow = pivotAt(closed, pivotIndex, 'low')
-    // An outside candle can be both pivots; without intrabar order it cannot define structure.
-    if (isHigh && !isLow) {
-      const candidate = anchorAt(closed, pivotIndex, 'high', time)
-      if (!high || (low && low.index > high.index
-        ? candidate.price >= fibPrice(high.price, low.price, 0.5, settings.scale)
-        : candidate.price > high.price)) high = candidate
-    } else if (isLow && !isHigh) {
-      const candidate = anchorAt(closed, pivotIndex, 'low', time)
-      if (!low || (high && high.index > low.index
-        ? candidate.price <= fibPrice(low.price, high.price, 0.5, settings.scale)
-        : candidate.price < low.price)) low = candidate
-    }
-
-    if (high && low && structure === 'insufficient') structure = 'range'
-    let direction: FibDirection | null = null
-    if (high && low && bar.close > high.price && !brokenHighs.has(high.time)) {
-      direction = 'long'
-      brokenHighs.add(high.time)
-      structure = 'bullish'
-    } else if (high && low && bar.close < low.price && !brokenLows.has(low.time)) {
-      direction = 'short'
-      brokenLows.add(low.time)
-      structure = 'bearish'
-    }
-
-    const hasPosition = current && isActiveFibSetup(current) && current.actualAverage !== null
-    if (direction && !hasPosition && !resolvedThisBar) {
-      const start = direction === 'long' ? low! : high!
-      if (!consumedOrigins.has(originKey(direction, start))) {
-        // A new significant origin takes precedence over a previous unentered plan.
-        if (current && isActiveFibSetup(current)) {
-          event(current, time, 'superseded', 'A fresh significant structure break replaced this unentered plan.')
-          finish(current, 'superseded', time)
-        }
-        let endIndex = start.index + 1
-        for (let j = endIndex + 1; j <= i; j++) {
-          if (direction === 'long' ? closed[j].high > closed[endIndex].high : closed[j].low < closed[endIndex].low) endIndex = j
-        }
-        pending = { direction, start: { ...start }, endIndex, breakAt: time }
-      }
-    }
-
-    if (pending && !hasPosition && pending.endIndex <= pivotIndex
-      && pivotAt(closed, pending.endIndex, pending.direction === 'long' ? 'high' : 'low')
-      && !pivotAt(closed, pending.endIndex, pending.direction === 'long' ? 'low' : 'high')) {
-      const created = createSetup(pending, closed, i, settings)
-      if (created) {
-        current = created
-        setups.push(created)
-        if (created.status === 'missed') consumedOrigins.add(originKey(created.direction, created.start))
-      }
-      pending = null
+    if (!isActiveFibSetup(current)) resolvedThisBar = true
+    else if (current.status === 'watching'
+      && (current.direction === 'long' ? bar.high > current.end.price : bar.low < current.end.price)) {
+      pending = { direction: current.direction, start: current.start, endIndex: ordinal,
+        breakAt: current.breakAt, durableOrigin: true }
+      event(current, time, 'superseded', 'Unentered impulse extended; wait for its new endpoint to mature.')
+      finish(current, 'superseded', time)
     }
   }
 
+  if (pending) {
+    if (pending.direction === 'long' ? bar.close < pending.start.price : bar.close > pending.start.price) pending = null
+    else if (pending.direction === 'long'
+      ? bar.high > closed[pending.endIndex - offset].high : bar.low < closed[pending.endIndex - offset].low) pending.endIndex = ordinal
+  }
+
+  const pivotIndex = i - PIVOT_BARS
+  const isHigh = pivotAt(closed, pivotIndex, 'high')
+  const isLow = pivotAt(closed, pivotIndex, 'low')
+  if (isHigh && !isLow) {
+    const candidate = anchorAt(closed, pivotIndex, 'high', time, offset)
+    if (!high || (low && low.index > high.index
+      ? candidate.price >= fibPrice(high.price, low.price, 0.5, settings.scale)
+      : candidate.price > high.price)) high = candidate
+  } else if (isLow && !isHigh) {
+    const candidate = anchorAt(closed, pivotIndex, 'low', time, offset)
+    if (!low || (high && high.index > low.index
+      ? candidate.price <= fibPrice(low.price, high.price, 0.5, settings.scale)
+      : candidate.price < low.price)) low = candidate
+  }
+
+  if (high && low && structure === 'insufficient') structure = 'range'
+  let direction: FibDirection | null = null
+  if (high && low && bar.close > high.price && !brokenHighs.has(high.time)) {
+    direction = 'long'
+    brokenHighs.add(high.time)
+    structure = 'bullish'
+  } else if (high && low && bar.close < low.price && !brokenLows.has(low.time)) {
+    direction = 'short'
+    brokenLows.add(low.time)
+    structure = 'bearish'
+  }
+
+  const hasPosition = current && isActiveFibSetup(current) && current.actualAverage !== null
+  if (direction && !hasPosition && !resolvedThisBar) {
+    const start = direction === 'long' ? low! : high!
+    if (!consumedOrigins.has(originKey(direction, start))) {
+      if (current && isActiveFibSetup(current)) {
+        event(current, time, 'superseded', 'A fresh significant structure break replaced this unentered plan.')
+        finish(current, 'superseded', time)
+      }
+      let endIndex = start.index - offset + 1
+      for (let j = endIndex + 1; j <= i; j++) {
+        if (direction === 'long' ? closed[j].high > closed[endIndex].high : closed[j].low < closed[endIndex].low) endIndex = j
+      }
+      pending = { direction, start: { ...start }, endIndex: endIndex + offset, breakAt: time }
+    }
+  }
+
+  if (pending && !hasPosition && pending.endIndex - offset <= pivotIndex
+    && pivotAt(closed, pending.endIndex - offset, pending.direction === 'long' ? 'high' : 'low')
+    && !pivotAt(closed, pending.endIndex - offset, pending.direction === 'long' ? 'low' : 'high')) {
+    const created = createSetup(pending, closed, i, settings, offset)
+    if (created) {
+      state.setups.push(created)
+      if (created.status === 'missed') consumedOrigins.add(originKey(created.direction, created.start))
+    }
+    pending = null
+  }
+  // Bound terminal chart context; the latest plan always survives for resolution context.
+  state.setups = state.setups.filter((setup, index, setups) => setup.detectedAt >= firstTime || index === setups.length - 1)
+  Object.assign(state, {
+    high, low, pending, structure,
+    consumedOrigins: [...consumedOrigins], brokenHighs: [...brokenHighs], brokenLows: [...brokenLows],
+  })
+}
+
+/** Analysis is detached from mutable checkpoint state. */
+export function summarizeFibReplay(state: FibReplayCheckpoint): FibAnalysis {
+  const setups = structuredClone(state.setups)
   const setup = setups.at(-1) ?? null
+  const closed = state.history
   const last = closed.at(-1)
   const sma200 = closed.length >= 200
     ? closed.slice(-200).reduce((sum, bar) => sum + bar.close, 0) / 200 : null
   const smaConfluence = !setup ? null : sma200 === null ? 'unavailable'
     : (setup.direction === 'long' ? last!.close > sma200 : last!.close < sma200) ? 'aligned' : 'against'
   return {
-    setup, setups, structure, closedBars: closed.length, lastClosedAt: last?.closeTime ?? null,
-    sma200, smaConfluence, historyIssue: issue, pendingDirection: pending?.direction ?? null,
+    setup, setups, structure: state.structure, closedBars: closed.length, lastClosedAt: last?.closeTime ?? null,
+    sma200, smaConfluence, historyIssue: state.historyIssue, pendingDirection: state.pending?.direction ?? null,
   }
+}
+
+/**
+ * Causal OHLC scenario replay. Discovery and SMA are bounded to 500 candles;
+ * active plans continue until an actual lifecycle event, regardless of age.
+ * Full supplied history is replayed so a fresh long-history run agrees with a
+ * rolling checkpoint. Interior invalid/missing data starts a fresh suffix.
+ */
+export function analyzeFibonacci(bars: readonly FibBar[], options: Partial<FibOptions> = {}): FibAnalysis {
+  const state = createFibReplay(options)
+  let end = bars.length
+  while (end > 0 && !bars[end - 1].isClosed) end--
+  for (let i = 0; i < end; i++) advanceFibReplay(state, bars[i])
+  return summarizeFibReplay(state)
 }

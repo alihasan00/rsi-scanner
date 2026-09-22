@@ -1,0 +1,17 @@
+.signal-context { display: grid; gap: 14px; padding-top: 12px; }
+.signal-context__heading, .signal-context__summary, .signal-context__filters { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.signal-context__heading { justify-content: space-between; }
+.signal-context h3, .signal-context p { margin: 0; }
+.signal-context__heading p, .signal-context__note, .signal-context small { color: var(--text-secondary); font-size: 12px; line-height: 1.65; }
+.signal-context__higher { display: grid; gap: 4px; min-width: 150px; }
+.signal-context__higher label, .signal-context__filters label { font-size: 12px; }
+.signal-context__summary strong { font-size: 13px; }
+.signal-context__table-wrap { overflow-x: auto; border: 1px solid var(--color-hairline); border-radius: 8px; }
+.signal-context table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 12px; }
+.signal-context caption { text-align: left; padding: 10px 12px; color: var(--text-secondary); }
+.signal-context td, .signal-context th { padding: 10px 12px; text-align: left; border-top: 1px solid var(--color-hairline); vertical-align: top; }
+.signal-context small { display: block; font-weight: normal; }
+.signal-context .is-bullish { color: #1f9d73; }
+.signal-context .is-bearish { color: #e06478; }
+.signal-context__missing { font-size: 12px; }
+.signal-context__missing summary { cursor: pointer; }

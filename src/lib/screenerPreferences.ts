@@ -19,8 +19,8 @@ export interface ScreenerPreferences {
   fibConfluence: 'any' | 'aligned'
   fibSettings: FibSettings
   srSource: 'all' | 'week' | 'month' | 'monday'
-  srSignal: 'all' | 'near' | 'sfp' | 'bullish' | 'bearish'
-  srSort: 'watchlist' | 'nearest' | 'signals' | 'symbol'
+  srSignal: 'all' | 'near' | 'near-atr' | 'sfp' | 'bullish' | 'bearish'
+  srSort: 'watchlist' | 'nearest' | 'atr' | 'signals' | 'symbol'
   harmonicPattern: 'all' | 'gartley' | 'bat' | 'butterfly'
   harmonicDirection: 'any' | 'bullish' | 'bearish'
   harmonicStage: 'all' | 'forming' | 'approaching' | 'zone'
@@ -61,8 +61,8 @@ export const DEFAULT_SCREENER_PREFERENCES: Readonly<ScreenerPreferences> = Objec
 
 const SIGNALS = ['all', 'divergence', 'trendline', 'fib', 'sr', 'harmonic'] as const
 const SR_SOURCES = ['all', 'week', 'month', 'monday'] as const
-const SR_SIGNALS = ['all', 'near', 'sfp', 'bullish', 'bearish'] as const
-const SR_SORTS = ['watchlist', 'nearest', 'signals', 'symbol'] as const
+const SR_SIGNALS = ['all', 'near', 'near-atr', 'sfp', 'bullish', 'bearish'] as const
+const SR_SORTS = ['watchlist', 'nearest', 'atr', 'signals', 'symbol'] as const
 const HARMONIC_PATTERNS = ['all', 'gartley', 'bat', 'butterfly'] as const
 const HARMONIC_DIRECTIONS = ['any', 'bullish', 'bearish'] as const
 const HARMONIC_STAGES = ['all', 'forming', 'approaching', 'zone'] as const

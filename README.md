@@ -11,6 +11,8 @@ and RSI charts; **Fibs** shows price candles with an impulse trendline;
 Each tab has its own signal filters. Binance REST seeds
 the candle history and combined kline WebSocket streams keep it current. Open
 any card for aligned price, Heikin-Ashi, and RSI charts or the Fib system view.
+Every card also opens **Context** for combined evidence and completed higher-timeframe
+candles, and **Research** for dated comparisons with explicit trading costs.
 The interface uses Ant Design components with the supplied dark purple theme.
 
 This repository contains the frontend only. The standalone Rust data tool lives
@@ -118,32 +120,71 @@ close, not wick extremes, and appears on minute/hour charts only. UTC
 calendar boundaries control updates; incomplete source periods are omitted.
 
 Cards show the nearest support below live price and resistance above it,
-their source, and distance in percent. A level changes roles when crossed.
+their source, and distance in percent and completed-candle ATR. A level changes roles when crossed.
 Open a card for the chart, all available levels with source dates, and
 recent bullish/bearish swing failures. A confirmed sweep wicks through a
 level and closes back on the approach side; the preceding contiguous
 candle must close on that side. Signals cover the latest 3 closed candles
 on the selected reaction timeframe. Forming sweeps stay provisional.
 
-Filters select the level source, **Within 0.5%**, and confirmed sweeps in
+Filters select the level source, **Within 0.5%**, optional **Within 1 ATR**, and confirmed sweeps in
 either or one direction. **All pairs / Starred** applies immediately from
 the results toolbar, to the right of sorting and card size. The **Filters**
 badge counts only choices in the modal, excluding the pair collection.
 The default **Watchlist order** matches the other tabs: BTC, ETH, SOL, and
 the rest of the Crypto list, or exchange listing order on TradFi. Nearest
-level, recent sweeps, and name sorts are also available. Search, favorites,
+level by percent or ATR, recent sweeps, and name sorts are also available. Search, favorites,
 timeframe, and density are shared with the other tabs; RSI and Fib signal
 filters do not restrict this tab.
 
-The daily context feed runs only while this tab is active, separately from
+The daily context feed runs for this tab's pairs or only the selected pair when
+a detail view is open from another tab, separately from
 the selected reaction timeframe. It uses up to 180 closed daily candles,
 exchange-clock closure, four concurrent seeds, a rate-limit cooldown, and
-midnight refresh. Switching the market or leaving the tab cancels it.
+midnight refresh. Switching market or context scope cancels the previous feed.
 
 The lecture's Fib/anchored-volume-profile levels, VSA-cluster confluence,
 and 4h boxes require discretionary selection and are not estimated here.
 **How to read this** and **Settings** explain this scope. Calendar liquidity
 is context, not an entry system. See [the lecture rules](docs/support-resistance.md).
+
+Open **S&R** or **Context** in any card for confirmed swing highs/lows, equal-level
+clusters, structure breaks, and break → retest → continuation tracking. Sweeps
+show penetration, close-back distance, wick/body proportions and relative volume.
+These are candle measurements, not order-flow or resting-liquidity observations.
+See [structure rules and limitations](docs/market-structure.md).
+
+### Combined context and research
+
+**Context** joins divergence, recent RSI trendline breaks, Fib/harmonic location,
+calendar/swing sweeps and price structure at the latest completed candle. It shows
+direction, age, confirmation time, conflicts and missing evidence. Related signals
+share an evidence family; counts are not probabilities. Optional direction and
+confirmed-trigger filters change the display without changing strategy rules.
+
+Higher-timeframe context uses actual completed exchange candles with Wilder RSI(14)
+and divergence analysis. Only the selected pair and interval are fetched, once per
+minute while Context is open. Market/symbol changes cancel the old request; the
+highest supported interval (1w) has no higher choice. Same-timeframe RSI above/below
+50 is not added as a mandatory reversal filter.
+
+**Research** compares Wilder RSI 12/14/16 and two separately defined experimental
+oscillators. It freezes candidate selection on a 60% training split, then reports
+20% validation and 20% holdout results, costs, sample size, forward returns,
+favorable/adverse excursions and realized drawdown. The simulation enters on the
+next candle open, applies ATR stops/targets and excludes outcomes crossing split
+boundaries or data gaps. Spot is long-only; Futures use an explicit assumed carry
+cost rather than reconstructed funding. Export CSV or complete JSON snapshots.
+The existing RSI-50 study and live Wilder RSI(14) scanner remain unchanged.
+See [research methodology and CLI](docs/research-evaluation.md).
+
+Fib plans now retain lifecycle state beyond the 500-candle discovery window, with
+bounded browser checkpoints and explicit warnings when gaps, corrections or storage
+retention prevent reliable restoration. See [Fib continuity](docs/fibonacci-system.md).
+Bat details also offer a separate strict-geometry research disclosure; the lecture
+ratios remain the default detector. These additions independently implement concepts
+from the [LuxAlgo review](docs/luxalgo-review.md); they do not copy its Pine code or
+establish improved trading performance.
 
 ### Harmonic Patterns
 

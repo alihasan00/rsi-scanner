@@ -1,7 +1,8 @@
 import type { Candle, Timeframe } from '../types'
 import { isValidCandle } from './rsiHistory'
+import { MARKETS } from './markets'
+import type { ScreenerMarket } from './markets'
 
-const REST_BASE = 'https://api.binance.com/api/v3'
 const PAGE_LIMIT = 1_000
 export const MAX_HISTORY_CANDLES = 100_250
 
@@ -19,6 +20,8 @@ export interface HistoryProgress {
 export interface ClosedHistoryRequest {
   symbol: string
   timeframe: Timeframe
+  /** Defaults to Spot for existing backtest callers. */
+  market?: ScreenerMarket
   count: number
   /** Inclusive upper boundary for the candle CLOSE timestamp. */
   endTime?: number
@@ -29,6 +32,7 @@ export interface ClosedHistoryRequest {
 export interface ClosedCandleHistory {
   symbol: string
   timeframe: Timeframe
+  market: ScreenerMarket
   candles: Candle[]
   requestedCount: number
   /** Snapshot read before pagination, never the potentially skewed client clock. */
@@ -97,14 +101,16 @@ export async function fetchClosedCandleHistory(
   request: ClosedHistoryRequest,
   fetcher: typeof fetch = fetch,
 ): Promise<ClosedCandleHistory> {
-  const { symbol, timeframe, count, endTime, signal, onProgress } = request
+  const { symbol, timeframe, count, endTime, signal, onProgress, market = 'spot' } = request
   validateHistoryIdentity(symbol, timeframe)
+  if (!Object.hasOwn(MARKETS, market)) throw new TypeError('Unsupported Binance market')
+  const restBase = MARKETS[market].restBase
   if (!Number.isSafeInteger(count) || count < 1 || count > MAX_HISTORY_CANDLES) {
     throw new RangeError(`count must be between 1 and ${MAX_HISTORY_CANDLES}`)
   }
   if (endTime !== undefined) validateTimestamp(endTime, 'endTime')
   signal?.throwIfAborted()
-  const clockResponse = await fetcher(`${REST_BASE}/time`, { signal })
+  const clockResponse = await fetcher(`${restBase}/time`, { signal })
   if (!clockResponse.ok) throw new Error(`Binance clock request failed (HTTP ${clockResponse.status})`)
   const clockData: unknown = await clockResponse.json()
   if (!clockData || typeof clockData !== 'object' || !('serverTime' in clockData)
@@ -128,7 +134,7 @@ export async function fetchClosedCandleHistory(
     })
     let page: Candle[]
     try {
-      const response = await fetcher(`${REST_BASE}/klines?${params}`, { signal })
+      const response = await fetcher(`${restBase}/klines?${params}`, { signal })
       if (!response.ok) throw new Error(`Binance history request failed (HTTP ${response.status})`)
       page = parsePage(await response.json(), timeframe, cursor)
     } catch (cause) {
@@ -152,7 +158,7 @@ export async function fetchClosedCandleHistory(
     warnings.push(`Loaded ${candles.length} of ${count} requested closed candles.`)
   }
   return {
-    symbol, timeframe, candles, requestedCount: count, serverTime, asOf,
+    symbol, timeframe, market, candles, requestedCount: count, serverTime, asOf,
     complete: candles.length === count && error === null,
     error, warnings,
   }

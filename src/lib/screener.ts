@@ -22,7 +22,10 @@ const analysisCache = new Map<string, CacheEntry>()
 
 /** Live ticks reuse immutable closed-bar analysis; corrected history invalidates it. */
 export function getScreenerAnalysis(symbol: string, bars: readonly RsiBar[], settings: ScreenerSettings): ScreenerAnalysis {
-  const closed = bars.filter((bar) => bar.isClosed)
+  // Replay treats an interior preview as an interruption; only tail previews are inert.
+  let end = bars.length
+  while (end > 0 && bars[end - 1].isClosed === false) end--
+  const closed = bars.slice(0, end)
   const settingsKey = `${settings.showHiddenDivergences}:${settings.requireBodyAgreement}:${settings.requireSameRsiCycle}:${settings.divergenceInvalidationAnchor}`
   const cached = analysisCache.get(symbol)
   if (cached && cached.settingsKey === settingsKey && cached.closed.length === closed.length

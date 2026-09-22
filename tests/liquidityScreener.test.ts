@@ -96,6 +96,25 @@ describe('calendar source selection before analysis', () => {
 })
 
 describe('liquidity filter composition', () => {
+  test('optional ATR proximity scales by completed volatility and excludes missing or flat ATR', () => {
+    const history = bars(Array.from({ length: 20 }, () => ({ open: 100, close: 100, low: 99, high: 101 })))
+    const near = screenRow('NEARUSDT', 100, history, [level('week', 102)])
+    const far = screenRow('FARUSDT', 100, history, [level('week', 102.01)])
+    const missing = screenRow('MISSINGUSDT', 100, [], [level('week', 100)])
+    const flat = screenRow('FLATUSDT', 100, bars(Array.from({ length: 20 }, () => ({ open: 100, close: 100, high: 100, low: 100 }))), [level('week', 100)])
+    expect(near.atr).toBe(2)
+    expect(filter([near, far, missing, flat], { srSignal: 'near-atr' })).toEqual(['NEARUSDT'])
+    // Original 0.5% setting is unaffected by the optional volatility filter.
+    expect(filter([near], { srSignal: 'near' })).toEqual([])
+    const liveSpike = makeLiquidityRow({ ...near.row, snapshot: { ...near.row.snapshot, bars: [...history, { ...history.at(-1)!, openTime: history.at(-1)!.closeTime + 1, closeTime: history.at(-1)!.closeTime + HOUR, high: 10000, isClosed: false }] } }, near.history, 'all', '1h')
+    expect(liveSpike.atr).toBe(near.atr)
+  })
+  test('ATR sorting compares normalized distances and leaves unavailable volatility last', () => {
+    const a = { ...screenRow('AUSDT', 100, [], [level('week', 101)]), atr: 1 }
+    const b = { ...screenRow('BUSDT', 100, [], [level('week', 102)]), atr: 4 }
+    const missing = screenRow('CUSDT', 100, [], [level('week', 100)])
+    expect(filter([a, missing, b], { srSort: 'atr' })).toEqual(['BUSDT', 'AUSDT', 'CUSDT'])
+  })
   test('includes exactly 0.5% on either side, includes exact touches, and excludes farther levels', () => {
     const items = [
       screenRow('ABOVEUSDT', 200, [], [level('week', 201)]),

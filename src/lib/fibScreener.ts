@@ -1,28 +1,20 @@
 import type { RsiBar } from '../types'
-import { analyzeFibonacci, fibPrice, getFibLiveContext, isActiveFibSetup } from './fibonacci'
+import { fibPrice, getFibLiveContext, isActiveFibSetup } from './fibonacci'
 import type { FibAnalysis, FibSetup } from './fibonacci'
 import type { FibSettings } from './fibPreferences'
 
-interface CachedFib {
-  bars: readonly RsiBar[]
-  settingsKey: string
-  analysis: FibAnalysis
-}
-const cache = new Map<string, CachedFib>()
+import { createFibAnalysisCache } from './fibReplayCache'
+export { createFibAnalysisCache } from './fibReplayCache'
 
-/** Reuse closed-candle work on live ticks; include gaps and corrections in identity. */
-export function getFibAnalysis(symbol: string, bars: readonly RsiBar[], settings: FibSettings): FibAnalysis {
-  let end = bars.length
-  while (end > 0 && bars[end - 1].isClosed === false) end--
-  const history = bars.slice(Math.max(0, end - 500), end)
-  const settingsKey = JSON.stringify(settings)
-  const previous = cache.get(symbol)
-  if (previous?.settingsKey === settingsKey && history.length === previous.bars.length
-    && history.every((bar, index) => bar === previous.bars[index])) return previous.analysis
-  const analysis = analyzeFibonacci(history, settings)
-  cache.set(symbol, { bars: history, settingsKey, analysis })
-  return analysis
+const cache = createFibAnalysisCache()
+
+/** Identity must include market, timeframe and symbol for durable lifecycle tracking. */
+export function getFibAnalysis(identity: string, bars: readonly RsiBar[], settings: FibSettings): FibAnalysis {
+  return cache.get(identity, bars, settings)
 }
+
+/** Explicitly forget this instrument's lifecycle checkpoints for all Fib settings. */
+export function resetFibAnalysis(identity: string): void { cache.reset(identity) }
 
 export const FIB_STATUS_LABELS: Record<FibSetup['status'], string> = {
   watching: 'Awaiting entry', entered: 'Entry reached', managing: 'Managing targets',

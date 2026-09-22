@@ -119,6 +119,19 @@ describe('screener analysis cache', () => {
     expect(hasConfirmedSignal(completed)).toBe(false)
   })
 
+  test('an inserted interior preview interrupts replay even when every closed object remains identical', () => {
+    const history = bullishDivergence()
+    const initial = getScreenerAnalysis('CACHE-INTERIOR-PREVIEW', history, SETTINGS)
+    expect(initial.divergences).toHaveLength(1)
+    const interruption = { ...bar(8), isClosed: false }
+    const interrupted = [...history.slice(0, 8), interruption, ...history.slice(8)]
+    const result = getScreenerAnalysis('CACHE-INTERIOR-PREVIEW', interrupted, SETTINGS)
+    expect(result).not.toBe(initial)
+    expect(result.divergences).toEqual([])
+    expect(result).toEqual(getScreenerAnalysis('CACHE-INTERIOR-FRESH', interrupted, SETTINGS))
+    expect(getScreenerAnalysis('CACHE-INTERIOR-PREVIEW', [...interrupted, { ...bar(11), isClosed: false }], SETTINGS)).toBe(result)
+  })
+
   test('historical correction invalidates the cache even with identical length and latest candle', () => {
     const history = bullishDivergence()
     const initial = getScreenerAnalysis('CACHE-CORRECTION', history, SETTINGS)

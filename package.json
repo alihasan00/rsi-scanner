@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test": "bun test",
     "backtest:divergence": "bun run scripts/backtest-divergence.ts",
+    "backtest:research": "bun run scripts/backtest-research.ts",
     "check:symbols": "bun run scripts/check-symbols.ts",
     "preview": "vite preview"
   },

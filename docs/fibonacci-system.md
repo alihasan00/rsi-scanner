@@ -142,12 +142,68 @@ missed-entry handling, and consumed-origin tracking are automation choices.
 The transcript specifies the 50% significance test and suggests three or four
 bars of maturity, but does not specify this full algorithm.
 
-Analysis uses the latest contiguous suffix of at most 500 closed candles.
-Missing or malformed candles break that sequence rather than being filled with
-invented data. Signals depend on the history available inside that window; the
-500-candle cap is a computation limit, not the lecturer's definition of an old
-structure. The open candle never supplies evidence for a historical pivot or
-lifecycle transition.
+New structure discovery uses at most 500 contiguous closed candles. Once a
+plan is observed, its lifecycle is retained independently of that discovery
+window: resting orders, frozen anchors, actual entry average, consumed origin,
+targets, remaining position and stop survive indefinitely until a lifecycle
+event resolves or replaces the plan. An old resting plan can still extend its
+endpoint and wait for three new confirming candles; a filled plan keeps its
+anchors. The 500-candle cap is a computation limit, not a trade expiry rule.
+The open candle never supplies evidence for a pivot or lifecycle transition.
+
+The replay engine processes every supplied closed candle causally and bounds
+its retained discovery history to 500. A full-history replay and a continuing
+rolling replay therefore agree after the original anchors leave the chart.
+The returned `closedBars` remains the available discovery count (at most 500),
+while anchor indices are stable ordinals in the uninterrupted replay. Chart
+placement continues to use anchor timestamps.
+
+### Reloads, corrections and explicit interruptions
+
+The scanner maintains a checkpoint immediately before its latest 500-candle
+correction window. The checkpoint itself holds up to 500 discovery candles,
+plus bounded structure and plan state. The saved record also includes exact
+OHLCV identity strings for the latest 3,000 observed candles, matching the
+production feed cap. This detects corrections before the replay window while
+allowing unchanged broader snapshots to continue the old plan. No age limit
+is imposed on the active plan.
+Keys include market, timeframe, symbol and all five Fib settings. RSI values
+are not part of Fib identity; timestamps, closure state and all OHLCV fields
+are compared by value, including when reconnects replace candle objects.
+
+- A matching reconnect restores the checkpoint and replays subsequent closes.
+  The UI identifies restored state because older candles remain checkpointed
+  and cannot be independently revalidated from a short reconnect response.
+- Corrections inside the retained replay window rewind to its baseline and
+  recalculate subsequent fills, targets and stops. No stale execution event is
+  carried forward. A full authoritative history can rebuild older corrections.
+- Changed or unverifiable evidence before the replay window cannot safely
+  repair the checkpoint without the original uninterrupted history. Unchanged
+  broader fetches join through verified overlap, and a short reconnect preserves
+  older source identities for subsequent broader fetches.
+  The scanner rebuilds from available evidence and explicitly reports that
+  older lifecycle tracking was reset. Settings changes follow the same policy
+  when the required older evidence is unavailable; checkpoints from different
+  templates are never combined.
+- Missing, invalid, or unfinished interior candles interrupt replay. A
+  reconnect that skips an interval or a request that moves backwards in time
+  explicitly resets older tracking. It never invents intermediate fills or
+  treats a missing lifecycle as a stop or target. The most recent contiguous
+  suffix can discover new setups.
+- Empty/loading snapshots do not erase saved tracking. An explicit
+  `resetFibAnalysis(identity)` clears the in-memory plan and every persisted
+  template for that market/timeframe/symbol.
+
+Browser persistence writes only when closed evidence changes, never on live
+price ticks. It retains at most 16 recent complete checkpoints within a
+1.5-million-character budget, with a 500,000-character limit per checkpoint. Quiet markets with no plan or
+pending impulse do not take storage slots; filled positions have retention
+priority over waiting plans and resolved chart context.
+Small eviction notices (up to 1,000 identities) make a later reload report a
+storage-retention interruption explicitly. If browser storage is blocked or
+full, the UI reports that reload recovery is unavailable; in-memory tracking
+continues. A user who clears browser data also clears these recovery records.
+These checkpoints describe hypothetical OHLC scenarios, not exchange orders.
 
 ## Level calculations
 

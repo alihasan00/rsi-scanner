@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  analyzeFibonacci, DEFAULT_FIB_OPTIONS, fibPrice, FIB_REFERENCE_RATIOS,
+  advanceFibReplay, analyzeFibonacci, createFibReplay, DEFAULT_FIB_OPTIONS, fibPrice, FIB_REFERENCE_RATIOS, summarizeFibReplay,
   getFibLiveContext, isActiveFibSetup,
 } from '../src/lib/fibonacci'
 import type { FibBar, FibOptions, FibSetup } from '../src/lib/fibonacci'
@@ -403,6 +403,17 @@ describe('live isolation and incomplete history', () => {
     }
   })
 
+  test('checkpoint history is detached from mutable input candles', () => {
+    const bars = Array.from({ length: 200 }, (_, i) => bar(i, 90, 110, 100))
+    const checkpoint = createFibReplay()
+    bars.forEach((candle) => advanceFibReplay(checkpoint, candle))
+    expect(summarizeFibReplay(checkpoint).sma200).toBe(100)
+    bars[0].close = 200
+    bars[0].high = 210
+    expect(summarizeFibReplay(checkpoint).sma200).toBe(100)
+    expect(checkpoint.history[0]).not.toBe(bars[0])
+  })
+
   test('does not mutate bars or options, and accepts empty history', () => {
     const bars = bullish()
     const original = structuredClone(bars)
@@ -411,5 +422,46 @@ describe('live isolation and incomplete history', () => {
     expect(() => analyzeFibonacci(bars, Object.freeze({ scale: 'log' }))).not.toThrow()
     expect(bars).toEqual(original)
     expect(analyzeFibonacci([])).toMatchObject({ setup: null, setups: [], structure: 'insufficient', closedBars: 0 })
+  })
+})
+
+describe('active Fib lifecycle beyond bounded discovery history', () => {
+  test.each([false, true])('retains managing state beyond candle 505 through an eventual stop (short=%p)', (short) => {
+    const bars = bullish()
+    append(bars, 145, 160)
+    while (bars.length < 1_205) append(bars, 160, 170, 165)
+    const transform = (history: FibBar[]) => short ? mirror(history) : history
+    const entered = setup(transform(bars.slice(0, 22)))
+    for (const length of [500, 504, 505, 1_005, 1_205]) {
+      const analysis = analyzeFibonacci(transform(bars.slice(0, length)))
+      expect(analysis.closedBars).toBe(500)
+      expect(analysis.setup).toMatchObject({
+        id: entered.id, status: 'managing', remainingPercent: 80, resolvedAt: null,
+        start: entered.start, end: entered.end,
+      })
+      expect(analysis.setup?.currentStop).toBeCloseTo(short ? 253.26 : 146.74)
+    }
+    append(bars, 140, 160, 150)
+    const exited = analyzeFibonacci(transform(bars))
+    expect(exited.setup).toMatchObject({ id: entered.id, status: 'stopped', remainingPercent: 0, resolvedAt: bars.at(-1)!.closeTime })
+    expect(exited.setup?.events.filter((event) => event.kind === 'stop')).toHaveLength(1)
+  })
+
+  test('retains an old resting plan and extends it causally after its origin leaves discovery', () => {
+    const bars = bullish()
+    while (bars.length < 1_005) append(bars, 169, 181, 175)
+    const original = setup(bars)
+    expect(original.status).toBe('watching')
+    append(bars, 181, 200, 195)
+    expect(analyzeFibonacci(bars).pendingDirection).toBe('long')
+    expect(setup(bars).status).toBe('superseded')
+    append(bars, 180, 196, 190)
+    append(bars, 179, 194, 188)
+    append(bars, 178, 192, 186)
+    const extended = setup(bars)
+    expect(extended.status).toBe('watching')
+    expect(extended.start).toEqual(original.start)
+    expect(extended.end.price).toBe(200)
+    expect(extended.detectedAt).toBe(bars.at(-1)!.closeTime)
   })
 })

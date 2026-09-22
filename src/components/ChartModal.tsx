@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Empty, Modal, Segmented, Tag } from 'antd'
+import { Alert, Empty, Modal, Segmented, Tag } from 'antd'
 import { useShallow } from 'zustand/react/shallow'
 import { useSymbolData } from '../hooks/useSymbolData'
 import { useDivergences } from '../hooks/useDivergences'
@@ -16,6 +16,8 @@ import { FibChart } from './FibChart'
 import { FibDetails } from './FibDetails'
 import { LiquidityDetails } from './LiquidityDetails'
 import { HarmonicDetails } from './HarmonicDetails'
+import { SignalContextPanel } from './SignalContextPanel'
+import { ResearchPanel } from './ResearchPanel'
 import { RsiTrendlineGuide, RsiTrendlineStatus } from './RsiTrendlineStatus'
 import './ChartModal.css'
 
@@ -37,10 +39,9 @@ export function ChartModal() {
     })),
   )
   const open = symbol !== null
-  const liquidityTab = useScannerStore((state) => state.screenerFilters.signal === 'sr')
   const harmonicTab = useScannerStore((state) => state.screenerFilters.signal === 'harmonic')
   const showTrendlines = useScannerStore((state) => state.screenerFilters.signal === 'trendline')
-  const [view, setView] = useState<'rsi' | 'fib' | 'sr' | 'harmonic'>(() => {
+  const [view, setView] = useState<'rsi' | 'fib' | 'sr' | 'harmonic' | 'context' | 'research'>(() => {
     const signal = useScannerStore.getState().screenerFilters.signal
     return signal === 'sr' || signal === 'fib' || signal === 'harmonic' ? signal : 'rsi'
   })
@@ -48,7 +49,7 @@ export function ChartModal() {
   const fibSettings = useScannerStore((state) => state.fibSettings)
   const { price, series, bars } = useSymbolData(symbol ?? '', open)
   const trendlineAnalysis = useRsiTrendlines(symbol ?? '', bars, open && showTrendlines && view === 'rsi')
-  const fib = useMemo(() => getFibAnalysis(symbol ?? '', bars, fibSettings), [symbol, bars, fibSettings])
+  const fib = useMemo(() => getFibAnalysis(`${market}:${timeframe}:${symbol ?? ''}`, bars, fibSettings), [symbol, market, timeframe, bars, fibSettings])
   const divergences = useDivergences(bars, open && !showTrendlines, {
     includeHidden: showHiddenDivergences,
     requireBodyAgreement,
@@ -100,8 +101,8 @@ export function ChartModal() {
         </div>
       }
     >
-      <div className="chart-modal__view"><Segmented<'rsi' | 'fib' | 'sr' | 'harmonic'> aria-label="Chart view" value={view} onChange={setView} options={[...(harmonicTab ? [{ value: 'harmonic' as const, label: 'Harmonic pattern' }] : []), ...(liquidityTab ? [{ value: 'sr' as const, label: 'Support & resistance' }] : []), { value: 'rsi', label: 'Price & RSI' }, { value: 'fib', label: 'Fib system' }]} />{view === 'fib' && <Segmented aria-label="Fib chart levels" value={fibGrid ? 'grid' : 'trade'} onChange={(value) => setFibGrid(value === 'grid')} options={[{ value: 'trade', label: 'Trade levels' }, { value: 'grid', label: 'Full grid' }]} />}</div>
-      {view === 'harmonic' ? <HarmonicDetails symbol={symbol ?? ''} bars={bars} price={price} /> : view === 'sr' ? <LiquidityDetails symbol={symbol ?? ''} bars={bars} price={price} timeframe={timeframe} /> : view === 'fib' ? <><FibChart symbol={symbol ?? ''} bars={bars} setup={fib.setup} showReferenceGrid={fibGrid} /><FibDetails analysis={fib} price={price} live={isLive} market={market} /></> : <div className="chart-modal__chart-area" ref={chartAreaRef}>
+      <div className="chart-modal__view"><Segmented<'rsi' | 'fib' | 'sr' | 'harmonic' | 'context' | 'research'> aria-label="Chart view" value={view} onChange={setView} options={[{ value: 'rsi', label: 'Price & RSI' }, { value: 'fib', label: 'Fib system' }, { value: 'sr', label: 'S&R' }, { value: 'harmonic', label: 'Harmonics' }, { value: 'context', label: 'Context' }, { value: 'research', label: 'Research' }]} />{view === 'fib' && <Segmented aria-label="Fib chart levels" value={fibGrid ? 'grid' : 'trade'} onChange={(value) => setFibGrid(value === 'grid')} options={[{ value: 'trade', label: 'Trade levels' }, { value: 'grid', label: 'Full grid' }]} />}</div>
+      {view === 'context' ? <SignalContextPanel key={`${market}:${timeframe}:${symbol}`} symbol={symbol ?? ''} market={market} timeframe={timeframe} bars={bars} price={price} fib={fib} /> : view === 'research' ? <ResearchPanel symbol={symbol ?? ''} timeframe={timeframe} market={market} /> : view === 'harmonic' ? <HarmonicDetails symbol={symbol ?? ''} bars={bars} price={price} /> : view === 'sr' ? <LiquidityDetails symbol={symbol ?? ''} bars={bars} price={price} timeframe={timeframe} /> : view === 'fib' ? <>{fib.continuity && <Alert type={fib.continuity.state === 'reset' ? 'warning' : 'info'} showIcon title={fib.continuity.state === 'reset' ? 'Fib history rebuilt' : 'Fib plan history restored'} description={fib.continuity.detail} />}{fib.persistenceIssue && <Alert type="warning" title="Browser storage unavailable" description="Fib plans continue in this session, but continuity across reloads cannot be saved." />}<FibChart symbol={symbol ?? ''} bars={bars} setup={fib.setup} showReferenceGrid={fibGrid} /><FibDetails analysis={fib} price={price} live={isLive} market={market} /></> : <div className="chart-modal__chart-area" ref={chartAreaRef}>
         <canvas ref={canvasRef} className="chart-modal__base-canvas" role="img" aria-label={chartLabel} />
         {!latestBar && (
           <div className="chart-modal__empty">

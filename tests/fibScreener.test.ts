@@ -5,7 +5,7 @@ import { analyzeFibonacci, fibPrice } from '../src/lib/fibonacci'
 import type { FibAnalysis, FibDirection, FibScale, FibStatus } from '../src/lib/fibonacci'
 import { DEFAULT_FIB_SETTINGS } from '../src/lib/fibPreferences'
 import type { FibSettings } from '../src/lib/fibPreferences'
-import { getFibAnalysis, matchesFibFilters } from '../src/lib/fibScreener'
+import { createFibAnalysisCache, getFibAnalysis, matchesFibFilters } from '../src/lib/fibScreener'
 import { filterScreenerRows } from '../src/lib/screener'
 import type { ScreenerFilters, ScreenerRow } from '../src/lib/screener'
 
@@ -360,5 +360,271 @@ describe('Fib screener integration', () => {
       'RSI-CONFIRMED', 'RSI-OLD', 'RSI-FORMING',
     ])
     expect(symbols(rows, { ...filters, signal: 'confirmed' })).toEqual(['RSI-CONFIRMED'])
+  })
+})
+
+
+class MemoryCheckpointStorage {
+  values = new Map<string, string>()
+  writes = 0
+  fail = false
+  get length() { return this.values.size }
+  key(index: number) { return [...this.values.keys()][index] ?? null }
+  getItem(key: string) { return this.values.get(key) ?? null }
+  setItem(key: string, value: string) {
+    if (this.fail) throw new Error('Storage full')
+    this.writes++
+    this.values.set(key, value)
+  }
+  removeItem(key: string) { this.values.delete(key) }
+}
+
+function longRunningPlan(length = 1_105): RsiBar[] {
+  const bars = impulse()
+  bars.push(bar(16, 102, { low: 100, high: 105 }))
+  while (bars.length < length) bars.push(bar(bars.length, 107.5, { low: 105, high: 110 }))
+  return bars
+}
+
+describe('durable Fib checkpoints and corrected rolling history', () => {
+  test('rolling 500-candle snapshots agree with full replay beyond 1005 candles and eventual exit', () => {
+    const storage = new MemoryCheckpointStorage()
+    const tracker = createFibAnalysisCache(storage)
+    const bars = longRunningPlan()
+    let latest: FibAnalysis | null = null
+    for (let end = 16; end <= bars.length; end++) {
+      latest = tracker.get('spot:1m:ROLLUSDT', bars.slice(Math.max(0, end - 500), end), DEFAULT_FIB_SETTINGS)
+      if ([17, 500, 504, 505, 1005, 1105].includes(end)) {
+        expect(latest.setup).toEqual(analyzeFibonacci(bars.slice(0, end)).setup)
+      }
+    }
+    expect(latest?.setup).toMatchObject({ status: 'managing', remainingPercent: 80, resolvedAt: null })
+    const saved = JSON.parse([...storage.values.values()][0])
+    expect(saved.window).toHaveLength(500)
+    expect(saved.baseline.history).toHaveLength(500)
+    expect(saved.baseline.setups).toHaveLength(1)
+    expect([...storage.values.values()][0].length).toBeLessThan(500_000)
+
+    bars.push(bar(bars.length, 103, { low: 100, high: 106 }))
+    const stopped = tracker.get('spot:1m:ROLLUSDT', bars.slice(-500), DEFAULT_FIB_SETTINGS)
+    expect(stopped.setup).toEqual(analyzeFibonacci(bars).setup)
+    expect(stopped.setup).toMatchObject({ status: 'stopped', remainingPercent: 0, resolvedAt: bars.at(-1)!.closeTime })
+    expect(stopped.setup?.events.filter((event) => event.kind === 'stop')).toHaveLength(1)
+    expect(latest?.setup?.status).toBe('managing')
+  })
+
+  test('production rolling 3000-candle snapshots keep an old plan past 3205 without live writes or replay resets', () => {
+    const storage = new MemoryCheckpointStorage()
+    const tracker = createFibAnalysisCache(storage)
+    const bars = longRunningPlan(3_305)
+    let latest: FibAnalysis | null = null
+    for (const end of [17, 500, 1000, 2000, 3000, ...Array.from({ length: 305 }, (_, i) => 3001 + i)]) {
+      const incoming = bars.slice(Math.max(0, end - 3000), end)
+      latest = tracker.get('spot:1m:PRODUCTIONUSDT', incoming, DEFAULT_FIB_SETTINGS)
+      expect(latest.setup).toEqual(analyzeFibonacci(bars.slice(0, end)).setup)
+      expect(latest.continuity).toBeUndefined()
+      const writes = storage.writes
+      expect(tracker.get('spot:1m:PRODUCTIONUSDT', [...incoming, bar(end, 1, { isClosed: false })], DEFAULT_FIB_SETTINGS)).toBe(latest)
+      expect(tracker.get('spot:1m:PRODUCTIONUSDT', structuredClone(incoming), DEFAULT_FIB_SETTINGS)).toBe(latest)
+      expect(storage.writes).toBe(writes)
+    }
+    expect(latest?.setup?.status).toBe('managing')
+    const saved = JSON.parse([...storage.values.values()][0])
+    expect(saved.source).toHaveLength(3000)
+    const reload = createFibAnalysisCache(storage)
+    const restored = reload.get('spot:1m:PRODUCTIONUSDT', structuredClone(bars.slice(-3000)), DEFAULT_FIB_SETTINGS)
+    expect(restored.setup).toEqual(latest?.setup)
+    expect(restored.continuity?.state).toBe('restored')
+    bars.push(bar(bars.length, 103, { low: 100, high: 106 }))
+    const exited = reload.get('spot:1m:PRODUCTIONUSDT', bars.slice(-3000), DEFAULT_FIB_SETTINGS)
+    expect(exited.setup).toEqual(analyzeFibonacci(bars).setup)
+    expect(exited.setup?.status).toBe('stopped')
+  })
+
+  test('short reconnects and single-bar updates preserve older exact evidence for a later broad fetch', () => {
+    const storage = new MemoryCheckpointStorage()
+    const tracker = createFibAnalysisCache(storage)
+    const bars = longRunningPlan(3305)
+    const active = tracker.get('spot:1m:SHORTRECONNECT', bars, DEFAULT_FIB_SETTINGS)
+    expect(tracker.get('spot:1m:SHORTRECONNECT', bars.slice(-350), DEFAULT_FIB_SETTINGS).setup).toEqual(active.setup)
+    expect(tracker.get('spot:1m:SHORTRECONNECT', bars.slice(-3000), DEFAULT_FIB_SETTINGS).setup).toEqual(active.setup)
+    bars.push(bar(bars.length, 107.5, { low: 105, high: 110 }))
+    expect(tracker.get('spot:1m:SHORTRECONNECT', bars.slice(-1), DEFAULT_FIB_SETTINGS).setup).toEqual(active.setup)
+    const reconnect = createFibAnalysisCache(storage).get('spot:1m:SHORTRECONNECT', bars.slice(-3000), DEFAULT_FIB_SETTINGS)
+    expect(reconnect.setup).toEqual(active.setup)
+    expect(reconnect.continuity?.state).toBe('restored')
+  })
+
+  test('in-place candle corrections invalidate exact cached source evidence', () => {
+    const tracker = createFibAnalysisCache(null)
+    const bars = longRunningPlan(3305)
+    const initial = tracker.get('spot:1m:INPLACEUSDT', bars.slice(-3000), DEFAULT_FIB_SETTINGS)
+    expect(initial.setup).toBeNull()
+    // Seed full original evidence, then advance using the production-sized window.
+    tracker.reset('spot:1m:INPLACEUSDT')
+    const active = tracker.get('spot:1m:INPLACEUSDT', bars, DEFAULT_FIB_SETTINGS)
+    tracker.get('spot:1m:INPLACEUSDT', bars.slice(-3000), DEFAULT_FIB_SETTINGS)
+    bars[3000].low = 100
+    const corrected = tracker.get('spot:1m:INPLACEUSDT', bars.slice(-3000), DEFAULT_FIB_SETTINGS)
+    expect(corrected.setup).toMatchObject({ id: active.setup!.id, status: 'stopped', resolvedAt: bars[3000].closeTime })
+    bars[800].low = 99
+    const earlier = tracker.get('spot:1m:INPLACEUSDT', bars.slice(-3000), DEFAULT_FIB_SETTINGS)
+    expect(earlier.continuity?.state).toBe('reset')
+    expect(earlier.setup).toBeNull()
+  })
+
+  test('reload detects a correction within 3000 source identities but before the replay checkpoint', () => {
+    const storage = new MemoryCheckpointStorage()
+    const bars = longRunningPlan(3305)
+    createFibAnalysisCache(storage).get('spot:1m:OLDSOURCEUSDT', bars, DEFAULT_FIB_SETTINGS)
+    bars[800] = { ...bars[800], low: 99 }
+    const corrected = createFibAnalysisCache(storage).get('spot:1m:OLDSOURCEUSDT', bars.slice(-3000), DEFAULT_FIB_SETTINGS)
+    expect(corrected.setup).toBeNull()
+    expect(corrected.continuity?.state).toBe('reset')
+    expect(corrected.continuity?.detail).toContain('Earlier closed-candle evidence changed')
+  })
+
+  test('reload restores an old active plan using equal-valued reconnect objects and ignores live ticks', () => {
+    const storage = new MemoryCheckpointStorage()
+    const bars = longRunningPlan()
+    const first = createFibAnalysisCache(storage).get('spot:1m:RELOADUSDT', bars, DEFAULT_FIB_SETTINGS)
+    const reloaded = createFibAnalysisCache(storage)
+    expect(reloaded.get('spot:1m:RELOADUSDT', [], DEFAULT_FIB_SETTINGS).setup).toBeNull()
+    const restored = reloaded.get('spot:1m:RELOADUSDT', structuredClone(bars.slice(-500)), DEFAULT_FIB_SETTINGS)
+    expect(restored.setup).toEqual(first.setup)
+    expect(restored.continuity?.state).toBe('restored')
+    const writes = storage.writes
+    for (const price of [80, 150, NaN]) {
+      const preview = bar(bars.length, price, { isClosed: false })
+      expect(reloaded.get('spot:1m:RELOADUSDT', [...bars.slice(-500), preview], DEFAULT_FIB_SETTINGS)).toBe(restored)
+    }
+    expect(storage.writes).toBe(writes)
+    bars.push(bar(bars.length, 103, { low: 100, high: 106 }))
+    expect(reloaded.get('spot:1m:RELOADUSDT', bars.slice(-500), DEFAULT_FIB_SETTINGS).setup)
+      .toEqual(analyzeFibonacci(bars).setup)
+  })
+
+  test('replays an interior correction after the old origin is absent, removing stale targets and position state', () => {
+    const storage = new MemoryCheckpointStorage()
+    const tracker = createFibAnalysisCache(storage)
+    const bars = longRunningPlan()
+    const original = tracker.get('spot:1m:FIXUSDT', bars, DEFAULT_FIB_SETTINGS)
+    bars[900] = bar(900, 103, { low: 100, high: 106 })
+    const corrected = tracker.get('spot:1m:FIXUSDT', bars.slice(-500), DEFAULT_FIB_SETTINGS)
+    expect(corrected.setup).toEqual(analyzeFibonacci(bars).setup)
+    expect(corrected.setup).toMatchObject({ status: 'stopped', resolvedAt: bars[900].closeTime })
+    expect(original.setup?.status).toBe('managing')
+    expect(corrected.setup?.events.filter((event) => event.kind === 'stop')).toHaveLength(1)
+    const restored = createFibAnalysisCache(storage).get('spot:1m:FIXUSDT', bars.slice(-500), DEFAULT_FIB_SETTINGS)
+    expect(restored.setup).toEqual(corrected.setup)
+  })
+
+  test('a full authoritative correction can rebuild old origins while partial pre-checkpoint corrections reset explicitly', () => {
+    const tracker = createFibAnalysisCache(null)
+    const bars = longRunningPlan()
+    tracker.get('spot:1m:EARLYUSDT', bars, DEFAULT_FIB_SETTINGS)
+    bars[8] = { ...bars[8], low: 88 }
+    const corrected = tracker.get('spot:1m:EARLYUSDT', bars, DEFAULT_FIB_SETTINGS)
+    expect(corrected.setup?.start.price).toBe(88)
+    expect(corrected.setup).toEqual(analyzeFibonacci(bars).setup)
+    // An unchanged broader reconnect joins through verified overlapping evidence.
+    expect(tracker.get('spot:1m:EARLYUSDT', bars.slice(-750), DEFAULT_FIB_SETTINGS).setup).toEqual(corrected.setup)
+    for (const count of [750, 1000]) {
+      tracker.get('spot:1m:EARLYUSDT', bars, DEFAULT_FIB_SETTINGS)
+      const partial = bars.slice(-count).map((candle, index) => index === 20 ? { ...candle, low: 99 } : candle)
+      const reset = tracker.get('spot:1m:EARLYUSDT', partial, DEFAULT_FIB_SETTINGS)
+      expect(reset.setup).toBeNull()
+      expect(reset.continuity).toMatchObject({ state: 'reset', previousSetupId: corrected.setup!.id })
+    }
+  })
+
+  test('settings changes never reuse lifecycle state from an incompatible template', () => {
+    const storage = new MemoryCheckpointStorage()
+    const tracker = createFibAnalysisCache(storage)
+    const bars = longRunningPlan()
+    const original = tracker.get('spot:1m:SETUSDT', bars, DEFAULT_FIB_SETTINGS)
+    const settings = { ...DEFAULT_FIB_SETTINGS, stopRatio: 1.04 as const }
+    const changed = tracker.get('spot:1m:SETUSDT', bars.slice(-500), settings)
+    expect(changed.setup).toBeNull()
+    expect(changed.continuity?.state).toBe('reset')
+    const switchedBack = tracker.get('spot:1m:SETUSDT', bars.slice(-500), DEFAULT_FIB_SETTINGS)
+    expect(switchedBack.setup).toEqual(original.setup)
+    expect(switchedBack.continuity?.state).toBe('restored')
+    expect(storage.length).toBe(2)
+  })
+
+  test('non-overlapping reconnects, interior gaps, and rewinds cannot silently bridge lifecycle evidence', () => {
+    for (const kind of ['gap', 'interior', 'rewind'] as const) {
+      const tracker = createFibAnalysisCache(null)
+      const bars = longRunningPlan()
+      const original = tracker.get(`spot:1m:${kind}`, bars, DEFAULT_FIB_SETTINGS)
+      const incoming = kind === 'gap' ? Array.from({ length: 20 }, (_, i) => bar(2000 + i))
+        : kind === 'interior' ? bars.slice(-500).filter((candle) => candle.openTime !== bars[900].openTime)
+          : bars.slice(500, 750)
+      const interrupted = tracker.get(`spot:1m:${kind}`, incoming, DEFAULT_FIB_SETTINGS)
+      expect(interrupted.setup).toBeNull()
+      expect(interrupted.continuity).toMatchObject({ state: 'reset', previousSetupId: original.setup!.id })
+      expect(interrupted.lastClosedAt).toBe(incoming.at(-1)!.closeTime)
+    }
+  })
+
+  test('explicit reset removes all template checkpoints while empty loading snapshots preserve them', () => {
+    const storage = new MemoryCheckpointStorage()
+    const tracker = createFibAnalysisCache(storage)
+    const bars = longRunningPlan()
+    tracker.get('spot:1m:RESETUSDT', bars, DEFAULT_FIB_SETTINGS)
+    tracker.get('spot:1m:RESETUSDT', bars, { ...DEFAULT_FIB_SETTINGS, scale: 'log' })
+    expect(storage.length).toBe(2)
+    tracker.get('spot:1m:RESETUSDT', [], DEFAULT_FIB_SETTINGS)
+    expect(storage.length).toBe(2)
+    tracker.reset('spot:1m:RESETUSDT')
+    expect(storage.length).toBe(0)
+    expect(tracker.get('spot:1m:RESETUSDT', bars.slice(-500), DEFAULT_FIB_SETTINGS).setup).toBeNull()
+  })
+
+  test('bounded storage keeps eviction notices so a reload cannot silently forget an observed plan', () => {
+    const storage = new MemoryCheckpointStorage()
+    const tracker = createFibAnalysisCache(storage)
+    const bars = impulse()
+    for (let i = 0; i < 20; i++) tracker.get(`spot:1m:RETENTION${i}`, bars, DEFAULT_FIB_SETTINGS)
+    const saved = [...storage.values.values()].map((value) => JSON.parse(value))
+    expect(saved.filter((item) => item.baseline)).toHaveLength(16)
+    expect(saved.filter((item) => item.evicted === true)).toHaveLength(4)
+    expect([...storage.values.values()].reduce((sum, value) => sum + value.length, 0)).toBeLessThanOrEqual(1_500_000)
+    const reloaded = createFibAnalysisCache(storage).get('spot:1m:RETENTION0', bars, DEFAULT_FIB_SETTINGS)
+    expect(reloaded.continuity?.state).toBe('reset')
+    expect(reloaded.continuity?.detail).toContain('storage retention')
+  })
+
+  test('quiet markets do not evict saved plans and waiting setups cannot displace filled positions', () => {
+    const storage = new MemoryCheckpointStorage()
+    const tracker = createFibAnalysisCache(storage)
+    const filled = longRunningPlan(18)
+    for (let i = 0; i < 16; i++) tracker.get(`spot:1m:POSITION${i}`, filled, DEFAULT_FIB_SETTINGS)
+    for (let i = 0; i < 100; i++) tracker.get(`spot:1m:QUIET${i}`, [bar(0), bar(1)], DEFAULT_FIB_SETTINGS)
+    expect(storage.length).toBe(16)
+    const waiting = tracker.get('spot:1m:WAITING', impulse(), DEFAULT_FIB_SETTINGS)
+    expect(waiting.persistenceIssue).toBe('unavailable')
+    expect(createFibAnalysisCache(storage).get('spot:1m:POSITION0', filled, DEFAULT_FIB_SETTINGS).setup?.status).toBe('managing')
+  })
+
+  test('malformed persisted state is rejected and storage failures leave in-memory tracking usable', () => {
+    const storage = new MemoryCheckpointStorage()
+    const tracker = createFibAnalysisCache(storage)
+    const bars = longRunningPlan()
+    const original = tracker.get('spot:1m:STOREUSDT', bars, DEFAULT_FIB_SETTINGS)
+    const key = storage.key(0)!
+    const malformed = JSON.parse(storage.getItem(key)!)
+    malformed.baseline.pending = { endIndex: -999 }
+    storage.values.set(key, JSON.stringify(malformed))
+    const invalid = createFibAnalysisCache(storage).get('spot:1m:STOREUSDT', bars.slice(-500), DEFAULT_FIB_SETTINGS)
+    expect(invalid.setup).toBeNull()
+    expect(invalid.continuity?.state).toBe('reset')
+    storage.fail = true
+    bars.push(bar(bars.length, 103, { low: 100, high: 106 }))
+    const exited = tracker.get('spot:1m:STOREUSDT', bars.slice(-500), DEFAULT_FIB_SETTINGS)
+    expect(exited.setup?.id).toBe(original.setup?.id)
+    expect(exited.setup?.status).toBe('stopped')
+    expect(exited.persistenceIssue).toBe('unavailable')
   })
 })

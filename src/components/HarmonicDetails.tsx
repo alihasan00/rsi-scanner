@@ -5,6 +5,7 @@ import { useScannerStore } from '../store/scannerStore'
 import { getFeedStatus, subscribeFeedStatus } from '../store/feedStatusStore'
 import { getHarmonicAnalysis } from '../lib/harmonicScreener'
 import { getHarmonicLiveContext, getHarmonicTargets, HARMONIC_C_RANGE } from '../lib/harmonics'
+import { getBatGeometryDiagnostics } from '../lib/harmonicQuality'
 import { HARMONIC_NAMES, HARMONIC_STAGES, selectHarmonicSetup } from '../lib/harmonicRows'
 import { formatQuotePrice } from '../lib/priceFormatting'
 import { HarmonicChart } from './HarmonicChart'
@@ -28,6 +29,7 @@ export function HarmonicDetails({ symbol, bars, price }: { symbol: string; bars:
   const lastBar = bars.at(-1)
   const live = getHarmonicLiveContext(setup, price, lastBar?.isClosed === false ? lastBar : undefined)
   const targets = getHarmonicTargets(setup)
+  const batGeometry = getBatGeometryDiagnostics(setup)
   const stale = feed.state !== 'ready' || feed.updatedAt === null || now - feed.updatedAt > 60_000
   const priceLabel = (value: number) => `${formatQuotePrice(value)} USDT`
   return <div className="harmonic-details">
@@ -47,6 +49,12 @@ export function HarmonicDetails({ symbol, bars, price }: { symbol: string; bars:
       <tr><th>C / AB</th><td>{setup.cRatio.toFixed(4)}</td><td>Valid within {HARMONIC_C_RANGE.join('–')}</td></tr>
       <tr><th>D / XA{setup.zoneNarrowed ? ' · base' : ''}</th><td>{setup.dRatioRange.map((value) => value.toFixed(4)).join('–')}</td><td>{setup.d ? 'Zone touched; reversal unconfirmed' : 'Projected zone'}</td></tr>
     </tbody></table></div>
+    {batGeometry.applicable && <details className="harmonic-details__method">
+      <summary>Optional strict Bat geometry · {batGeometry.passes === null ? 'awaiting observed D' : batGeometry.passes ? 'measurements within range' : 'outside stricter ranges'}</summary>
+      <p className="harmonic-details__manual">Research comparison using narrower Bat ratios. The lecture pattern remains unchanged. D measurements use the first completed candle touching the zone, which is not a confirmed reversal pivot.</p>
+      <div className="harmonic-table-wrap"><table className="harmonic-table"><caption>Strict Bat research profile</caption><thead><tr><th>Ratio</th><th>Observed</th><th>Research range</th><th>Result</th></tr></thead><tbody>{batGeometry.checks.map((check) => <tr key={check.name}><th>{check.name}</th><td>{check.value === null ? 'Awaiting D' : check.value.toFixed(4)}</td><td>{check.range.map((value) => value.toFixed(3)).join('–')}</td><td>{check.passed === null ? 'Unavailable' : check.passed ? 'Within range' : 'Outside range'}</td></tr>)}</tbody></table></div>
+      <p className="harmonic-details__manual">AD / XA uses 0.886 ± 0.020. These measurements are separate context and do not establish a better-performing strategy.</p>
+    </details>}
     {setup.kind === 'butterfly' && <p className="harmonic-details__manual">{setup.zoneNarrowed ? `D zone narrowed by B→C confluence. Original X→A zone: ${priceLabel(setup.baseZone.low)} – ${priceLabel(setup.baseZone.high)}.` : 'The B→C extension does not narrow this Butterfly. Its full X→A zone is shown.'}</p>}
     <div className="harmonic-table-wrap"><table className="harmonic-table"><caption>Take-profit references · {setup.kind === 'butterfly' ? 'C→D' : 'A→D'}</caption><thead><tr><th>Target</th><th>Ratio</th><th>Price</th></tr></thead><tbody>{targets.map((target, index) => <tr key={target.ratio}><th>TP {index + 1}</th><td>{target.ratio}</td><td>{priceLabel(target.price)}</td></tr>)}</tbody></table></div>
     <p className="harmonic-details__manual">{setup.d ? `Targets use the first closed D touch at ${priceLabel(setup.d.price)}.` : `Projected targets use the D zone midpoint at ${priceLabel((setup.zone.low + setup.zone.high) / 2)}; they will update when D is touched.`} Levels follow the video templates and do not imply an executed entry or a confirmed reversal.</p>

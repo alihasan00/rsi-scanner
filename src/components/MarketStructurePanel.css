@@ -1,0 +1,10 @@
+.market-structure{padding:12px 14px;background:#111824;border:1px solid #263245;border-radius:8px;color:#c8d3e3;font-size:12px;line-height:1.5}
+.market-structure__header,.market-structure__metrics,.market-structure__filters,.market-structure__events{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.market-structure__header{justify-content:space-between;margin-bottom:7px}.market-structure__header strong{font-size:13px;color:#e3eaf4}
+.market-structure__metrics{gap:8px 18px;color:#9aadc5;margin-bottom:10px}.market-structure__metrics b{color:#dde6f2;font-weight:500}
+.market-structure__filters{margin-bottom:8px}.market-structure__filters button{border:1px solid #344459;background:transparent;color:#a7b8cf;padding:3px 9px;border-radius:5px;cursor:pointer;font:inherit}.market-structure__filters button[aria-pressed=true]{background:#263b53;border-color:#5c86ad;color:#f0f5fb}.market-structure__filters button:focus-visible{outline:2px solid #7fbcff;outline-offset:2px}
+.market-structure__row{display:grid;grid-template-columns:minmax(150px,1.3fr) minmax(120px,1fr) minmax(110px,1fr);gap:10px;padding:5px 0;border-top:1px solid #253142}.market-structure__row b{font-weight:500;color:#e0e8f2;margin-left:5px}.market-structure__row.is-heading{border:0;color:#879bb4;font-size:11px}
+.market-structure__events{margin-top:10px}.market-structure__event,.market-structure__retest,.market-structure__trend{padding:2px 7px;border-radius:4px;background:#1c2b3c}.market-structure .is-bullish{color:#75d7b2}.market-structure .is-bearish{color:#f69d9d}.market-structure__retest{color:#d0c397}
+.market-structure__empty,.market-structure__note{color:#8498b0;margin:7px 0 0}.market-structure__note{font-size:11px}
+.market-structure__quality{grid-column:1 / -1;color:#9aadc5;font-size:11px}
+@media(max-width:600px){.market-structure__row{grid-template-columns:minmax(110px,1.2fr) minmax(80px,1fr) minmax(75px,1fr);gap:5px;font-size:11px}.market-structure__row b{display:block;margin-left:0}.market-structure{padding:10px}}

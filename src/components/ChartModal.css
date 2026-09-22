@@ -6,6 +6,9 @@
   padding: 2px 32px 10px 0;
 }
 
+.chart-modal__view { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.chart-modal__view > .ant-segmented { max-width: 100%; overflow-x: auto; }
+
 .chart-modal__symbol {
   font-size: 1.1rem;
   font-weight: 700;
@@ -62,6 +65,12 @@
 }
 
 @media (max-width: 640px) {
+  .chart-modal__view > .ant-segmented:first-child { width: 100%; }
+  .chart-modal__view > .ant-segmented:first-child .ant-segmented-group {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .chart-modal .ant-modal-container {
     padding: 16px 12px;
   }

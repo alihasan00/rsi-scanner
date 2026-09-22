@@ -34,6 +34,20 @@ function mockBinance(totalCandles: number, serverTime: number, failOnPage: numbe
 }
 
 describe('fetchClosedCandleHistory', () => {
+  test('routes clock and historical candles to Futures and retains the market identity', async () => {
+    const { fetcher, calls } = mockBinance(50, 50 * HOUR)
+    const history = await fetchClosedCandleHistory({ symbol: 'XAUUSDT', timeframe: '1h', market: 'tradfi', count: 5 }, fetcher)
+    expect(history.market).toBe('tradfi')
+    expect(calls.every((url) => url.origin === 'https://fapi.binance.com')).toBe(true)
+    expect(calls.map((url) => url.pathname)).toEqual(['/fapi/v1/time', '/fapi/v1/klines'])
+  })
+
+  test('keeps old callers on Spot and rejects unknown markets', async () => {
+    const { fetcher, calls } = mockBinance(50, 50 * HOUR)
+    expect((await fetchClosedCandleHistory({ symbol: 'BTCUSDT', timeframe: '1h', count: 5 }, fetcher)).market).toBe('spot')
+    expect(calls.every((url) => url.origin === 'https://api.binance.com')).toBe(true)
+    await expect(fetchClosedCandleHistory({ symbol: 'BTCUSDT', timeframe: '1h', count: 5, market: 'bad' as 'spot' }, fetcher)).rejects.toThrow('market')
+  })
   test('fetches history for Chinese Binance symbols without changing the encoded identity', async () => {
     const symbol = '币安人生USDT'
     const { fetcher, calls } = mockBinance(50, 50 * HOUR)

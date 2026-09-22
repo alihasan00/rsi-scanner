@@ -102,7 +102,7 @@ export function ScreenerFiltersModal({ initialFilters, onApply, onClear, onClose
           </fieldset>
           <fieldset className="screener-filters__group">
             <legend>Price at the level</legend>
-            <div className="screener-filters__options">{([['all', 'All pairs'], ['near', 'Within 0.5%'], ['sfp', 'Confirmed sweeps'], ['bullish', 'Bullish sweep'], ['bearish', 'Bearish sweep']] as const).map(([value, label]) => <Button key={value} aria-pressed={draft.srSignal === value} onClick={() => update({ srSignal: value })}>{label}</Button>)}</div>
+            <div className="screener-filters__options">{([['all', 'All pairs'], ['near', 'Within 0.5%'], ['near-atr', 'Within 1 ATR'], ['sfp', 'Confirmed sweeps'], ['bullish', 'Bullish sweep'], ['bearish', 'Bearish sweep']] as const).map(([value, label]) => <Button key={value} aria-pressed={draft.srSignal === value} onClick={() => update({ srSignal: value })}>{label}</Button>)}</div>
             <p className="screener-filters__help">A sweep crosses a level and closes back on the approach side. Signals cover the latest 3 closed candles on your selected timeframe. Forming candles never match confirmed-sweep filters.</p>
           </fieldset>
         </>}

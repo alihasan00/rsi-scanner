@@ -15,12 +15,14 @@ export function useSrContext(symbol: string, active = true): SrContextSnapshot {
 }
 
 /** Daily history remains stable when the display timeframe changes. */
-export function useSrContextFeed(symbols: readonly string[], market: ScreenerMarket, active = true): void {
+export function useSrContextFeed(symbols: readonly string[], market: ScreenerMarket, active = true, scope: 'liquidity' | 'selected' = 'liquidity'): void {
   const [generation, restartFeed] = useReducer((value: number) => value + 1, 0)
   useEffect(() => {
     const isCurrent = () => {
       const current = useScannerStore.getState()
-      return current.market === market && current.screenerFilters.signal === 'sr'
+      return current.market === market && (scope === 'liquidity'
+        ? current.screenerFilters.signal === 'sr'
+        : current.screenerFilters.signal !== 'sr' && symbols.length === 1 && current.selectedSymbol === symbols[0])
     }
     if (!active || !isCurrent()) return
     resetSrContexts()
@@ -43,5 +45,5 @@ export function useSrContextFeed(symbols: readonly string[], market: ScreenerMar
       stop()
       resetSrContexts()
     }
-  }, [symbols, market, active, generation])
+  }, [symbols, market, active, scope, generation])
 }

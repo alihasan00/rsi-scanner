@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useMemo } from 'react'
 import { Header } from './components/Header'
 import { ScreenerGrid } from './components/ScreenerGrid'
 import { useRsiFeed } from './hooks/useRsiFeed'
@@ -21,7 +21,8 @@ function App() {
 
   const universe = useMarketUniverse(market)
   useRsiFeed(universe.symbols, market)
-  useSrContextFeed(universe.symbols, market, showLiquidity)
+  const contextSymbols = useMemo(() => showLiquidity ? universe.symbols : selectedSymbol ? [selectedSymbol] : [], [showLiquidity, universe.symbols, selectedSymbol])
+  useSrContextFeed(contextSymbols, market, contextSymbols.length > 0, showLiquidity ? 'liquidity' : 'selected')
 
   return (
     <div className="app-shell">
