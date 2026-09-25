@@ -15,9 +15,9 @@ export function startScreenerPreferenceSync(
   browser: PreferenceBrowser = window,
 ): () => void {
   const writeUrl = () => {
-    const { screenerFilters, market, timeframe, cardDensity, fibSettings } = store.getState()
+    const { screenerFilters, appView, market, timeframe, cardDensity, fibSettings } = store.getState()
     const { pathname, search, hash } = browser.location
-    const nextSearch = writeScreenerPreferencesToSearch(search, { ...screenerFilters, market, timeframe, cardDensity, fibSettings })
+    const nextSearch = writeScreenerPreferencesToSearch(search, { ...screenerFilters, appView, market, timeframe, cardDensity, fibSettings })
     if (nextSearch === search) return
     try {
       browser.history.replaceState(browser.history.state, '', `${pathname}${nextSearch}${hash}`)
@@ -34,6 +34,7 @@ export function startScreenerPreferenceSync(
   const unsubscribe = store.subscribe((state, previous) => {
     if (state.screenerFilters !== previous.screenerFilters
       || state.fibSettings !== previous.fibSettings
+      || state.appView !== previous.appView
       || state.market !== previous.market
       || state.timeframe !== previous.timeframe || state.cardDensity !== previous.cardDensity) writeUrl()
   })

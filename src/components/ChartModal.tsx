@@ -39,10 +39,11 @@ export function ChartModal() {
     })),
   )
   const open = symbol !== null
-  const harmonicTab = useScannerStore((state) => state.screenerFilters.signal === 'harmonic')
-  const showTrendlines = useScannerStore((state) => state.screenerFilters.signal === 'trendline')
+  const harmonicTab = useScannerStore((state) => state.appView === 'scanner' && state.screenerFilters.signal === 'harmonic')
+  const showTrendlines = useScannerStore((state) => state.appView === 'scanner' && state.screenerFilters.signal === 'trendline')
   const [view, setView] = useState<'rsi' | 'fib' | 'sr' | 'harmonic' | 'context' | 'research'>(() => {
-    const signal = useScannerStore.getState().screenerFilters.signal
+    const { appView, screenerFilters: { signal } } = useScannerStore.getState()
+    if (appView === 'families') return 'rsi'
     return signal === 'sr' || signal === 'fib' || signal === 'harmonic' ? signal : 'rsi'
   })
   const [fibGrid, setFibGrid] = useState(false)

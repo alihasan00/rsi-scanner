@@ -4,7 +4,7 @@ import type { StateStorage } from 'zustand/middleware'
 import { resetSymbolData } from './dataStore'
 import { resetFeedStatus } from './feedStatusStore'
 import { DEFAULT_SCREENER_PREFERENCES, restoreScreenerPreferences } from '../lib/screenerPreferences'
-import type { RsiSignalFilter, ScreenerFilterPreferences, ScreenerPreferences } from '../lib/screenerPreferences'
+import type { AppView, RsiSignalFilter, ScreenerFilterPreferences, ScreenerPreferences } from '../lib/screenerPreferences'
 import type { ScreenerMarket } from '../lib/markets'
 import { DEFAULT_FIB_SETTINGS, restoreFibSettings } from '../lib/fibPreferences'
 import type { FibSettings } from '../lib/fibPreferences'
@@ -54,6 +54,7 @@ export function restoreSupportResistanceFilters(
 }
 
 interface ScannerState {
+  appView: AppView
   market: ScreenerMarket
   starredSymbols: string[]
   starredSymbolsByMarket: Record<ScreenerMarket, string[]>
@@ -71,6 +72,7 @@ interface ScannerState {
   supportResistanceSort: SupportResistanceSort
   supportResistanceFilters: SupportResistanceFilters
   setMarket: (market: ScreenerMarket) => void
+  setAppView: (appView: AppView) => void
   toggleStarredSymbol: (symbol: string) => void
   setCardDensity: (density: 'comfortable' | 'compact') => void
   setScreenerTab: (tab: 'rsi' | 'fib' | 'sr' | 'harmonic') => void
@@ -163,6 +165,8 @@ function safeStorage(storage?: StateStorage): StateStorage {
 export const createScannerStore = (storage?: StateStorage) => create<ScannerState>()(
   persist(
     (set, get) => ({
+      // New visits start with families; shared screener URLs retain their own baseline.
+      appView: 'families',
       market: DEFAULT_SCREENER_PREFERENCES.market,
       starredSymbols: [],
       starredSymbolsByMarket: { spot: [], tradfi: [] },
@@ -181,10 +185,28 @@ export const createScannerStore = (storage?: StateStorage) => create<ScannerStat
       supportResistanceFilters: DEFAULT_SUPPORT_RESISTANCE_FILTERS,
       setMarket: (market) => {
         const state = get()
-        if (state.market === market) return
+        if (state.market === market) {
+          if (state.appView !== 'scanner') set({ appView: 'scanner' })
+          return
+        }
         resetSymbolData()
         resetFeedStatus()
-        set({ market, selectedSymbol: null, starredSymbols: state.starredSymbolsByMarket[market] })
+        set({ market, appView: 'scanner', selectedSymbol: null, starredSymbols: state.starredSymbolsByMarket[market] })
+      },
+      setAppView: (appView) => {
+        const state = get()
+        const market = appView === 'families' ? 'spot' : state.market
+        const marketChanged = market !== state.market
+        if (!marketChanged && state.appView === appView) return
+        if (marketChanged) {
+          resetSymbolData()
+          resetFeedStatus()
+        }
+        set({
+          appView, market,
+          selectedSymbol: marketChanged ? null : state.selectedSymbol,
+          starredSymbols: state.starredSymbolsByMarket[market],
+        })
       },
       toggleStarredSymbol: (symbol) => set((state) => {
         const starredSymbols = state.starredSymbols.includes(symbol)
@@ -226,6 +248,7 @@ export const createScannerStore = (storage?: StateStorage) => create<ScannerStat
           resetFeedStatus()
         }
         set({
+          appView: restored.appView,
           market: restored.market,
           starredSymbols: state.starredSymbolsByMarket[restored.market],
           selectedSymbol: marketChanged ? null : state.selectedSymbol,
@@ -271,21 +294,22 @@ export const createScannerStore = (storage?: StateStorage) => create<ScannerStat
       name: 'rsi-scanner-preferences',
       storage: createJSONStorage(() => safeStorage(storage)),
       partialize: ({
-        market, starredSymbolsByMarket, cardDensity, timeframe, cellSize, starredTimeframes, settings, fibSettings, screenerFilters, lastRsiSignal,
+        appView, market, starredSymbolsByMarket, cardDensity, timeframe, cellSize, starredTimeframes, settings, fibSettings, screenerFilters, lastRsiSignal,
         supportResistanceView, supportResistanceSort, supportResistanceFilters,
       }) => ({
-        market, starredSymbolsByMarket, cardDensity, timeframe, cellSize, starredTimeframes, settings, fibSettings, screenerFilters, lastRsiSignal,
+        appView, market, starredSymbolsByMarket, cardDensity, timeframe, cellSize, starredTimeframes, settings, fibSettings, screenerFilters, lastRsiSignal,
         supportResistanceView, supportResistanceSort, supportResistanceFilters,
       }),
       // Keep defaults for preferences added after a user's settings were saved.
       merge: (persisted, current) => {
         const saved = persisted as Partial<ScannerState> | undefined
-        const { market, timeframe, cardDensity } = restoreScreenerPreferences(saved)
+        const { appView, market, timeframe, cardDensity } = restoreScreenerPreferences(saved)
         const screenerFilters = pickScreenerFilters(restoreScreenerPreferences(saved?.screenerFilters))
         const starredSymbolsByMarket = restoreStarredSymbolsByMarket(saved)
         return {
           ...current,
           ...saved,
+          appView: saved == null ? current.appView : appView,
           market,
           starredSymbols: starredSymbolsByMarket[market],
           starredSymbolsByMarket,

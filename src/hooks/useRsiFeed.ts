@@ -8,12 +8,16 @@ import { useScannerStore } from '../store/scannerStore'
 
 export function useRsiFeed(symbols: readonly string[], market: ScreenerMarket): void {
   const timeframe = useScannerStore((state) => state.timeframe)
+  const appView = useScannerStore((state) => state.appView)
+  const familySymbol = useScannerStore((state) => state.appView === 'families' ? state.selectedSymbol : null)
   const [generation, restartFeed] = useReducer((value: number) => value + 1, 0)
 
   useEffect(() => {
     const isCurrent = () => {
       const current = useScannerStore.getState()
       return current.market === market && current.timeframe === timeframe
+        && current.appView === appView
+        && (appView !== 'families' || current.selectedSymbol === familySymbol)
     }
     if (!isCurrent()) return
 
@@ -41,8 +45,8 @@ export function useRsiFeed(symbols: readonly string[], market: ScreenerMarket): 
     // Cancel as soon as the store changes. A generation forces a restart even
     // when a batched switch away and back leaves the final effect deps equal.
     let invalidated = false
-    const unsubscribe = useScannerStore.subscribe((state) => {
-      if (!invalidated && (state.market !== market || state.timeframe !== timeframe)) {
+    const unsubscribe = useScannerStore.subscribe(() => {
+      if (!invalidated && !isCurrent()) {
         invalidated = true
         stopFeed()
         restartFeed()
@@ -53,5 +57,5 @@ export function useRsiFeed(symbols: readonly string[], market: ScreenerMarket): 
       unsubscribe()
       stopFeed()
     }
-  }, [symbols, market, timeframe, generation])
+  }, [symbols, market, timeframe, appView, familySymbol, generation])
 }

@@ -8,8 +8,10 @@ import type { FibSettings } from './fibPreferences'
 import type { FibStage } from './fibScreener'
 
 export type RsiSignalFilter = 'all' | 'divergence' | 'trendline'
+export type AppView = 'scanner' | 'families'
 
 export interface ScreenerPreferences {
+  appView: AppView
   market: ScreenerMarket
   search: string
   signal: RsiSignalFilter | 'fib' | 'sr' | 'harmonic'
@@ -36,7 +38,10 @@ export type ScreenerFilterPreferences = Pick<ScreenerPreferences,
   'search' | 'signal' | 'divergenceRecency' | 'fibDirection' | 'fibStage' | 'fibConfluence' | 'srSource' | 'srSignal' | 'srSort'
   | 'harmonicPattern' | 'harmonicDirection' | 'harmonicStage' | 'harmonicSort' | 'rsiState' | 'starredOnly' | 'sort'>
 
+// Existing shared URLs without a view parameter must still open the scanner.
+// The fresh-visit landing view is set separately in scannerStore.
 export const DEFAULT_SCREENER_PREFERENCES: Readonly<ScreenerPreferences> = Object.freeze({
+  appView: 'scanner',
   market: 'spot',
   search: '',
   signal: 'all',
@@ -77,7 +82,7 @@ const TIMEFRAMES = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '8h', '1d'
 const DENSITIES = ['comfortable', 'compact'] as const
 const MARKETS = ['spot', 'tradfi'] as const satisfies readonly ScreenerMarket[]
 const SEARCH_KEYS = [
-  'market', 'q', 'indicator', 'candles', 'rsi', 'starred', 'sort', 'timeframe', 'density',
+  'view', 'market', 'q', 'indicator', 'candles', 'rsi', 'starred', 'sort', 'timeframe', 'density',
   'fibSide', 'fibStage', 'fibTrend', 'fibScale', 'fibStop', 'fibTp3', 'fibTp4', 'fibRunner',
   'srSource', 'srSignal', 'srSort',
   'harmonicPattern', 'harmonicDirection', 'harmonicStage', 'harmonicSort',
@@ -92,8 +97,10 @@ export function restoreScreenerPreferences(input: unknown): ScreenerPreferences 
   const saved = input !== null && typeof input === 'object' && !Array.isArray(input)
     ? input as Record<string, unknown> : {}
   const defaults = DEFAULT_SCREENER_PREFERENCES
+  const appView = saved.appView === 'families' ? 'families' : defaults.appView
   return {
-    market: isChoice(saved.market, MARKETS) ? saved.market : defaults.market,
+    appView,
+    market: appView === 'families' ? 'spot' : isChoice(saved.market, MARKETS) ? saved.market : defaults.market,
     search: typeof saved.search === 'string' ? saved.search : defaults.search,
     signal: isChoice(saved.signal, SIGNALS) ? saved.signal : defaults.signal,
     divergenceRecency: isChoice(saved.divergenceRecency, RECENCIES) ? saved.divergenceRecency : defaults.divergenceRecency,
@@ -128,6 +135,7 @@ export function readScreenerPreferencesFromSearch(search: string): ScreenerPrefe
   if (!SEARCH_KEYS.some((key) => params.has(key))) return null
   const candles = params.get('candles')
   return restoreScreenerPreferences({
+    appView: params.get('view'),
     market: params.get('market'),
     search: params.get('q'),
     signal: params.get('indicator'),
@@ -165,6 +173,7 @@ export function writeScreenerPreferencesToSearch(search: string, prefs: Screener
   for (const key of SEARCH_KEYS) params.delete(key)
   // An explicit anchor distinguishes a default shared view from no shared view.
   params.set('timeframe', current.timeframe)
+  if (current.appView !== defaults.appView) params.set('view', current.appView)
   if (current.market !== defaults.market) params.set('market', current.market)
   if (current.search !== defaults.search) params.set('q', current.search)
   if (current.signal !== defaults.signal) params.set('indicator', current.signal)

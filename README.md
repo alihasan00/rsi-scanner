@@ -15,6 +15,10 @@ Every card also opens **Context** for combined evidence and completed higher-tim
 candles, and **Research** for dated comparisons with explicit trading costs.
 The interface uses Ant Design components with the supplied dark purple theme.
 
+**Coin Families** is the first header tab and the default for a fresh visit.
+It groups the scanner's coins into ecosystems, sectors, and memes, showing live
+rolling 24-hour performance, leaders, and gaps between family members.
+
 This repository contains the frontend only. The standalone Rust data tool lives
 in the separate sibling project `../cli` and fetches and analyzes market
 data from the command line for AI-assisted analysis. Both projects build and run
@@ -34,6 +38,50 @@ bun test
 bun run lint
 bun run build
 ```
+
+## Coin Families
+
+Open **Coin Families** in the header. The view includes Ethereum, Solana, BNB
+Chain, Bitcoin, Cosmos, Base, XRP & payments, memes, AI, DeFi, gaming, privacy,
+storage, Layer 1s, scaling, cross-chain infrastructure, tokenization and gold.
+All 110 scanner coins are available; seven without a curated connection appear
+in **Other assets**, where no linked-group comparison is implied.
+
+The **Best movers** strip at the top gives a quick look at the five largest
+positive 24h moves across the entire scanner. Each coin appears once, even if
+it belongs to several families. Click its price card to open the chart, or its
+family label to explore the related coins. The strip ignores family filters
+and excludes delayed, zero-volume, flat and falling quotes.
+
+Search by coin, family, or connection; filter ecosystems, sectors, or memes;
+and sort by family order, average return, or number of price gaps. Open a family
+for each member's connection, price, volume, 24h change and gap to the leader.
+Stars use the existing Crypto favorites, and clicking a coin opens its chart.
+The Families view persists across reloads and can be shared with `?view=families`.
+Previously saved views and shared Crypto/TradFi links still open the selected
+scanner; the fresh-visit default does not override them.
+
+- **Average:** equal-weight rolling 24h return of members with fresh, nonzero-volume
+  quotes. Coins may belong to more than one family; overview coin counts are unique.
+- **Leader:** highest 24h return in the family, independent of its ecosystem anchor
+  or theme reference. A negative top performer is not described as pumping.
+- **Gap watch:** a leader up at least 3% and another member at least 2 percentage
+  points behind. A +7% leader and +2% member have a 5 pp gap. The side panel shows
+  up to five distinct coins with the largest qualifying gaps.
+- **Connections:** curated relationships, not measured correlations. The XRP
+  bucket groups payment use cases across separate networks. Gold-backed tokens
+  are separate from tokenization governance tokens. Gaps are research leads, not
+  evidence that a lagging coin will rise or that a trade is profitable.
+- **Data:** one deduplicated Binance Spot ticker batch every 30 seconds while
+  the tab is open, with cancellation, a request timeout and retry backoff. A
+  delisted-symbol rejection falls back to a bulk ticker response filtered to the
+  same scanner universe. Quotes older than 90 seconds, failed refreshes, and
+  zero-volume quotes do not generate comparisons. Last prices remain visible
+  in details during failures, marked delayed. Missing prices show as unavailable.
+
+`src/lib/coinFamilies.ts` owns curated membership; `familyMarketData.ts` validates
+quotes and calculates comparisons. `useFamilyMarketData.ts` owns polling, and
+`CoinFamilies.tsx` renders the dashboard and family detail panel.
 
 ## Screener
 

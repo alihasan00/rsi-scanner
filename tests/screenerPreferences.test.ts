@@ -22,6 +22,14 @@ const SELECTED: ScreenerPreferences = {
 }
 
 describe('stored screener preferences', () => {
+  test('families uses the crypto market and validates the stored view independently', () => {
+    expect(restoreScreenerPreferences({ ...SELECTED, appView: 'families' })).toEqual({
+      ...SELECTED, appView: 'families', market: 'spot',
+    })
+    expect(restoreScreenerPreferences({ ...SELECTED, appView: 'memes' })).toEqual(SELECTED)
+    expect(restoreScreenerPreferences({ ...SELECTED, appView: ['families'] })).toEqual(SELECTED)
+  })
+
   test('restores the trendline filter with independent RSI state and divergence age preferences', () => {
     const selected: ScreenerPreferences = { ...SELECTED, signal: 'trendline', rsiState: 'neutral', divergenceRecency: 1 }
     expect(restoreScreenerPreferences(JSON.parse(JSON.stringify(selected)))).toEqual(selected)
@@ -110,6 +118,22 @@ describe('stored screener preferences', () => {
 })
 
 describe('screener URL preferences', () => {
+  test('family links round trip independently of indicator preferences and canonicalize to Spot', () => {
+    const selected: ScreenerPreferences = { ...SELECTED, appView: 'families', market: 'spot', signal: 'harmonic' }
+    const search = writeScreenerPreferencesToSearch('?campaign=friend&view=scanner&view=families&market=tradfi', selected)
+    const params = new URLSearchParams(search)
+    expect(params.getAll('view')).toEqual(['families'])
+    expect(params.has('market')).toBe(false)
+    expect(params.get('indicator')).toBe('harmonic')
+    expect(params.get('campaign')).toBe('friend')
+    expect(readScreenerPreferencesFromSearch(search)).toEqual(selected)
+    expect(readScreenerPreferencesFromSearch('?view=families&market=tradfi')).toEqual({
+      ...DEFAULT_SCREENER_PREFERENCES, appView: 'families',
+    })
+    expect(readScreenerPreferencesFromSearch('?view=unknown')).toEqual(DEFAULT_SCREENER_PREFERENCES)
+    expect(readScreenerPreferencesFromSearch('?view=scanner&view=families')).toEqual(DEFAULT_SCREENER_PREFERENCES)
+  })
+
   test('round trips a shared trendline view without discarding other selections', () => {
     const selected: ScreenerPreferences = { ...SELECTED, signal: 'trendline', divergenceRecency: 5, rsiState: 'overbought' }
     const search = writeScreenerPreferencesToSearch('?campaign=course', selected)

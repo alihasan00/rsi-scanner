@@ -82,7 +82,7 @@ function fakeBrowser(initialUrl = '/screener', initialState: unknown = { route: 
 
 function preferences(store: ReturnType<typeof createScannerStore>): ScreenerPreferences {
   const state = store.getState()
-  return { ...state.screenerFilters, market: state.market, timeframe: state.timeframe, cardDensity: state.cardDensity, fibSettings: state.fibSettings }
+  return { ...state.screenerFilters, appView: state.appView, market: state.market, timeframe: state.timeframe, cardDensity: state.cardDensity, fibSettings: state.fibSettings }
 }
 
 function loadedSnapshot(): SymbolSnapshot {
@@ -102,6 +102,95 @@ afterEach(() => {
 })
 
 describe('screener store persistence', () => {
+  test('fresh visits start with Coin Families while saved and legacy market choices remain selected', () => {
+    const { storage } = memoryStorage()
+    const fresh = createScannerStore(storage)
+    expect(fresh.getState().appView).toBe('families')
+    expect(fresh.getState().market).toBe('spot')
+    for (const market of ['spot', 'tradfi'] as const) {
+      fresh.getState().setMarket(market)
+      const reloaded = createScannerStore(storage)
+      expect(reloaded.getState().appView).toBe('scanner')
+      expect(reloaded.getState().market).toBe(market)
+      const legacy = createScannerStore(memoryStorage({ market }).storage)
+      expect(legacy.getState().appView).toBe('scanner')
+      expect(legacy.getState().market).toBe(market)
+    }
+  })
+
+  test('entering Coin Families switches to Spot atomically and preserves screener choices', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    store.getState().toggleStarredSymbol('ETHUSDT')
+    store.getState().setMarket('tradfi')
+    store.getState().toggleStarredSymbol('XAUUSDT')
+    store.getState().updateScreenerFilters({ signal: 'trendline', search: 'gold', rsiState: 'neutral' })
+    store.getState().setScreenerTab('sr')
+    store.getState().selectSymbol('XAUUSDT')
+    setSymbolSnapshot('XAUUSDT', loadedSnapshot())
+    setFeedStatus('XAUUSDT', { state: 'ready', updatedAt: 900_000, error: null })
+    const before = store.getState()
+    const observed: unknown[] = []
+    cleanups.push(store.subscribe((state) => observed.push({
+      appView: state.appView, market: state.market, selectedSymbol: state.selectedSymbol,
+      favorites: state.starredSymbols, bars: getSymbolSnapshot('XAUUSDT').bars.length,
+      feed: getFeedStatus('XAUUSDT').state,
+    })))
+
+    store.getState().setAppView('families')
+
+    expect(observed).toEqual([{
+      appView: 'families', market: 'spot', selectedSymbol: null,
+      favorites: ['ETHUSDT'], bars: 0, feed: 'loading',
+    }])
+    expect(store.getState().screenerFilters).toBe(before.screenerFilters)
+    expect(store.getState().lastRsiSignal).toBe('trendline')
+    const reloaded = createScannerStore(storage)
+    expect(reloaded.getState().appView).toBe('families')
+    expect(reloaded.getState().market).toBe('spot')
+    expect(reloaded.getState().screenerFilters).toEqual(before.screenerFilters)
+    expect(reloaded.getState().starredSymbolsByMarket.tradfi).toEqual(['XAUUSDT'])
+  })
+
+  test('Crypto exits Coin Families at the same market without resetting live data or indicator choices', () => {
+    const store = createScannerStore(memoryStorage().storage)
+    store.getState().updateScreenerFilters({ signal: 'harmonic', harmonicPattern: 'bat' })
+    store.getState().setAppView('families')
+    setSymbolSnapshot('ETHUSDT', loadedSnapshot())
+    setFeedStatus('ETHUSDT', { state: 'ready', updatedAt: 900_000, error: null })
+    const dataVersion = getSymbolStoreVersion()
+    const feedVersion = getFeedStatusVersion()
+
+    store.getState().setMarket('spot')
+
+    expect(store.getState().appView).toBe('scanner')
+    expect(store.getState().market).toBe('spot')
+    expect(store.getState().screenerFilters.signal).toBe('harmonic')
+    expect(store.getState().screenerFilters.harmonicPattern).toBe('bat')
+    expect(getSymbolStoreVersion()).toBe(dataVersion)
+    expect(getFeedStatusVersion()).toBe(feedVersion)
+    store.getState().setAppView('families')
+    store.getState().setMarket('tradfi')
+    expect(store.getState().appView).toBe('scanner')
+    expect(store.getState().market).toBe('tradfi')
+    expect(getSymbolSnapshot('ETHUSDT').bars).toEqual([])
+  })
+
+  test('saved Coin Families always restores Spot and malformed views fall back to the scanner', () => {
+    const familyStore = createScannerStore(memoryStorage({
+      appView: 'families', market: 'tradfi',
+      starredSymbolsByMarket: { spot: ['SOLUSDT'], tradfi: ['XAUUSDT'] },
+    }).storage)
+    expect(familyStore.getState().appView).toBe('families')
+    expect(familyStore.getState().market).toBe('spot')
+    expect(familyStore.getState().starredSymbols).toEqual(['SOLUSDT'])
+    for (const appView of [undefined, null, 'meme', ['families']]) {
+      const store = createScannerStore(memoryStorage({ appView, market: 'tradfi' }).storage)
+      expect(store.getState().appView).toBe('scanner')
+      expect(store.getState().market).toBe('tradfi')
+    }
+  })
+
   test('the trendline choice survives every tab and reload, while RSI reset returns to all', () => {
     const { storage } = memoryStorage()
     const store = createScannerStore(storage)
@@ -555,7 +644,7 @@ describe('screener store persistence', () => {
     const { storage, values } = memoryStorage()
     values.set(STORAGE_KEY, '{ invalid JSON')
     const recovered = createScannerStore(storage)
-    expect(preferences(recovered)).toEqual(DEFAULT_SCREENER_PREFERENCES)
+    expect(preferences(recovered)).toEqual({ ...DEFAULT_SCREENER_PREFERENCES, appView: 'families' })
     recovered.getState().updateScreenerFilters({ search: 'BTC', sort: 'symbol' })
     expect(createScannerStore(storage).getState().screenerFilters).toEqual({
       ...DEFAULT_FILTERS, search: 'BTC', sort: 'symbol',
@@ -595,6 +684,86 @@ describe('screener store persistence', () => {
 })
 
 describe('screener URL and store synchronization', () => {
+  test('fresh landing links identify Families and scanner links stay shareable without a view parameter', () => {
+    const store = createScannerStore(memoryStorage().storage)
+    const browser = fakeBrowser('/screener?campaign=fresh#coins')
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+    expect(store.getState().appView).toBe('families')
+    expect(browser.location.search).toBe('?campaign=fresh&timeframe=15m&view=families')
+
+    store.getState().setMarket('spot')
+    expect(browser.location.search).toBe('?campaign=fresh&timeframe=15m')
+    const recipient = createScannerStore(memoryStorage().storage)
+    expect(recipient.getState().appView).toBe('families')
+    const sharedBrowser = fakeBrowser(`${browser.location.pathname}${browser.location.search}`)
+    cleanups.push(startScreenerPreferenceSync(recipient, sharedBrowser))
+    expect(recipient.getState().appView).toBe('scanner')
+    expect(recipient.getState().market).toBe('spot')
+  })
+
+  test.each([
+    { search: '?timeframe=4h', market: 'spot' },
+    { search: '?indicator=fib', market: 'spot' },
+    { search: '?market=tradfi', market: 'tradfi' },
+    { search: '?view=scanner', market: 'spot' },
+  ])('existing or explicit scanner link $search overrides the new family landing view', ({ search, market }) => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    expect(store.getState().appView).toBe('families')
+    const browser = fakeBrowser(`/screener${search}`)
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+    expect(store.getState().appView).toBe('scanner')
+    expect(store.getState().market).toBe(market)
+    expect(new URLSearchParams(browser.location.search).has('view')).toBe(false)
+
+    const reloaded = createScannerStore(storage)
+    const bareBrowser = fakeBrowser('/screener')
+    cleanups.push(startScreenerPreferenceSync(reloaded, bareBrowser))
+    expect(reloaded.getState().appView).toBe('scanner')
+    expect(reloaded.getState().market).toBe(market)
+  })
+
+  test('family view persists through reload, shared URLs, market navigation, and browser history', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    const browser = fakeBrowser('/screener?indicator=sr&timeframe=4h&campaign=families#coins')
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+    store.getState().setAppView('families')
+    expect(new URLSearchParams(browser.location.search).get('view')).toBe('families')
+    expect(new URLSearchParams(browser.location.search).get('indicator')).toBe('sr')
+    const familyUrl = `${browser.location.pathname}${browser.location.search}${browser.location.hash}`
+
+    const reloaded = createScannerStore(storage)
+    const bareBrowser = fakeBrowser('/screener')
+    cleanups.push(startScreenerPreferenceSync(reloaded, bareBrowser))
+    expect(reloaded.getState().appView).toBe('families')
+    expect(new URLSearchParams(bareBrowser.location.search).get('view')).toBe('families')
+    expect(reloaded.getState().screenerFilters.signal).toBe('sr')
+
+    const recipient = createScannerStore(memoryStorage().storage)
+    const sharedBrowser = fakeBrowser(familyUrl)
+    cleanups.push(startScreenerPreferenceSync(recipient, sharedBrowser))
+    expect(preferences(recipient)).toEqual(preferences(store))
+
+    store.getState().setMarket('spot')
+    expect(store.getState().appView).toBe('scanner')
+    expect(new URLSearchParams(browser.location.search).has('view')).toBe(false)
+    expect(store.getState().screenerFilters.signal).toBe('sr')
+    browser.navigate(familyUrl)
+    expect(store.getState().appView).toBe('families')
+    browser.navigate('/screener?market=tradfi&indicator=fib&timeframe=1h')
+    expect(store.getState().appView).toBe('scanner')
+    expect(store.getState().market).toBe('tradfi')
+    store.getState().selectSymbol('XAUUSDT')
+    browser.navigate(familyUrl)
+    expect(store.getState().appView).toBe('families')
+    expect(store.getState().market).toBe('spot')
+    expect(store.getState().selectedSymbol).toBeNull()
+    expect(store.getState().screenerFilters.signal).toBe('sr')
+    expect(browser.location.hash).toBe('#coins')
+    expect(new URLSearchParams(browser.location.search).get('campaign')).toBe('families')
+  })
+
   test('tab changes use the existing indicator URL field and navigation updates RSI memory', () => {
     const { storage } = memoryStorage()
     const store = createScannerStore(storage)
