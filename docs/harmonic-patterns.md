@@ -95,9 +95,10 @@ algorithm, a history length, a confirmation delay, or a setup expiry. The
 following are explicit implementation conventions rather than additional
 lecture rules:
 
-- Use at most the latest **500 closed candles** from the current timeframe,
-  restricted to the latest contiguous segment. Missing candles are not padded
-  and patterns do not span a history gap.
+- Discover new patterns from at most the latest **500 closed candles** from the
+  current timeframe. Active setups retain their anchors and lifecycle separately
+  when this window rolls forward. Full supplied histories replay chronologically;
+  missing candles are not padded and patterns do not span a history gap.
 - A strict **3/3 wick pivot** must be more extreme than the three closed
   candles on each side. Its pivot time and its availability time differ:
   it is available only when the third right-hand candle closes. Equal
@@ -150,6 +151,77 @@ It cannot confirm a stage or promote a provisional touch into a closed-candle
 event. Live proximity can change before close. A forming candle's wick breach
 remains provisionally flagged even when its latest price returns inside the
 boundary; the closed setup itself changes only after candle closure.
+
+### Separate D-pivot confirmation
+
+After contact, the scanner also looks for a strict **3/3 wick pivot** inside the
+effective D zone. It must be the most extreme wick since C: the lowest for a
+bullish pattern or highest for a bearish pattern. A later higher low or lower
+high cannot replace that terminal extreme. A dual high/low pivot is skipped.
+Confirmation becomes available only at the third right-hand candle close, while
+the setup is still active, including the candle that completes it at the first
+target. A boundary breach takes precedence over confirmation.
+
+`confirmedD` and `dConfirmedAt` are separate from the first observed contact at
+`d`. They freeze once confirmed. The original contact, stage, stop boundary, and
+target references do not move to the later pivot. The chart marks the confirmed
+pivot separately, and details show both its occurrence and availability times.
+“D pivot confirmed” describes price geometry, not a guaranteed reversal.
+
+### Lifecycle continuity
+
+The harmonic cache is scoped by market, timeframe, and symbol. It retains replay
+checkpoints and overlapping candle evidence so an active setup survives both
+the discovery-window rollover and a reload with matching history. Corrections
+within the replay window are replayed; older changed evidence, gaps, or a move
+backward in history trigger reconstruction and an explicit history notice.
+An empty loading snapshot does not delete a saved checkpoint.
+
+Browser retention is bounded to 16 recent analyses and a shared 1.5-million-
+character budget. Eviction and unavailable storage are surfaced in details;
+continuity cannot be guaranteed across a reload without retained evidence.
+Finished outcomes also have bounded retention. Historical research captures
+events as they happen rather than relying on the final retained outcome list.
+The Context view uses the same harmonic checkpoint only when its closed-candle
+timestamp matches the displayed evidence time.
+
+## Ratio fit and geometry diagnostics
+
+**Ratio fit** is an independently defined score from 0 to 100, available for
+Gartley, Bat, and Butterfly. It is the arithmetic mean of B/XA fit and C/AB fit.
+Each component receives 100 throughout its ideal band and falls linearly to zero
+at the nearest accepted-template edge. For example, Gartley B halfway between
+0.556 and 0.618 receives 50; with an ideal C, the total is 75. Ideal ranges are
+not reduced to a preferred midpoint. The actual point prices supply the ratios.
+
+Only those two components determine the score. It remains comparable before and
+after D contact and confirmation. It never represents a win probability, changes
+the lecture eligibility rules, or silently introduces a high-score filter.
+
+Details expose supplemental measurements separately:
+
+- **BC/XA zone agreement:** the fraction of the original XA D band overlapped by
+  the BC projection. Butterfly uses its lecture 1.4562–2.8798 band; Bat uses the
+  existing strict research 1.618–2.618 band. Gartley is unavailable because the
+  supplied sources do not define its BC template. Bat's measurement does not
+  narrow its live D zone or disqualify a setup.
+- **Confirmed AD/XA fit:** the same ideal-to-accepted scoring applied to the
+  separately confirmed D pivot. It remains unavailable before confirmation.
+- **Leg duration and age:** XA, AB, BC, observed CD, and elapsed candles since C,
+  plus age in mean XABC leg lengths. Duration asymmetry is the largest absolute
+  percentage deviation of one leg from the mean of the other legs; it uses three
+  completed legs until D confirms, then four. Time measures use the last closed
+  candle, never the forming candle or wall clock. These do not filter live setups.
+
+The pre-existing optional strict Bat table continues to measure its D ratios at
+the first observed contact and says so explicitly; it is distinct from the new
+confirmed-D measurement.
+
+**Compare harmonic rules on historical candles** in symbol details evaluates first
+observable D contact, ratio fit ≥80 at contact, waiting for a confirmed D pivot,
+and proportional expiry. See [harmonic research](./harmonic-research.md) for the
+dated splits, executable benchmark, and export conventions. Live expiry remains
+60 candles before D and 12 candles outside D after contact.
 
 ## Stops, targets, and manual confluence
 
@@ -210,7 +282,7 @@ are shared with the other screener tabs.
 
 Default **Watchlist order** preserves the current market's universe order.
 Price updates and newly loaded symbols do not continually reorder existing
-cards. **Nearest D zone** and **Symbol** are optional sorts. Harmonic filters
+cards. **Nearest D zone**, **Best ratio fit**, and **Symbol** are optional sorts. Harmonic filters
 and sort persist in the URL and local storage with `indicator=harmonic`:
 
 | Setting / URL key | Choices | Default |
@@ -218,7 +290,12 @@ and sort persist in the URL and local storage with `indicator=harmonic`:
 | `harmonicPattern` | `all`, `gartley`, `bat`, `butterfly` | `all` |
 | `harmonicDirection` | `any`, `bullish`, `bearish` | `any` |
 | `harmonicStage` | `all`, `forming`, `approaching`, `zone` | `all` |
-| `harmonicSort` | `watchlist`, `nearest`, `symbol` | `watchlist` |
+| `harmonicSort` | `watchlist`, `nearest`, `quality`, `symbol` | `watchlist` |
+
+Best ratio fit selects each symbol's highest-scoring matching active setup before
+sorting symbols. Tied setup scores prefer the more recently confirmed geometry;
+tied symbol scores preserve the universe order. Other sorts retain the newest
+matching setup selection.
 
 Stage filters use closed-candle state; a live price moving into D does not
 make the setup satisfy the closed D-zone filter. The Filters modal presents

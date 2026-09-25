@@ -3,6 +3,7 @@ import type { RsiBar } from '../src/types'
 import type { LiquidityLevel } from '../src/lib/liquidityLevels'
 import type { HigherTimeframeSnapshot } from '../src/lib/higherTimeframe'
 import { analyzeSignalEvidence } from '../src/lib/signalEvidence'
+import { analyzeHarmonics } from '../src/lib/harmonics'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -16,6 +17,26 @@ function hourly(index: number, patch: Partial<RsiBar> = {}): RsiBar {
 }
 
 describe('evidence review regressions', () => {
+  test('durable harmonics remain visible in context after their anchors leave available candles', () => {
+    const prices = [120, 115, 110, 100, 125, 150, 175, 200, 180, 160, 150, 138.2, 150, 160, 170, 176.3924, 170, 165, 160]
+    const bars = prices.map((price, index) => minute(index, { open: price, close: price, low: price, high: price }))
+    for (const low of [118, 116, 120, 121, 122]) bars.push(minute(bars.length, { open: low + 1, close: low + 1, low, high: low + 2 }))
+    while (bars.length < 620) bars.push(minute(bars.length, { open: 122, close: 122, low: 120, high: 124 }))
+    const snapshot = analyzeHarmonics(bars)
+    expect(snapshot.setups[0].confirmedD?.price).toBe(116)
+    const available = bars.slice(-50)
+    expect(analyzeSignalEvidence({ ...identity, bars: available }).items.some((item) => item.source === 'Harmonic')).toBe(false)
+    const observed = analyzeSignalEvidence({ ...identity, bars: available, harmonicSnapshot: snapshot })
+    const harmonic = observed.items.find((item) => item.source === 'Harmonic')!
+    expect(harmonic.id).toBe(snapshot.setups[0].id)
+    expect(harmonic.detail).toContain('D pivot confirmed')
+    expect(harmonic.availableAt).toBe(bars[23].closeTime)
+    expect(harmonic.role).toBe('context')
+    // A newer cache snapshot cannot supply state to a historical evidence view.
+    const earlier = analyzeSignalEvidence({ ...identity, bars: available, asOf: available.at(-2)!.closeTime, harmonicSnapshot: snapshot })
+    expect(earlier.items.some((item) => item.source === 'Harmonic')).toBe(false)
+  })
+
   test('the replay clock cannot be advanced by a future calendar map timestamp', () => {
     const weekly: LiquidityLevel = { id: 'week-low', label: 'Weekly low', source: 'week', price: 100, periodStart: Date.parse('2026-08-31'), periodEnd: Date.parse('2026-09-07'), availableFrom: Date.parse('2026-09-07') }
     const bars = [minute(0), minute(1, { low: 95 })]

@@ -1,12 +1,14 @@
 import type { RsiBar } from '../types'
 
+export type HarmonicBar = Omit<RsiBar, 'rsi'>
+
 export type HarmonicKind = 'gartley' | 'bat' | 'butterfly'
 export type HarmonicDirection = 'bullish' | 'bearish'
 export type HarmonicStage = 'forming' | 'approaching' | 'zone'
 export type HarmonicStatus = 'active' | 'invalidated' | 'completed' | 'expired' | 'superseded'
 
 export interface HarmonicPoint {
-  /** Index in the analyzed contiguous closed suffix, at most 500 candles. */
+  /** Absolute ordinal within this contiguous replay; use time to place anchors on charts. */
   index: number
   time: number
   price: number
@@ -23,6 +25,10 @@ export interface HarmonicSetup {
   c: HarmonicPoint
   /** First closed candle that touched D after C formed; never an assumed fill or a future pivot. */
   d: HarmonicPoint | null
+  /** Strict 3/3 terminal CD wick pivot inside D, observed separately from first contact. */
+  confirmedD: HarmonicPoint | null
+  /** Close time of the third right-hand candle; never the pivot candle time. */
+  dConfirmedAt: number | null
   /** Latest closed candle that touched D; drives the stale-zone expiry. */
   lastTouchIndex: number | null
   /** XA band before optional Butterfly BC confluence narrows it. */
@@ -43,10 +49,16 @@ export interface HarmonicSetup {
 export interface HarmonicAnalysis {
   setups: HarmonicSetup[]
   closedBarCount: number
+  lastClosedAt?: number
+  historyIssue?: 'gap' | 'invalid'
+  continuity?: { state: 'restored' | 'reset'; detail: string; previousSetupId: string | null }
+  persistenceIssue?: 'unavailable'
 }
 
 export const HARMONIC_MAX_HISTORY = 500
 export const HARMONIC_PIVOT_BARS = 3
+/** Active setups are retained independently; finished outcomes have a bounded recent history. */
+export const HARMONIC_MAX_FINISHED = 500
 /** Scanner conventions, not lecture trading rules or modeled holding periods. */
 export const HARMONIC_EXPIRY_BARS = 60
 /** Closed candles a touched setup may spend outside D before it is treated as stale. */
@@ -73,7 +85,7 @@ function positiveFinite(value: number): boolean {
   return Number.isFinite(value) && value > 0
 }
 
-function validBar(bar: RsiBar): boolean {
+function validBar(bar: HarmonicBar): boolean {
   return [bar.open, bar.high, bar.low, bar.close].every(positiveFinite)
     && Number.isFinite(bar.volume) && bar.volume >= 0
     && Number.isSafeInteger(bar.openTime) && Number.isSafeInteger(bar.closeTime)
@@ -81,27 +93,8 @@ function validBar(bar: RsiBar): boolean {
     && bar.low <= Math.min(bar.open, bar.close) && bar.high >= Math.max(bar.open, bar.close)
 }
 
-/** Interior gaps reset structure. Trailing previews cannot change closed analysis. */
-function closedSuffix(bars: readonly RsiBar[]): RsiBar[] {
-  let end = bars.length
-  while (end > 0 && bars[end - 1].isClosed === false) end--
-  let closed: RsiBar[] = []
-  for (let i = Math.max(0, end - HARMONIC_MAX_HISTORY); i < end; i++) {
-    const bar = bars[i]
-    if (bar.isClosed !== true || !validBar(bar)) {
-      closed = []
-      continue
-    }
-    const previous = closed.at(-1)
-    if (previous && (bar.openTime !== previous.closeTime + 1
-      || bar.closeTime - bar.openTime !== previous.closeTime - previous.openTime)) closed = []
-    closed.push(bar)
-  }
-  return closed
-}
-
-function strictPivot(bars: readonly RsiBar[], index: number, kind: PivotKind): boolean {
-  if (index < HARMONIC_PIVOT_BARS) return false
+function strictPivot(bars: readonly HarmonicBar[], index: number, kind: PivotKind): boolean {
+  if (index < HARMONIC_PIVOT_BARS || index + HARMONIC_PIVOT_BARS >= bars.length) return false
   const price = bars[index][kind]
   for (let offset = -HARMONIC_PIVOT_BARS; offset <= HARMONIC_PIVOT_BARS; offset++) {
     if (offset === 0) continue
@@ -139,23 +132,23 @@ export function getHarmonicTargets(setup: HarmonicSetup): { ratio: number; price
     .filter((target) => positiveFinite(target.price))
 }
 
-function touches(setup: HarmonicSetup, bar: Pick<RsiBar, 'high' | 'low'>): boolean {
+function touches(setup: HarmonicSetup, bar: Pick<HarmonicBar, 'high' | 'low'>): boolean {
   return bar.low <= setup.zone.high && bar.high >= setup.zone.low
 }
 
-function crossesB(setup: HarmonicSetup, bar: RsiBar): boolean {
+function crossesB(setup: HarmonicSetup, bar: HarmonicBar): boolean {
   return setup.direction === 'bullish' ? bar.close < setup.b.price : bar.close > setup.b.price
 }
 
 /** A wick beyond the stop boundary always ends the setup; C's outer boundary only matters before D is reached. */
-function breaches(setup: HarmonicSetup, bar: Pick<RsiBar, 'high' | 'low'>): boolean {
+function breaches(setup: HarmonicSetup, bar: Pick<HarmonicBar, 'high' | 'low'>): boolean {
   const bullish = setup.direction === 'bullish'
   if (bullish ? bar.low < setup.stopReference : bar.high > setup.stopReference) return true
   if (setup.d) return false
   return bullish ? bar.high > setup.cInvalidation : bar.low < setup.cInvalidation
 }
 
-function reachesFirstTarget(setup: HarmonicSetup, bar: Pick<RsiBar, 'high' | 'low'>): boolean {
+function reachesFirstTarget(setup: HarmonicSetup, bar: Pick<HarmonicBar, 'high' | 'low'>): boolean {
   const first = getHarmonicTargets(setup)[0]
   if (!first) return false
   return setup.direction === 'bullish' ? bar.high >= first.price : bar.low <= first.price
@@ -166,7 +159,7 @@ function end(setup: HarmonicSetup, status: HarmonicStatus, time: number): void {
   setup.endedAt = time
 }
 
-function advance(setup: HarmonicSetup, bar: RsiBar, index: number): void {
+function advance(setup: HarmonicSetup, bar: HarmonicBar, index: number, options: HarmonicReplayOptions): void {
   if (setup.status !== 'active') return
   // A wick through a boundary wins an ambiguous candle; OHLC cannot order intrabar events.
   if (breaches(setup, bar)) {
@@ -174,7 +167,8 @@ function advance(setup: HarmonicSetup, bar: RsiBar, index: number): void {
     return
   }
   if (!setup.d) {
-    if (index - setup.c.index >= HARMONIC_EXPIRY_BARS) {
+    if (index - setup.c.index >= (options.expiryMode === 'proportional'
+      ? Math.max(3, Math.ceil((setup.c.index - setup.x.index) / 3 * 3.5)) : HARMONIC_EXPIRY_BARS)) {
       end(setup, 'expired', bar.closeTime)
     } else if (touches(setup, bar)) {
       setup.d = {
@@ -191,12 +185,14 @@ function advance(setup: HarmonicSetup, bar: RsiBar, index: number): void {
   }
   if (reachesFirstTarget(setup, bar)) end(setup, 'completed', bar.closeTime)
   else if (touches(setup, bar)) setup.lastTouchIndex = index
-  else if (index - setup.lastTouchIndex! >= HARMONIC_TOUCH_RECENCY_BARS) end(setup, 'expired', bar.closeTime)
+  else if (index - setup.lastTouchIndex! >= (options.expiryMode === 'proportional'
+    ? Math.max(3, Math.ceil((setup.d.index - setup.x.index) / 2)) : HARMONIC_TOUCH_RECENCY_BARS)) end(setup, 'expired', bar.closeTime)
 }
 
 function createSetup(
   kind: HarmonicKind, direction: HarmonicDirection, x: HarmonicPoint, a: HarmonicPoint, b: HarmonicPoint, c: HarmonicPoint,
-  bRatio: number, cRatio: number, bars: readonly RsiBar[], confirmationIndex: number,
+  bRatio: number, cRatio: number, bars: readonly HarmonicBar[], confirmationIndex: number,
+  offset: number, options: HarmonicReplayOptions,
 ): HarmonicSetup | null {
   const xa = a.price - x.price
   const ab = a.price - b.price
@@ -211,7 +207,7 @@ function createSetup(
     : { zone: { ...baseZone }, zoneNarrowed: false }
   const setup: HarmonicSetup = {
     id: `${kind}:${direction}:${x.time}:${a.time}:${b.time}:${c.time}`,
-    kind, direction, stage: 'forming', x, a, b, c, d: null, lastTouchIndex: null,
+    kind, direction, stage: 'forming', x, a, b, c, d: null, confirmedD: null, dConfirmedAt: null, lastTouchIndex: null,
     baseZone, zone, zoneNarrowed,
     bRatio, cRatio, dRatioRange, cInvalidation,
     stopReference: kind === 'butterfly' ? (direction === 'bullish' ? zone.low : zone.high) : x.price,
@@ -219,7 +215,7 @@ function createSetup(
   }
   // The pattern only exists once C's third right-hand candle closes. Replay the candles
   // since C so a touch already in progress is reported, and a dead-on-arrival candidate is dropped.
-  for (let index = c.index + 1; index <= confirmationIndex; index++) advance(setup, bars[index], index)
+  for (let index = c.index - offset + 1; index <= confirmationIndex; index++) advance(setup, bars[index], index + offset, options)
   return setup.status === 'active' ? setup : null
 }
 
@@ -230,7 +226,8 @@ function createSetup(
  * A-B-C at different ratio bands; the nearest X per family is kept.
  */
 function discover(
-  bars: readonly RsiBar[], kinds: readonly (PivotKind | undefined)[], c: Pivot, confirmationIndex: number,
+  bars: readonly HarmonicBar[], kinds: readonly (PivotKind | null)[], c: Pivot, confirmationIndex: number,
+  offset: number, options: HarmonicReplayOptions,
 ): HarmonicSetup[] {
   const bullish = c.kind === 'high'
   const direction: HarmonicDirection = bullish ? 'bullish' : 'bearish'
@@ -238,7 +235,7 @@ function discover(
   const up = (index: number) => bullish ? bars[index].high : -bars[index].low
   const down = (index: number) => bullish ? bars[index].low : -bars[index].high
   const point = (index: number, side: 'up' | 'down'): HarmonicPoint => ({
-    index, time: bars[index].openTime,
+    index: index + offset, time: bars[index].openTime,
     price: (side === 'up') === bullish ? bars[index].high : bars[index].low,
   })
   const found: HarmonicSetup[] = []
@@ -269,7 +266,7 @@ function discover(
             if (kind && !families.has(kind)) {
               families.add(kind)
               if (inRange(cRatio, HARMONIC_C_RANGE)) {
-                const setup = createSetup(kind, direction, x, a, b, point(c.index, 'up'), bRatio, cRatio, bars, confirmationIndex)
+                const setup = createSetup(kind, direction, x, a, b, point(c.index, 'up'), bRatio, cRatio, bars, confirmationIndex, offset, options)
                 if (setup) found.push(setup)
               }
             }
@@ -288,41 +285,129 @@ function discover(
   return found
 }
 
+export interface HarmonicReplayOptions {
+  /** Proportional timing is an explicit research profile; the scanner keeps fixed 60/12. */
+  expiryMode: 'fixed' | 'proportional'
+}
+
+export interface HarmonicReplayCheckpoint {
+  version: 1
+  options: HarmonicReplayOptions
+  history: HarmonicBar[]
+  kinds: (PivotKind | null)[]
+  startedAt: number | null
+  offset: number
+  setups: HarmonicSetup[]
+  /** Most extreme post-C wick, retained when its candle leaves discovery history. */
+  dExtremes: Record<string, HarmonicPoint>
+  historyIssue: 'gap' | 'invalid' | null
+}
+
+export function createHarmonicReplay(options: Partial<HarmonicReplayOptions> = {}): HarmonicReplayCheckpoint {
+  const expiryMode = options.expiryMode ?? 'fixed'
+  if (expiryMode !== 'fixed' && expiryMode !== 'proportional') throw new RangeError('Unknown harmonic expiry mode')
+  return { version: 1, options: { expiryMode }, history: [], kinds: [], startedAt: null, offset: 0, setups: [], dExtremes: {}, historyIssue: null }
+}
+
+function confirmD(setup: HarmonicSetup, pivot: Pivot, confirmedAt: number): void {
+  if (setup.status !== 'active' || !setup.d || setup.confirmedD || pivot.index < setup.d.index
+    || pivot.kind !== (setup.direction === 'bullish' ? 'low' : 'high')
+    || pivot.price < setup.zone.low || pivot.price > setup.zone.high) return
+  setup.confirmedD = { index: pivot.index, time: pivot.time, price: pivot.price }
+  setup.dConfirmedAt = confirmedAt
+}
+
 /**
- * Causal, linear-price harmonic scanner for L17/L18. Strict 3/3 wick pivots become
- * available three closed candles late; each new pivot is tried as C against every
- * dominant A and X behind it. A later C for the same X, A, and family supersedes the
- * earlier drawing. Targets and BC narrowing are projections, without order or P&L simulation.
+ * Feed chronological closed candles. Interior invalid/provisional candles or a gap
+ * reset unsupported structures. Batch analysis strips trailing live previews first.
+ * Only the private replay state mutates; prior summaries and caller candles do not.
  */
-export function analyzeHarmonics(bars: readonly RsiBar[]): HarmonicAnalysis {
-  const closed = closedSuffix(bars)
-  const setups: HarmonicSetup[] = []
-  const kinds: (PivotKind | undefined)[] = new Array(closed.length)
-  const latest = new Map<string, HarmonicSetup>()
-  let active: HarmonicSetup[] = []
-  for (let index = 0; index < closed.length; index++) {
-    for (const setup of active) advance(setup, closed[index], index)
-    active = active.filter((setup) => setup.status === 'active')
-    const pivotIndex = index - HARMONIC_PIVOT_BARS
-    if (pivotIndex < 0) continue
-    const high = strictPivot(closed, pivotIndex, 'high')
-    const low = strictPivot(closed, pivotIndex, 'low')
-    // Outside candles have no knowable intrabar high/low order.
-    if (high === low) continue
-    const kind: PivotKind = high ? 'high' : 'low'
-    kinds[pivotIndex] = kind
-    const c: Pivot = { index: pivotIndex, time: closed[pivotIndex].openTime, price: closed[pivotIndex][kind], kind }
-    for (const setup of discover(closed, kinds, c, index)) {
-      const key = `${setup.x.index}:${setup.a.index}:${setup.kind}`
-      const previous = latest.get(key)
-      if (previous?.status === 'active') end(previous, 'superseded', setup.confirmedAt)
-      latest.set(key, setup)
-      setups.push(setup)
-      active.push(setup)
-    }
-    active = active.filter((setup) => setup.status === 'active')
+export function advanceHarmonicReplay(state: HarmonicReplayCheckpoint, bar: HarmonicBar): void {
+  const previous = state.history.at(-1)
+  if (bar.isClosed !== true || !validBar(bar) || (previous && (bar.openTime !== previous.closeTime + 1
+    || bar.closeTime - bar.openTime !== previous.closeTime - previous.openTime))) {
+    const historyIssue = bar.isClosed === true && !validBar(bar) ? 'invalid' : 'gap'
+    Object.assign(state, createHarmonicReplay(state.options), { historyIssue })
+    if (bar.isClosed !== true || !validBar(bar)) return
   }
-  return { setups, closedBarCount: closed.length }
+  state.startedAt ??= bar.openTime
+  state.history.push({ openTime: bar.openTime, closeTime: bar.closeTime, open: bar.open, high: bar.high,
+    low: bar.low, close: bar.close, volume: bar.volume, isClosed: true })
+  state.kinds.push(null)
+  if (state.history.length > HARMONIC_MAX_HISTORY) {
+    state.history.shift()
+    state.kinds.shift()
+    state.offset++
+    // Discovery still requires all three left-hand witnesses in its bounded window.
+    state.kinds.fill(null, 0, HARMONIC_PIVOT_BARS)
+  }
+  const closed = state.history
+  const index = closed.length - 1
+  const ordinal = state.offset + index
+  const pivotIndex = index - HARMONIC_PIVOT_BARS
+  const high = strictPivot(closed, pivotIndex, 'high')
+  const low = strictPivot(closed, pivotIndex, 'low')
+  // Outside candles have no knowable intrabar high/low order.
+  const kind: PivotKind | null = high === low ? null : high ? 'high' : 'low'
+  const pivot: Pivot | null = kind ? { index: ordinal - HARMONIC_PIVOT_BARS,
+    time: closed[pivotIndex].openTime, price: closed[pivotIndex][kind], kind } : null
+  for (const setup of state.setups) {
+    if (setup.status !== 'active') continue
+    if (!setup.confirmedD) {
+      const extreme = state.dExtremes[setup.id]
+      const price = setup.direction === 'bullish' ? bar.low : bar.high
+      if (!extreme || (setup.direction === 'bullish' ? price < extreme.price : price > extreme.price)) {
+        state.dExtremes[setup.id] = { index: ordinal, time: bar.openTime, price }
+      }
+      // Confirmation can mature on a completion bar, but a stop violation wins.
+      if (pivot && pivot.price === state.dExtremes[setup.id]?.price && !breaches(setup, bar)) {
+        confirmD(setup, pivot, bar.closeTime)
+      }
+    }
+    advance(setup, bar, ordinal, state.options)
+    if (setup.status !== 'active' || setup.confirmedD) delete state.dExtremes[setup.id]
+  }
+  if (pivot && kind) {
+    state.kinds[pivotIndex] = kind
+    for (const setup of discover(closed, state.kinds, { ...pivot, index: pivotIndex }, index, state.offset, state.options)) {
+      const previousSetup = state.setups.find((candidate) => candidate.status === 'active'
+        && candidate.x.time === setup.x.time && candidate.a.time === setup.a.time && candidate.kind === setup.kind)
+      if (previousSetup) {
+        end(previousSetup, 'superseded', setup.confirmedAt)
+        delete state.dExtremes[previousSetup.id]
+      }
+      state.setups.push(setup)
+      const side = setup.direction === 'bullish' ? 'low' : 'high'
+      let extremeIndex = setup.c.index - state.offset + 1
+      for (let candidate = extremeIndex + 1; candidate <= index; candidate++) {
+        if (side === 'low' ? closed[candidate].low < closed[extremeIndex].low : closed[candidate].high > closed[extremeIndex].high) extremeIndex = candidate
+      }
+      state.dExtremes[setup.id] = { index: extremeIndex + state.offset, time: closed[extremeIndex].openTime, price: closed[extremeIndex][side] }
+    }
+  }
+  const finished = state.setups.filter((setup) => setup.status !== 'active')
+  if (finished.length > HARMONIC_MAX_FINISHED) {
+    // A very old active setup may end today: retain by outcome time so research
+    // consumers still observe its terminal event on this candle.
+    const retained = new Set(finished.sort((a, b) => b.endedAt! - a.endedAt! || b.confirmedAt - a.confirmedAt)
+      .slice(0, HARMONIC_MAX_FINISHED).map((setup) => setup.id))
+    state.setups = state.setups.filter((setup) => setup.status === 'active' || retained.has(setup.id))
+  }
+}
+
+export function summarizeHarmonicReplay(state: HarmonicReplayCheckpoint): HarmonicAnalysis {
+  return { setups: structuredClone(state.setups), closedBarCount: state.history.length,
+    ...(state.history.length ? { lastClosedAt: state.history.at(-1)!.closeTime } : {}),
+    ...(state.historyIssue ? { historyIssue: state.historyIssue } : {}) }
+}
+
+/** Full chronological replay with bounded discovery; active setups survive window rollover. */
+export function analyzeHarmonics(bars: readonly HarmonicBar[], options: Partial<HarmonicReplayOptions> = {}): HarmonicAnalysis {
+  const state = createHarmonicReplay(options)
+  let end = bars.length
+  while (end > 0 && bars[end - 1].isClosed === false) end--
+  for (let index = 0; index < end; index++) advanceHarmonicReplay(state, bars[index])
+  return summarizeHarmonicReplay(state)
 }
 
 export interface HarmonicLiveContext {
@@ -335,7 +420,7 @@ export interface HarmonicLiveContext {
 export function getHarmonicLiveContext(
   setup: HarmonicSetup,
   price: number,
-  liveBar?: Pick<RsiBar, 'high' | 'low' | 'isClosed'>,
+  liveBar?: Pick<HarmonicBar, 'high' | 'low' | 'isClosed'>,
 ): HarmonicLiveContext {
   if (!positiveFinite(price)) return { inZone: false, distancePercent: Infinity, invalidated: true }
   const distance = price < setup.zone.low ? setup.zone.low - price : price > setup.zone.high ? price - setup.zone.high : 0

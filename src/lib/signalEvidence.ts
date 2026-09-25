@@ -7,6 +7,7 @@ import { findRsiTrendlines } from './rsiTrendlines'
 import { analyzeFibonacci, isActiveFibSetup } from './fibonacci'
 import type { FibAnalysis, FibOptions } from './fibonacci'
 import { analyzeHarmonics } from './harmonics'
+import type { HarmonicAnalysis } from './harmonics'
 import { advanceLiquidityMap, analyzeLiquidity } from './liquidityLevels'
 import type { LiquidityMap } from './liquidityLevels'
 import { analyzeMarketStructure } from './marketStructure'
@@ -52,6 +53,8 @@ export interface EvidenceRequest {
   fibOptions?: Partial<FibOptions>
   /** May carry an older active plan from the durable cache; timestamp must match. */
   fibSnapshot?: FibAnalysis
+  /** Durable harmonic state is eligible only at the same closed-candle time. */
+  harmonicSnapshot?: HarmonicAnalysis
   calendarMap?: LiquidityMap | null
   higherTimeframe?: HigherTimeframeSnapshot | null
 }
@@ -86,8 +89,14 @@ export function analyzeSignalEvidence(request: EvidenceRequest) {
     const inPocket = latest.close >= plan.goldenPocket.low && latest.close <= plan.goldenPocket.high
     add({ id: plan.id, family: 'location', source: 'Fib plan', direction: plan.direction === 'long' ? 'bullish' : 'bearish', role: 'context', availableAt: plan.detectedAt, detail: `${plan.status}${inPocket ? ' · close inside golden pocket' : ' · close outside golden pocket'}; SMA200 ${fib.smaConfluence ?? 'unavailable'}` })
   } else missing.push('No active Fib plan')
-  const harmonics = analyzeHarmonics(closed).setups.filter((setup) => setup.status === 'active')
-  for (const setup of harmonics) add({ id: setup.id, family: 'location', source: 'Harmonic', direction: setup.direction, role: 'context', availableAt: setup.confirmedAt, detail: `${setup.kind} · ${latest && latest.close >= setup.zone.low && latest.close <= setup.zone.high ? 'close inside D zone' : 'close outside D zone'}; reversal unconfirmed` })
+  const harmonicAnalysis = request.harmonicSnapshot?.lastClosedAt === asOf ? request.harmonicSnapshot : analyzeHarmonics(closed)
+  const harmonics = harmonicAnalysis.setups.filter((setup) => setup.status === 'active' && setup.confirmedAt <= asOf)
+  for (const setup of harmonics) {
+    const pivotConfirmed = setup.confirmedD && setup.dConfirmedAt != null && setup.dConfirmedAt <= asOf
+    add({ id: setup.id, family: 'location', source: 'Harmonic', direction: setup.direction, role: 'context',
+      availableAt: pivotConfirmed ? setup.dConfirmedAt! : setup.confirmedAt,
+      detail: `${setup.kind} · ${latest && latest.close >= setup.zone.low && latest.close <= setup.zone.high ? 'close inside D zone' : 'close outside D zone'}; ${pivotConfirmed ? 'D pivot confirmed; reversal outcome unknown' : 'reversal unconfirmed'}` })
+  }
   if (!harmonics.length) missing.push('No active harmonic pattern')
 
   if (request.calendarMap && latest) {

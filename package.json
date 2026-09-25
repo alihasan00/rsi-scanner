@@ -10,6 +10,7 @@
     "test": "bun test",
     "backtest:divergence": "bun run scripts/backtest-divergence.ts",
     "backtest:research": "bun run scripts/backtest-research.ts",
+    "backtest:harmonics": "bun run scripts/backtest-harmonics.ts",
     "check:symbols": "bun run scripts/check-symbols.ts",
     "preview": "vite preview"
   },

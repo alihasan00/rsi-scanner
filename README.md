@@ -203,13 +203,18 @@ A projected D is conditional: price may reverse **if it reaches the zone**;
 the pattern does not predict that it will reach D or confirm a reversal.
 
 Open **Filters** to select pattern family, direction, and stage. Default
-**Watchlist order** is stable as prices update; **Nearest D zone** and
-**Symbol** are available alternatives. Search, favorites, timeframe, and card
+**Watchlist order** is stable as prices update; **Nearest D zone**, **Best ratio
+fit**, and **Symbol** are available alternatives. Ratio fit ranks the actual B/C
+measurements from 0 to 100; it is a geometry score, not a win probability.
+Search, favorites, timeframe, and card
 density are shared with the other tabs, whose signal filters do not constrain
 harmonic results.
 
-The detector uses strict 3/3 wick pivots in the latest contiguous 500 closed
-candles and selects legs the way the lectures draw them: A is the extreme of
+The detector discovers strict 3/3 wick pivots in the latest contiguous 500 closed
+candles and retains active setup state separately as that window rolls forward.
+Bounded browser checkpoints preserve continuity across reloads when available
+history matches; missing or corrected evidence produces a reconstruction notice.
+It selects legs the way the lectures draw them: A is the extreme of
 the window, B is the deepest retracement between A and C, C is the extreme
 after B, and X is the extreme before A. C becomes observable after its third
 right-hand close; a later higher C supersedes the earlier drawing. Unfilled
@@ -223,6 +228,18 @@ contact, they use the first observed closed-candle D price. They are reference
 levels, not entry fills, a final D pivot, or a profit record. A stop buffer and
 reversal confluence remain manual. **How to read this** and **Settings**
 explain the method. See [harmonic rules and video evidence](docs/harmonic-patterns.md).
+
+The terminal CD extreme inside D can subsequently become a strict 3/3 pivot.
+**D pivot confirmed** has its own marker and confirmation time; it does not move
+the first contact or target references. Details also show BC/XA zone agreement
+where a sourced template exists, confirmed D ratio fit, leg durations, and age.
+
+Expand the historical comparison in harmonic details to compare first D contact,
+ratio fit ≥80, confirmed D pivots, and proportional expiry on dated training,
+validation, and holdout periods. Each uses a common next-open ATR benchmark with
+costs, distinct from the lecture's structural stop and target references. JSON
+and CSV exports support repeatable evaluation. Live timing remains fixed at
+60/12 candles. See [harmonic research and CLI](docs/harmonic-research.md).
 
 ### Binance TradFi
 
@@ -276,7 +293,7 @@ the current browser history entry.
 | `harmonicPattern` | `all` (default), `gartley`, `bat`, or `butterfly` |
 | `harmonicDirection` | `any` (default), `bullish`, or `bearish` |
 | `harmonicStage` | `all` (default), `forming`, `approaching`, or `zone` |
-| `harmonicSort` | `watchlist` (default), `nearest`, or `symbol` |
+| `harmonicSort` | `watchlist` (default), `nearest`, `quality` (best ratio fit), or `symbol` |
 | `starred` | `1` for Starred-only; otherwise All pairs |
 | `sort` | `watchlist`, `signals`, `change`, `rsi-low`, `rsi-high`, or `symbol` |
 | `timeframe` | Selected candle timeframe, such as `15m` or `4h` |
@@ -590,8 +607,11 @@ plus candle/RSI alignment and seed-to-stream handling.
   `LiquidityScreener`, `LiquidityChart`, and `LiquidityDetails` render the tab.
 - `src/lib/harmonics.ts` detects closed-candle Gartley, Bat, and Butterfly
   structures, applies the source video's templates, narrows Butterfly D where
-  BC overlaps, and calculates target references. `harmonicScreener.ts` caches
-  closed history; `harmonicRows.ts` applies independent filters and stable
+  BC overlaps, and calculates target references. `harmonicReplayCache.ts` retains
+  active setups across discovery-window rollover and verified reloads;
+  `harmonicScreener.ts` shares that cache. `harmonicQuality.ts` supplies independent
+  ratio and timing measurements, and `harmonicResearch.ts` evaluates frozen
+  chronological events. `harmonicRows.ts` applies independent filters and stable
   sorting. `HarmonicScreener`, `HarmonicChart`, and `HarmonicDetails` render
   the tab and detail view; `HarmonicGuide` explains the method in settings.
 

@@ -30,6 +30,13 @@ export const HARMONIC_STAGE_OPTIONS: { value: ScreenerFilterPreferences['harmoni
   { value: 'zone', label: 'D zone reached' },
 ]
 
+export const HARMONIC_SORT_OPTIONS: { value: ScreenerFilterPreferences['harmonicSort']; label: string }[] = [
+  { value: 'watchlist', label: 'Watchlist order' },
+  { value: 'nearest', label: 'Nearest D zone' },
+  { value: 'quality', label: 'Best ratio fit' },
+  { value: 'symbol', label: 'Name: A to Z' },
+]
+
 export const FIB_STAGE_OPTIONS: { value: FibStage; label: string }[] = [
   { value: 'any', label: 'Any active setup' },
   { value: 'waiting', label: 'Awaiting entry' },

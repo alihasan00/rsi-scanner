@@ -7,12 +7,15 @@
 .harmonic-card__pattern > span:last-child { margin-left: auto; color: var(--color-ink-muted); }
 .harmonic-card__pattern .is-bullish { color: #63c69b; }
 .harmonic-card__pattern .is-bearish { color: #de8995; }
+.harmonic-card__quality { display: flex; justify-content: space-between; gap: 8px; padding: 3px 12px 5px; color: var(--color-ink-muted); font: 10px var(--font-numeric); }
+.harmonic-card__quality span + span { color: #93b5ff; }
 .harmonic-chart { width: 100%; min-width: 0; }
 .harmonic-chart svg { display: block; width: 100%; height: auto; }
 .harmonic-chart__grid { stroke: var(--color-hairline); stroke-opacity: 0.55; }
 .harmonic-chart__muted { fill: var(--color-ink-muted); font: 10px var(--font-body); }
 .harmonic-chart__point { font: 600 11px var(--font-body); paint-order: stroke; stroke: var(--color-surface); stroke-width: 3px; stroke-linejoin: round; }
 .harmonic-chart--compact { min-height: 186px; }
+.harmonic-chart__history { margin: 2px 12px 10px; color: var(--color-ink-muted); font-size: 10px; line-height: 1.5; }
 .harmonic-card__placeholder { height: 186px; }
 .harmonic-card__zone { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 5px; padding: 6px 12px 10px; font-size: 10px; }
 .harmonic-card__zone > span { color: var(--color-ink-muted); }
@@ -42,6 +45,9 @@
 .harmonic-details__levels strong { color: var(--color-ink); font: 12px/1.7 var(--font-numeric); }
 .harmonic-details__levels small { color: var(--color-ink-muted); line-height: 1.6; }
 .harmonic-details__manual { color: var(--color-ink-secondary); font-size: 12px; line-height: 1.7; }
+.harmonic-quality { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-hairline); }
+.harmonic-quality__heading { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 13px; }
+.harmonic-quality__heading .ant-tag { margin: 0; }
 .harmonic-details__method { border-top: 1px solid var(--color-hairline); margin-top: 16px; padding-top: 14px; }
 .harmonic-details__method summary { cursor: pointer; color: var(--color-ink-secondary); font-size: 12px; }
 .harmonic-details__method[open] summary { margin-bottom: 16px; }

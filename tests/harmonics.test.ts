@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { RsiBar } from '../src/types'
 import {
-  analyzeHarmonics, getHarmonicLiveContext, getHarmonicTargets, HARMONIC_C_RANGE, HARMONIC_RATIOS,
+  advanceHarmonicReplay, analyzeHarmonics, createHarmonicReplay, summarizeHarmonicReplay, getHarmonicLiveContext, getHarmonicTargets, HARMONIC_C_RANGE, HARMONIC_RATIOS,
   HARMONIC_TARGET_RATIOS, HARMONIC_TOUCH_RECENCY_BARS, narrowButterflyZone,
 } from '../src/lib/harmonics'
 import type { HarmonicKind, HarmonicSetup } from '../src/lib/harmonics'
@@ -421,12 +421,12 @@ describe('history integrity and live context', () => {
 
   test('missing, provisional, duplicated, or changed-duration interior candles reset the suffix', () => {
     const bars = pattern()
-    expect(analyzeHarmonics(bars.filter((_, index) => index !== 11))).toEqual({ setups: [], closedBarCount: 7 })
+    expect(analyzeHarmonics(bars.filter((_, index) => index !== 11))).toMatchObject({ setups: [], closedBarCount: 7, historyIssue: 'gap' })
     expect(analyzeHarmonics(bars.map((candle, index) => index === 11 ? { ...candle, isClosed: false } : candle)))
-      .toEqual({ setups: [], closedBarCount: 7 })
+      .toMatchObject({ setups: [], closedBarCount: 7, historyIssue: 'gap' })
     expect(analyzeHarmonics([...bars.slice(0, 12), bars[11], ...bars.slice(12)]).setups).toEqual([])
     const changed = bars.map((candle, index) => index === 11 ? { ...candle, closeTime: candle.closeTime - 1 } : candle)
-    expect(analyzeHarmonics(changed)).toEqual({ setups: [], closedBarCount: 7 })
+    expect(analyzeHarmonics(changed)).toMatchObject({ setups: [], closedBarCount: 7, historyIssue: 'gap' })
   })
 
   test.each([false, true])('a provisional wick violation remains visible after price recedes (bearish=%p)', (bearish) => {
@@ -453,7 +453,7 @@ describe('history integrity and live context', () => {
   ])('malformed final closed bar clears stale signals (%p)', (patch) => {
     const bars = pattern()
     bars[18] = { ...bars[18], ...patch }
-    expect(analyzeHarmonics(bars)).toEqual({ setups: [], closedBarCount: 0 })
+    expect(analyzeHarmonics(bars)).toEqual({ setups: [], closedBarCount: 0, historyIssue: 'invalid' })
   })
 
   test('history is bounded, input is immutable, and a new suffix can form its own pattern', () => {
@@ -468,5 +468,198 @@ describe('history integrity and live context', () => {
     const resumed = pattern().map((candle) => ({ ...candle, openTime: candle.openTime + 100 * 60_000, closeTime: candle.closeTime + 100 * 60_000 }))
     expect(find([...bars, ...resumed]).x.time).toBe(resumed[3].openTime)
     expect(analyzeHarmonics([...bars, ...resumed]).closedBarCount).toBe(19)
+  })
+})
+
+
+describe('durable chronological harmonics', () => {
+  test.each([false, true])('active setup survives candle 501 and completes after its anchors roll out (bearish=%p)', (bearish) => {
+    const bars = pattern()
+    while (bars.length < 800) append(bars, 118, 122, 120)
+    const stream = bearish ? mirror(bars) : bars
+    const before = find(stream.slice(0, 20))
+    for (const length of [499, 500, 501, 506, 800]) {
+      const current = find(stream.slice(0, length))
+      expect(current).toMatchObject({ id: before.id, status: 'active', x: before.x, a: before.a, b: before.b, c: before.c, d: before.d })
+      expect(current.lastTouchIndex).toBe(length - 1)
+      expect(getHarmonicTargets(current)).toEqual(getHarmonicTargets(before))
+    }
+    append(bars, 135, 145, 140)
+    const ended = find(bearish ? mirror(bars) : bars)
+    expect(ended).toMatchObject({ status: 'completed', endedAt: bars.at(-1)!.closeTime, d: before.d })
+    expect(analyzeHarmonics(bearish ? mirror(bars) : bars).closedBarCount).toBe(500)
+  })
+
+  test.each(['stop', 'stale'] as const)('retained setup eventually ends by %s', (reason) => {
+    const bars = pattern()
+    while (bars.length < 710) append(bars, 118, 122, 120)
+    if (reason === 'stop') append(bars, 99, 110, 105)
+    else for (let i = 0; i < 12; i++) append(bars, 130, 134, 132)
+    expect(find(bars)).toMatchObject({ status: reason === 'stop' ? 'invalidated' : 'expired', endedAt: bars.at(-1)!.closeTime })
+  })
+
+  test.each([false, true])('D pivot requires three closed right candles and preserves contact and targets (bearish=%p)', (bearish) => {
+    const bars = pattern()
+    append(bars, 124, 130, 127)
+    append(bars, 118, 126, 122)
+    append(bars, 121, 130, 125)
+    append(bars, 123, 131, 127)
+    const transform = () => bearish ? mirror(bars) : bars
+    const touched = find(transform())
+    const targets = getHarmonicTargets(touched)
+    expect(touched.confirmedD).toBeNull()
+    append(bars, 125, 134, 130)
+    const live = transform().map((candle, i) => i === bars.length - 1 ? { ...candle, isClosed: false } : candle)
+    expect(find(live).confirmedD).toBeNull()
+    const confirmed = find(transform())
+    expect(confirmed.confirmedD).toEqual({ index: 20, time: bars[20].openTime, price: bearish ? 282 : 118 })
+    expect(confirmed.dConfirmedAt).toBe(bars[23].closeTime)
+    expect(confirmed.d).toEqual(touched.d)
+    expect(getHarmonicTargets(confirmed)).toEqual(targets)
+    append(bars, 119, 128, 124)
+    append(bars, 115, 124, 120)
+    append(bars, 118, 128, 124)
+    append(bars, 120, 130, 125)
+    append(bars, 122, 132, 127)
+    expect(find(transform()).confirmedD).toEqual(confirmed.confirmedD)
+    expect(find(transform()).dConfirmedAt).toBe(confirmed.dConfirmedAt)
+  })
+
+  test('the contact candle itself can become D, and confirmation is available on the completion bar', () => {
+    const bars = pattern()
+    append(bars, 118, 125, 122)
+    append(bars, 122, 131, 128)
+    append(bars, 125, 133, 129)
+    append(bars, 127, 140, 134)
+    const setup = find(bars)
+    expect(setup).toMatchObject({ status: 'completed', dConfirmedAt: bars[22].closeTime,
+      confirmedD: { index: 19, time: bars[19].openTime, price: 118 } })
+    expect(setup.confirmedD).toEqual(setup.d)
+  })
+
+  test('a pivot confirmed after the setup ends cannot add retrospective confirmation', () => {
+    const bars = pattern()
+    append(bars, 118, 125, 122)
+    append(bars, 124, 145, 140)
+    append(bars, 130, 145, 138)
+    append(bars, 132, 148, 140)
+    expect(find(bars)).toMatchObject({ status: 'completed', confirmedD: null, dConfirmedAt: null })
+  })
+
+  test.each(['tie', 'below-zone', 'outside'] as const)('rejects a %s D pivot', (reason) => {
+    const bars = pattern()
+    append(bars, 124, 130, 127)
+    if (reason === 'outside') for (let i = 0; i < 3; i++) append(bars, 124, 130, 127)
+    const low = reason === 'below-zone' ? 110 : 118
+    append(bars, low, reason === 'outside' ? 136 : 126, 122)
+    append(bars, reason === 'tie' ? low : 122, 130, 126)
+    append(bars, 123, 131, 127)
+    append(bars, 125, 134, 130)
+    expect(find(bars).confirmedD).toBeNull()
+  })
+
+
+  test('a later strict pivot may revisit an equal CD extreme outside its three-bar neighborhood', () => {
+    const bars = pattern()
+    append(bars, 118, 125, 122)
+    append(bars, 118, 126, 122)
+    append(bars, 122, 130, 126)
+    append(bars, 123, 131, 127)
+    append(bars, 124, 132, 128)
+    expect(find(bars).confirmedD).toBeNull()
+    append(bars, 118, 126, 122)
+    append(bars, 121, 130, 125)
+    append(bars, 123, 132, 127)
+    append(bars, 125, 134, 130)
+    expect(find(bars)).toMatchObject({ d: { index: 19, price: 118 },
+      confirmedD: { index: 24, price: 118 }, dConfirmedAt: bars[27].closeTime })
+  })
+
+  test('a later higher local low is not the terminal CD extreme', () => {
+    const bars = pattern()
+    append(bars, 110, 112, 111)
+    append(bars, 120, 127, 124)
+    append(bars, 125, 130, 127)
+    append(bars, 126, 131, 128)
+    append(bars, 122, 128, 125)
+    append(bars, 125, 131, 128)
+    append(bars, 126, 132, 129)
+    append(bars, 127, 133, 130)
+    expect(find(bars)).toMatchObject({ status: 'active', confirmedD: null })
+  })
+
+  test('stream summaries are immutable snapshots and agree with full-history replay', () => {
+    const bars = pattern()
+    while (bars.length < 650) append(bars, 118, 122, 120)
+    const state = createHarmonicReplay()
+    for (const candle of bars.slice(0, 20)) advanceHarmonicReplay(state, candle)
+    const first = summarizeHarmonicReplay(state)
+    const copy = structuredClone(first)
+    for (const candle of bars.slice(20)) advanceHarmonicReplay(state, candle)
+    expect(first).toEqual(copy)
+    expect(summarizeHarmonicReplay(state)).toEqual(analyzeHarmonics(bars))
+    expect(state.history).toHaveLength(500)
+    expect(state.kinds).toHaveLength(500)
+    expect(state.offset).toBe(150)
+  })
+
+  test('discovery after rollover uses absolute ordinals and finished outcomes stay bounded', () => {
+    const state = createHarmonicReplay()
+    for (let i = 0; i < 600; i++) advanceHarmonicReplay(state, bar(i, 120))
+    const fixture = pattern()
+    let index = 600
+    for (const candle of fixture) {
+      advanceHarmonicReplay(state, { ...candle, openTime: index * 60_000, closeTime: ++index * 60_000 - 1 })
+    }
+    expect(summarizeHarmonicReplay(state).setups[0].x.index).toBe(603)
+    expect(summarizeHarmonicReplay(state).setups[0].c.index).toBe(615)
+    for (let count = 0; count < 520; count++) {
+      for (const candle of fixture) {
+        advanceHarmonicReplay(state, { ...candle, openTime: index * 60_000, closeTime: ++index * 60_000 - 1 })
+      }
+      advanceHarmonicReplay(state, bar(index++, 124))
+      advanceHarmonicReplay(state, bar(index++, 150))
+    }
+    expect(state.setups.filter((setup) => setup.status !== 'active')).toHaveLength(500)
+    expect(state.history).toHaveLength(500)
+    expect(Object.keys(state.dExtremes).length).toBe(state.setups.filter((setup) => setup.status === 'active' && !setup.confirmedD).length)
+  })
+
+
+  test('an old setup ending after 500 newer outcomes remains observable on its ending bar', () => {
+    const bars = pattern()
+    append(bars, 118, 122, 120)
+    const state = createHarmonicReplay()
+    for (const candle of bars) advanceHarmonicReplay(state, candle)
+    const originalId = state.setups[0].id
+    let index = bars.length
+    for (let count = 0; count < 510; count++) {
+      for (const candle of pattern()) {
+        const price = 118 + (candle.close - 100) * 0.1
+        advanceHarmonicReplay(state, bar(index++, price))
+      }
+      advanceHarmonicReplay(state, bar(index++, 120))
+      advanceHarmonicReplay(state, bar(index++, 126))
+    }
+    expect(state.setups.filter((setup) => setup.status !== 'active')).toHaveLength(500)
+    expect(state.setups.find((setup) => setup.id === originalId)?.status).toBe('active')
+    const final = bar(index, 140)
+    advanceHarmonicReplay(state, final)
+    expect(summarizeHarmonicReplay(state).setups.find((setup) => setup.id === originalId))
+      .toMatchObject({ status: 'completed', endedAt: final.closeTime })
+  })
+
+  test('proportional expiry is an opt-in research profile', () => {
+    const bars = pattern()
+    while (bars.length <= 29) append(bars, 150)
+    expect(analyzeHarmonics(bars).setups[0].status).toBe('active')
+    expect(analyzeHarmonics(bars, { expiryMode: 'proportional' }).setups[0])
+      .toMatchObject({ status: 'expired', endedAt: bars[29].closeTime })
+    const touched = pattern()
+    append(touched, 118, 124, 120)
+    for (let i = 0; i < 8; i++) append(touched, 130, 134, 132)
+    expect(analyzeHarmonics(touched).setups[0].status).toBe('active')
+    expect(analyzeHarmonics(touched, { expiryMode: 'proportional' }).setups[0].status).toBe('expired')
+    expect(() => createHarmonicReplay({ expiryMode: 'unknown' as 'fixed' })).toThrow()
   })
 })

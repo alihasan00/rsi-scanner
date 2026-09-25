@@ -24,7 +24,7 @@ export interface ScreenerPreferences {
   harmonicPattern: 'all' | 'gartley' | 'bat' | 'butterfly'
   harmonicDirection: 'any' | 'bullish' | 'bearish'
   harmonicStage: 'all' | 'forming' | 'approaching' | 'zone'
-  harmonicSort: 'watchlist' | 'nearest' | 'symbol'
+  harmonicSort: 'watchlist' | 'nearest' | 'quality' | 'symbol'
   rsiState: RsiStateFilter
   starredOnly: boolean
   sort: ScreenerSort
@@ -66,7 +66,7 @@ const SR_SORTS = ['watchlist', 'nearest', 'atr', 'signals', 'symbol'] as const
 const HARMONIC_PATTERNS = ['all', 'gartley', 'bat', 'butterfly'] as const
 const HARMONIC_DIRECTIONS = ['any', 'bullish', 'bearish'] as const
 const HARMONIC_STAGES = ['all', 'forming', 'approaching', 'zone'] as const
-const HARMONIC_SORTS = ['watchlist', 'nearest', 'symbol'] as const
+const HARMONIC_SORTS = ['watchlist', 'nearest', 'quality', 'symbol'] as const
 const RECENCIES = [1, 3, 5, 'any'] as const
 const FIB_DIRECTIONS = ['any', 'long', 'short'] as const
 const FIB_STAGES = ['any', 'waiting', 'near', 'active', 'pocket'] as const satisfies readonly FibStage[]

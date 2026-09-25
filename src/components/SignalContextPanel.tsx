@@ -9,6 +9,7 @@ import { useSrContext } from '../hooks/useSrContext'
 import { useHigherTimeframe } from '../hooks/useHigherTimeframe'
 import { defaultHigherTimeframe, higherTimeframeChoices } from '../lib/higherTimeframe'
 import { analyzeSignalEvidence } from '../lib/signalEvidence'
+import { getHarmonicAnalysis } from '../lib/harmonicScreener'
 import { MarketStructurePanel } from './MarketStructurePanel'
 import './SignalContextPanel.css'
 
@@ -28,16 +29,18 @@ export function SignalContextPanel({ symbol, market, timeframe, bars, price, fib
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 15_000); return () => clearInterval(timer) }, [])
   const stale = feed.state !== 'ready' || feed.updatedAt === null || now - feed.updatedAt > 60_000
+  const harmonic = useMemo(() => getHarmonicAnalysis(`${market}:${timeframe}:${symbol}`, bars), [market, timeframe, symbol, bars])
   const result = useMemo(() => analyzeSignalEvidence({
-    symbol, market, timeframe, bars, fibOptions, fibSnapshot: fib,
+    symbol, market, timeframe, bars, fibOptions, fibSnapshot: fib, harmonicSnapshot: harmonic,
     calendarMap: daily.status === 'ready' ? daily.map : null,
     higherTimeframe: htf.status === 'ready' ? htf.snapshot : null,
     divergenceOptions: { includeHidden: settings.showHiddenDivergences, requireBodyAgreement: settings.requireBodyAgreement, requireSameRsiCycle: settings.requireSameRsiCycle, invalidationAnchor: settings.divergenceInvalidationAnchor },
-  }), [symbol, market, timeframe, bars, fib, fibOptions, daily, htf.status, htf.snapshot, settings])
+  }), [symbol, market, timeframe, bars, fib, harmonic, fibOptions, daily, htf.status, htf.snapshot, settings])
   const visible = result.items.filter((item) => (direction === 'all' || item.direction === direction) && (!triggersOnly || item.role === 'trigger'))
   return <div className="signal-context">
     <div className="signal-context__heading"><div><h3>Signal evidence</h3><p>{result.asOf === null ? 'Waiting for completed candles' : `At the ${stamp(result.asOf)} UTC close · ${timeframe}`}</p></div><div className="signal-context__higher"><label htmlFor="higher-timeframe">Higher timeframe</label><Select id="higher-timeframe" aria-label="Higher timeframe" value={higher} onChange={setHigher} disabled={higherTimeframeChoices(timeframe).length === 0} placeholder="Highest available" options={higherTimeframeChoices(timeframe).map((value) => ({ value, label: value }))} /></div></div>
     {stale && <Alert type="warning" showIcon title="Updates delayed · last known evidence" description="Wait for fresh market data before interpreting the signals below." />}
+    {harmonic.continuity?.state === 'reset' && <Alert type="warning" showIcon title="Harmonic history rebuilt" description={harmonic.continuity.detail} />}
     {higher && htf.status !== 'ready' && <p role="status" className="signal-context__note">{htf.status === 'error' ? `${htf.error} Retrying automatically.` : `Loading completed ${higher} candles…`}</p>}
     {daily.status !== 'ready' && <p role="status" className="signal-context__note">{daily.status === 'error' ? `Daily context: ${daily.error} Retrying automatically.` : 'Loading calendar context…'}</p>}
     <div className="signal-context__summary"><Tag color="green">Bullish: {result.bullishFamilies.length} {result.bullishFamilies.length === 1 ? 'family' : 'families'}</Tag><Tag color="red">Bearish: {result.bearishFamilies.length} {result.bearishFamilies.length === 1 ? 'family' : 'families'}</Tag><strong>{result.conflict ? 'Mixed directions · inspect the conflicts' : result.items.length ? 'Evidence available for review' : 'No current directional evidence'}</strong></div>

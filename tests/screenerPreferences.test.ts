@@ -288,7 +288,7 @@ describe('canonical screener URL writing', () => {
       harmonicPattern: ['all', 'gartley', 'bat', 'butterfly'],
       harmonicDirection: ['any', 'bullish', 'bearish'],
       harmonicStage: ['all', 'forming', 'approaching', 'zone'],
-      harmonicSort: ['watchlist', 'nearest', 'symbol'],
+      harmonicSort: ['watchlist', 'nearest', 'quality', 'symbol'],
       divergenceRecency: [1, 3, 5, 'any'],
       fibDirection: ['any', 'long', 'short'],
       fibStage: ['any', 'waiting', 'near', 'active', 'pocket'],

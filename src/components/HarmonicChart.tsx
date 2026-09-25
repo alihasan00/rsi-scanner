@@ -19,15 +19,18 @@ export function HarmonicChart({ bars: source, setup, price, compact = false }: {
   const top = 30
   const bottom = height - 30
   const last = bars.at(-1)
+  const first = bars[0]
+  const olderAnchors = first !== undefined && setup.x.time < first.openTime
   const duration = last ? last.closeTime - last.openTime + 1 : 60_000
   const lastTime = Math.max(setup.c.time, last?.openTime ?? setup.c.time)
   // A projected D has no forecast date; the extra space separates it from actual candles.
   const projectedTime = lastTime + duration * Math.max(6, bars.length * 0.12)
   const d = setup.d ?? { time: projectedTime, price: (setup.zone.low + setup.zone.high) / 2 }
-  const endTime = Math.max(projectedTime, d.time) + duration * 2
+  const endTime = Math.max(projectedTime, d.time, setup.confirmedD?.time ?? 0, setup.dConfirmedAt ?? 0) + duration * 2
   const prices = [setup.x.price, setup.a.price, setup.b.price, setup.c.price, setup.zone.low, setup.zone.high,
     ...bars.flatMap((bar) => [bar.low, bar.high]), ...(price > 0 ? [price] : []),
-    ...(!compact ? [setup.cInvalidation, setup.stopReference] : [])]
+    ...(setup.confirmedD ? [setup.confirmedD.price] : []),
+    ...(!compact ? [...(!setup.d ? [setup.cInvalidation] : []), setup.stopReference] : [])]
   const low = Math.min(...prices)
   const high = Math.max(...prices)
   const padding = Math.max((high - low) * 0.12, high * 0.001)
@@ -39,7 +42,7 @@ export function HarmonicChart({ bars: source, setup, price, compact = false }: {
   const candleWidth = Math.max(1, Math.min(7, (right - left) * duration / (endTime - setup.x.time) * 0.6))
   const points = [setup.x, setup.a, setup.b, setup.c, d]
   const pointString = (indexes: number[]) => indexes.map((index) => `${x(points[index].time)},${y(points[index].price)}`).join(' ')
-  const caption = `${HARMONIC_NAMES[setup.kind]}, ${setup.direction}. X A B C confirmed swings. D ${setup.d ? 'zone touched on a closed candle' : 'zone is projected, with no predicted arrival time'}. Linear price scale. Hollow candles are provisional.`
+  const caption = `${HARMONIC_NAMES[setup.kind]}, ${setup.direction}. X A B C confirmed swings. D ${setup.d ? 'marks the first closed-candle zone touch' : 'zone is projected, with no predicted arrival time'}.${setup.confirmedD ? ' A separate diamond marks the later confirmed D pivot; the first touch remains fixed.' : ''}${olderAnchors ? ' Earlier anchors are retained, but their original candles are outside the visible history.' : ''} Linear price scale. Hollow candles are provisional.`
   const utc = (time: number) => new Date(time).toLocaleString('en-GB', { timeZone: 'UTC', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
 
   return <div ref={ref} className={`harmonic-chart${compact ? ' harmonic-chart--compact' : ''}`}>
@@ -50,6 +53,7 @@ export function HarmonicChart({ bars: source, setup, price, compact = false }: {
         return <g key={index}><line x1={left} x2={right} y1={y(value)} y2={y(value)} className="harmonic-chart__grid" />{!compact && <text x={right + 10} y={y(value) + 3} className="harmonic-chart__muted">{formatQuotePrice(value)}</text>}</g>
       })}
       <g clipPath={`url(#${clipId})`}>
+        {olderAnchors && <rect x={left} y={top} width={Math.max(0, x(first.openTime) - left)} height={bottom - top} fill="var(--color-ink-muted)" fillOpacity={0.04} stroke="var(--color-hairline)" strokeDasharray="3 4" />}
         <rect x={x(setup.c.time)} y={y(setup.zone.high)} width={right - x(setup.c.time)} height={Math.max(1, y(setup.zone.low) - y(setup.zone.high))} fill={color} fillOpacity={0.09} stroke={color} strokeOpacity={0.4} strokeDasharray="4 4" />
         <polygon points={pointString([0, 1, 2])} fill={color} fillOpacity={0.1} />
         <polygon points={pointString([2, 3, 4])} fill={color} fillOpacity={0.1} />
@@ -62,7 +66,7 @@ export function HarmonicChart({ bars: source, setup, price, compact = false }: {
           </g>
         })}
         {!compact && <>
-          <line x1={x(setup.c.time)} x2={right} y1={y(setup.cInvalidation)} y2={y(setup.cInvalidation)} stroke="#c77d85" strokeDasharray="2 5" />
+          {!setup.d && <line x1={x(setup.c.time)} x2={right} y1={y(setup.cInvalidation)} y2={y(setup.cInvalidation)} stroke="#c77d85" strokeDasharray="2 5" />}
           <line x1={x(setup.c.time)} x2={right} y1={y(setup.stopReference)} y2={y(setup.stopReference)} stroke="#888" strokeDasharray="2 5" />
         </>}
         {price > 0 && <line x1={left} x2={right} y1={y(price)} y2={y(price)} stroke="#999" strokeDasharray="2 5" strokeOpacity={0.5} />}
@@ -76,10 +80,16 @@ export function HarmonicChart({ bars: source, setup, price, compact = false }: {
           <text x={x(point.time)} y={y(point.price) + (above ? -9 : 16)} textAnchor={index === 0 ? 'start' : 'middle'} fill={color} className="harmonic-chart__point">{'XABCD'[index]}{index === 4 && !setup.d ? '?' : ''}</text>
         </g>
       })}
+      {setup.confirmedD && <g>
+        <path d={`M ${x(setup.confirmedD.time)} ${y(setup.confirmedD.price) - 5} l 5 5 l -5 5 l -5 -5 Z`} fill="var(--color-surface)" stroke="#93b5ff" strokeWidth={1.5} />
+        <text x={x(setup.confirmedD.time) + 9} y={y(setup.confirmedD.price) + (setup.direction === 'bullish' ? 29 : -20)} fill="#93b5ff" className="harmonic-chart__point">{compact ? 'D pivot' : `D pivot · ${utc(setup.confirmedD.time)}`}</text>
+        {!compact && setup.dConfirmedAt !== null && <title>{`D pivot ${formatQuotePrice(setup.confirmedD.price)} at ${utc(setup.confirmedD.time)} UTC; confirmed ${utc(setup.dConfirmedAt)} UTC.`}</title>}
+      </g>}
       <text x={left} y={14} className="harmonic-chart__muted">{compact ? 'Linear · XABCD' : 'Raw candles · Linear price · UTC'}</text>
-      <text x={right} y={14} textAnchor="end" fill={color} className="harmonic-chart__muted">{setup.d ? 'D zone touched' : 'D = possible reversal zone'}</text>
+      <text x={right} y={14} textAnchor="end" fill={color} className="harmonic-chart__muted">{setup.confirmedD ? 'D pivot confirmed' : setup.d ? 'D zone touched' : 'D = possible reversal zone'}</text>
       <text x={left} y={height - 7} className="harmonic-chart__muted">{compact ? setup.d ? 'D = first closed touch' : 'Dashed leg = projected' : `X: ${utc(setup.x.time)}`}</text>
       {!compact && <text x={right} y={height - 7} textAnchor="end" className="harmonic-chart__muted">Latest candle: {utc(lastTime)} · Hollow = forming</text>}
     </svg>
+    {olderAnchors && <p className="harmonic-chart__history">Earlier anchors retained · visible candles begin {utc(first.openTime)} UTC. The shaded history area has no loaded candles.</p>}
   </div>
 }

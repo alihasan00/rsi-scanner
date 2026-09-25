@@ -5,6 +5,8 @@ import type { HarmonicSetup } from '../src/lib/harmonics'
 import type { ScreenerFilterPreferences } from '../src/lib/screenerPreferences'
 import { DEFAULT_SCREENER_PREFERENCES } from '../src/lib/screenerPreferences'
 import { analyzeHarmonics, getHarmonicLiveContext } from '../src/lib/harmonics'
+import { getHarmonicQuality } from '../src/lib/harmonicQuality'
+import { getHarmonicAnalysis } from '../src/lib/harmonicScreener'
 import { makeHarmonicRows, selectHarmonicSetup } from '../src/lib/harmonicRows'
 
 function bar(index: number, price: number, patch: Partial<RsiBar> = {}): RsiBar {
@@ -30,8 +32,10 @@ function row(symbol: string, price = 160, bars = pattern()): ScreenerRow {
   }
 }
 
+const identity = { market: 'spot', timeframe: '1m' } as const
+
 function symbols(rows: readonly ScreenerRow[], patch: Partial<ScreenerFilterPreferences> = {}, starred: readonly string[] = []): string[] {
-  return makeHarmonicRows(rows, filters(patch), starred).map((item) => item.row.symbol)
+  return makeHarmonicRows(rows, filters(patch), starred, identity).map((item) => item.row.symbol)
 }
 
 describe('production harmonic setup selection', () => {
@@ -64,6 +68,27 @@ describe('production harmonic setup selection', () => {
 
   test('empty analysis has no selectable geometry', () => {
     expect(selectHarmonicSetup(analyzeHarmonics([]), filters())).toBeUndefined()
+  })
+
+  test('ratio-fit selection ranks only matching active setups and resolves equal scores by recency', () => {
+    const analysis = analyzeHarmonics(pattern())
+    const original = analysis.setups[0]
+    const ideal = { ...original, id: 'ideal', confirmedAt: 1 }
+    const boundary = {
+      ...original, id: 'boundary', confirmedAt: 3,
+      b: { ...original.b, price: 144.4 }, c: { ...original.c, price: 178.7608 },
+      bRatio: 0.556, cRatio: 0.618,
+    }
+    const bearish = { ...ideal, id: 'bearish', direction: 'bearish' as const, confirmedAt: 4 }
+    const ended = { ...ideal, id: 'ended', status: 'completed' as const, confirmedAt: 5 }
+    const candidates = { ...analysis, setups: [ideal, boundary, bearish, ended] }
+    const before = structuredClone(candidates)
+    expect(getHarmonicQuality(ideal).score).toBeCloseTo(100)
+    expect(getHarmonicQuality(boundary).score).toBeCloseTo(50)
+    expect(selectHarmonicSetup(candidates, filters({ harmonicDirection: 'bullish' }))).toBe(boundary)
+    expect(selectHarmonicSetup(candidates, filters({ harmonicSort: 'quality', harmonicDirection: 'bullish' }))).toBe(ideal)
+    expect(selectHarmonicSetup(candidates, filters({ harmonicSort: 'quality' }))).toBe(bearish)
+    expect(candidates).toEqual(before)
   })
 })
 
@@ -109,11 +134,33 @@ describe('production harmonic rows', () => {
     expect(rows.map((item) => item.symbol)).toEqual(['SOLUSDT', 'BTCUSDT', 'ETHUSDT'])
   })
 
+  test('ratio-fit sorting is stable for ties and independent of live price changes', () => {
+    const edge = pattern()
+    edge[11] = bar(11, 144.4)
+    edge[15] = bar(15, 178.7608)
+    const rows = [row('EDGEUSDT', 124, edge), row('IDEAL-BUSDT'), row('IDEAL-AUSDT')]
+    expect(symbols(rows)).toEqual(['EDGEUSDT', 'IDEAL-BUSDT', 'IDEAL-AUSDT'])
+    expect(symbols(rows, { harmonicSort: 'quality' })).toEqual(['IDEAL-BUSDT', 'IDEAL-AUSDT', 'EDGEUSDT'])
+    const changed = rows.map((item, index) => ({ ...item, snapshot: { ...item.snapshot, price: [190, 124, 201][index] } }))
+    expect(symbols(changed, { harmonicSort: 'quality' })).toEqual(['IDEAL-BUSDT', 'IDEAL-AUSDT', 'EDGEUSDT'])
+    expect(rows.map((item) => item.symbol)).toEqual(['EDGEUSDT', 'IDEAL-BUSDT', 'IDEAL-AUSDT'])
+  })
+
+  test('analysis cache identity includes the selected market and timeframe', () => {
+    const bars = pattern()
+    const item = row('IDENTITYUSDT', 160, bars)
+    const spot = makeHarmonicRows([item], filters(), [], identity)[0]
+    const futures = makeHarmonicRows([item], filters(), [], { market: 'tradfi', timeframe: '1m' })[0]
+    expect(spot.analysis).toBe(getHarmonicAnalysis('spot:1m:IDENTITYUSDT', bars))
+    expect(futures.analysis).toBe(getHarmonicAnalysis('tradfi:1m:IDENTITYUSDT', bars))
+    expect(spot.analysis).not.toBe(futures.analysis)
+  })
+
   test('live zone contact does not promote closed stage and closes do update the production row', () => {
     const bars = pattern()
     const live = bar(19, 124, { isClosed: false })
     const preview = row('HARMONIC-STAGEUSDT', 124, [...bars, live])
-    const selected = makeHarmonicRows([preview], filters(), [])[0]
+    const selected = makeHarmonicRows([preview], filters(), [], identity)[0]
     expect(selected.setup.stage).toBe('forming')
     expect(selected.setup.d).toBeNull()
     expect(getHarmonicLiveContext(selected.setup, 124, live).inZone).toBe(true)
@@ -128,7 +175,7 @@ describe('production harmonic rows', () => {
     const bars = pattern()
     const live = bar(19, 160, { high: 201, low: 155, isClosed: false })
     const preview = row('HARMONIC-WARNINGUSDT', 160, [...bars, live])
-    const selected = makeHarmonicRows([preview], filters(), [])[0]
+    const selected = makeHarmonicRows([preview], filters(), [], identity)[0]
     expect(selected.setup.status).toBe('active')
     expect(getHarmonicLiveContext(selected.setup, 160, live).invalidated).toBe(true)
     const closed = row(preview.symbol, 160, [...bars, { ...live, isClosed: true }])
@@ -144,7 +191,7 @@ describe('production harmonic rows', () => {
   test('a D touch inside the confirmation window produces a zone-stage card', () => {
     const touched = pattern()
     touched[18] = { ...touched[18], low: 124, high: 134, open: 132, close: 130 }
-    const rows = makeHarmonicRows([row('TOUCHEDUSDT', 130, touched)], filters(), [])
+    const rows = makeHarmonicRows([row('TOUCHEDUSDT', 130, touched)], filters(), [], identity)
     expect(rows.map((item) => [item.row.symbol, item.setup.stage, item.setup.d?.price])).toEqual([['TOUCHEDUSDT', 'zone', 124]])
   })
 })

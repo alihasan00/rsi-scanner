@@ -10,6 +10,8 @@ import type { ScreenerFilterPreferences } from '../lib/screenerPreferences'
 import { HARMONIC_COLORS, HARMONIC_NAMES, HARMONIC_STAGES, makeHarmonicRows } from '../lib/harmonicRows'
 import type { HarmonicRow } from '../lib/harmonicRows'
 import { getHarmonicLiveContext } from '../lib/harmonics'
+import { getHarmonicQuality } from '../lib/harmonicQuality'
+import { HARMONIC_SORT_OPTIONS } from '../lib/screenerFilterOptions'
 import { formatQuotePrice } from '../lib/priceFormatting'
 import { useScannerStore } from '../store/scannerStore'
 import { HarmonicChart } from './HarmonicChart'
@@ -22,6 +24,7 @@ import './Harmonic.css'
 
 const HarmonicCard = memo(function HarmonicCard({ data, starred, delayed }: { data: HarmonicRow; starred: boolean; delayed: boolean }) {
   const { row, setup } = data
+  const quality = getHarmonicQuality(setup)
   const { ref, isNearViewport } = useNearViewport<HTMLDivElement>()
   const selectSymbol = useScannerStore((state) => state.selectSymbol)
   const toggleStarredSymbol = useScannerStore((state) => state.toggleStarredSymbol)
@@ -39,6 +42,7 @@ const HarmonicCard = memo(function HarmonicCard({ data, starred, delayed }: { da
       </div>
       <button type="button" className="screener-card__chart-button harmonic-card__open" aria-label={`Open ${row.symbol} ${setup.direction} ${HARMONIC_NAMES[setup.kind]} pattern`} onClick={() => selectSymbol(row.symbol)}>
         <div className="harmonic-card__pattern"><strong style={{ color: HARMONIC_COLORS[setup.kind] }}>{HARMONIC_NAMES[setup.kind]}</strong><span className={`is-${setup.direction}`}>{setup.direction === 'bullish' ? '↗ Bullish' : '↘ Bearish'}</span><span>{HARMONIC_STAGES[setup.stage]}</span></div>
+        <div className="harmonic-card__quality"><span>Ratio fit {quality.score.toFixed(0)} / 100</span>{setup.confirmedD && <span>D pivot confirmed</span>}</div>
         {isNearViewport ? <HarmonicChart bars={row.snapshot.bars} setup={setup} price={row.snapshot.price} compact /> : <div className="harmonic-card__placeholder" />}
         <div className="harmonic-card__zone"><span>D zone</span><strong>{formatQuotePrice(setup.zone.low)} – {formatQuotePrice(setup.zone.high)}</strong></div>
         <div className={`harmonic-card__status${interrupted || live.invalidated ? ' is-warning' : live.inZone ? ' is-zone' : ''}`}><span>{liveLabel}</span><span aria-hidden="true">↗</span></div>
@@ -55,7 +59,7 @@ export function HarmonicScreener({ universe, rows, now }: { universe: MarketUniv
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
   const searchRef = useRef<InputRef>(null)
-  const visible = useMemo(() => makeHarmonicRows(rows, filters, starredSymbols), [rows, filters, starredSymbols])
+  const visible = useMemo(() => makeHarmonicRows(rows, filters, starredSymbols, { market: universe.market, timeframe }), [rows, filters, starredSymbols, universe.market, timeframe])
   const loaded = rows.filter((row) => row.snapshot.bars.length > 0).length
   const failed = rows.filter((row) => row.feed.state === 'error').length
   const delayed = rows.filter((row) => row.feed.updatedAt !== null && now - row.feed.updatedAt > 60_000).length
@@ -92,7 +96,7 @@ export function HarmonicScreener({ universe, rows, now }: { universe: MarketUniv
     <div className="screener__results-bar">
       <span className="screener__collection-label">{filters.starredOnly ? <><StarOutlined /> Starred patterns</> : 'Harmonic patterns'} <span role="status">{visible.length}</span><Tag>{inZone} in D zone now</Tag></span>
       <div className="screener__result-controls">
-        <Select<ScreenerFilterPreferences['harmonicSort']> aria-label="Sort harmonic pairs" className="screener__sort" value={filters.harmonicSort} onChange={(harmonicSort) => updateFilters({ harmonicSort })} options={[{ value: 'watchlist', label: 'Watchlist order' }, { value: 'nearest', label: 'Nearest D zone' }, { value: 'symbol', label: 'Name: A to Z' }]} variant="borderless" />
+        <Select<ScreenerFilterPreferences['harmonicSort']> aria-label="Sort harmonic pairs" className="screener__sort" value={filters.harmonicSort} onChange={(harmonicSort) => updateFilters({ harmonicSort })} options={HARMONIC_SORT_OPTIONS} variant="borderless" />
         <Segmented className="screener__density" aria-label="Card size" value={density} onChange={setDensity} options={[{ value: 'comfortable', label: <Tooltip title="Comfortable cards"><AppstoreOutlined aria-label="Comfortable cards" /></Tooltip> }, { value: 'compact', label: <Tooltip title="Compact cards"><BarsOutlined aria-label="Compact cards" /></Tooltip> }]} />
         <PairCollectionPicker starredOnly={filters.starredOnly} starredCount={starredSymbols.length} onChange={(starredOnly) => updateFilters({ starredOnly })} />
       </div>
