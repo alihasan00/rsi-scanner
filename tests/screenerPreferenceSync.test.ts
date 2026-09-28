@@ -102,6 +102,47 @@ afterEach(() => {
 })
 
 describe('screener store persistence', () => {
+  test('Ichimoku tab stays under Crypto, survives reload and reset, and remembers the previous RSI mode', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    const browser = fakeBrowser('/screener?indicator=trendline&candles=5&market=tradfi')
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+    store.getState().setScreenerTab('ichimoku')
+    store.getState().setAppView('watchlist')
+    store.getState().setMarket('spot') // The existing Crypto header action.
+    expect(store.getState().appView).toBe('scanner')
+    expect(store.getState().market).toBe('spot')
+    expect(store.getState().screenerFilters.signal).toBe('ichimoku')
+    expect(new URLSearchParams(browser.location.search).get('indicator')).toBe('ichimoku')
+    expect(new URLSearchParams(browser.location.search).has('view')).toBe(false)
+    const restored = createScannerStore(storage)
+    expect(restored.getState().screenerFilters.signal).toBe('ichimoku')
+    expect(restored.getState().lastRsiSignal).toBe('trendline')
+    restored.getState().resetScreenerFilters()
+    expect(restored.getState().screenerFilters.signal).toBe('ichimoku')
+    restored.getState().setScreenerTab('rsi')
+    expect(restored.getState().screenerFilters.signal).toBe('trendline')
+  })
+
+  test('an Ichimoku URL overrides a saved view and browser navigation restores its indicator without losing RSI memory', () => {
+    const { storage } = memoryStorage({ appView: 'watchlist', market: 'tradfi', screenerFilters: { signal: 'divergence' }, lastRsiSignal: 'divergence' })
+    const store = createScannerStore(storage)
+    const browser = fakeBrowser('/screener?indicator=ichimoku')
+    cleanups.push(startScreenerPreferenceSync(store, browser))
+    expect(store.getState().appView).toBe('scanner')
+    expect(store.getState().market).toBe('spot')
+    expect(store.getState().screenerFilters.signal).toBe('ichimoku')
+    expect(store.getState().lastRsiSignal).toBe('divergence')
+    browser.navigate('/screener?indicator=fib')
+    expect(store.getState().screenerFilters.signal).toBe('fib')
+    browser.navigate('/screener?indicator=ichimoku&market=tradfi')
+    expect(store.getState().screenerFilters.signal).toBe('ichimoku')
+    expect(store.getState().market).toBe('tradfi')
+    expect(preferences(createScannerStore(storage))).toEqual(preferences(store))
+    store.getState().setScreenerTab('rsi')
+    expect(store.getState().screenerFilters.signal).toBe('divergence')
+  })
+
   test('watchlist market changes are atomic, restore scoped stars and persist the view', () => {
     const { storage } = memoryStorage()
     const store = createScannerStore(storage)
@@ -219,7 +260,7 @@ describe('screener store persistence', () => {
     const { storage } = memoryStorage()
     const store = createScannerStore(storage)
     store.getState().updateScreenerFilters({ signal: 'trendline', divergenceRecency: 5, search: 'BTC', rsiState: 'neutral', sort: 'signals' })
-    for (const tab of ['fib', 'sr', 'harmonic'] as const) {
+    for (const tab of ['fib', 'sr', 'harmonic', 'ichimoku'] as const) {
       store.getState().setScreenerTab(tab)
       expect(store.getState().lastRsiSignal).toBe('trendline')
       const restored = createScannerStore(storage)

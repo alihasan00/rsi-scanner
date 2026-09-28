@@ -230,7 +230,18 @@ func pbIchimoku(in Input, interval string, b []market.Candle, family string) []O
 			if direction == "bearish" {
 				level = low
 			}
-			if pbBreak(direction, b[i-1].Close, level) || !pbBreak(direction, b[i].Close, level) || !pbBreak(direction, b[i].Close, b[i].Open) {
+			if pbBreak(direction, b[i-1].Close, level) || !pbBreak(direction, b[i].Close, level) ||
+				family == KijunReclaim && !pbBreak(direction, b[i].Close, b[i].Open) {
+				continue
+			}
+			currentLow, currentHigh := pbIchimokuZone(b, i, family)
+			currentEdge := currentHigh
+			if direction == "bearish" {
+				currentEdge = currentLow
+			}
+			// Kijun and the cloud may move between closes. Crossing yesterday's
+			// boundary alone is not a reclaim of the indicator at this close.
+			if !pbBreak(direction, b[i].Close, currentEdge) {
 				continue
 			}
 			op := pbBase(in, interval, family, direction, b, i, level, low, high)
@@ -240,21 +251,46 @@ func pbIchimoku(in Input, interval string, b []market.Candle, family string) []O
 				op.SourceStartAt = b[i-ichimoku.CloudWarmupBars].OpenTime
 				op.SourceEndAt = b[i-1-ichimoku.DisplacementBars].CloseTime
 			}
-			op.State, op.Reason, op.Next = "waiting_for_retest", "A completed directional close reclaimed a previously known Ichimoku boundary; that boundary is now frozen.", "Wait for a later retest that closes on the favorable side of the same frozen boundary."
-			op.Invalidation = "A completed close back through the frozen reclaim boundary before confirmation, then the frozen retest stop."
+			op.State, op.Reason, op.Next = "waiting_for_retest", "A completed directional close reclaimed both the previously known and current Kijun; the prior boundary is now frozen.", "Wait for a later retest of both the frozen and current Kijun that closes on their favorable side."
+			op.Invalidation = "A completed close back through the frozen or current Kijun before confirmation, then the frozen retest stop."
+			if family == CloudReclaim {
+				op.Reason = "A completed close broke through the previously known cloud and the cloud displayed at that close; the source zone is frozen."
+				op.Next = "Wait for a held retest of both the frozen cloud zone and the cloud displayed at the retest; either cloud edge or its interior may provide the bounce."
+				op.Invalidation = "A completed close through the adverse edge of either the frozen or currently displayed cloud before confirmation, then the frozen retest stop."
+			}
 			for j := i + 1; j < len(b) && j <= i+pbObserveBars; j++ {
-				if !pbBreak(direction, b[j].Close, level) {
-					pbResolve(&op, "invalidated", "Price closed back through the frozen reclaim boundary.", b[j].CloseTime)
+				currentLow, currentHigh := pbIchimokuZone(b, j, family)
+				adverse, currentAdverse := level, currentLow
+				if family == CloudReclaim {
+					adverse, currentAdverse = low, currentLow
+					if direction == "bearish" {
+						adverse, currentAdverse = high, currentHigh
+					}
+				}
+				if !pbBreak(direction, b[j].Close, adverse) || !pbBreak(direction, b[j].Close, currentAdverse) {
+					pbResolve(&op, "invalidated", "Price closed back through the frozen or current reclaim boundary.", b[j].CloseTime)
 					break
 				}
-				if b[j].Low > level || b[j].High < level {
+				if !pbOverlap(b[j], low, high) || !pbOverlap(b[j], currentLow, currentHigh) {
 					continue
+				}
+				// A close still inside the cloud needs an observed rejection
+				// toward the breakout side. This candle-body convention defines
+				// "hold" without requiring an invented minimum candle size.
+				if family == CloudReclaim {
+					outside := b[j].Close > math.Max(high, currentHigh)
+					if direction == "bearish" {
+						outside = b[j].Close < math.Min(low, currentLow)
+					}
+					if !outside && !pbBreak(direction, b[j].Close, b[j].Open) {
+						continue
+					}
 				}
 				op.RetestAt = pbPtr(b[j].CloseTime)
 				atr, ok := pbATR(b, j)
-				stop := math.Min(low, b[j].Low)
+				stop := math.Min(math.Min(low, currentLow), b[j].Low)
 				if direction == "bearish" {
-					stop = math.Max(high, b[j].High)
+					stop = math.Max(math.Max(high, currentHigh), b[j].High)
 					if ok {
 						stop += .1 * atr
 					}

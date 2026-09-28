@@ -1,5 +1,6 @@
 // Package browserengine supplies validated browser candle snapshots to the
-// frozen Go scanner and selector. It does not implement indicator or strategy
+// Go scanner and selector, including the local Ichimoku lecture extension.
+// It does not implement indicator or strategy
 // rules, fetch data, persist account state, or execute trades.
 package browserengine
 
@@ -12,13 +13,16 @@ import (
 	"time"
 
 	"github.com/alihasan00/crypto/internal/harmonic"
+	"github.com/alihasan00/crypto/internal/ichimoku"
 	"github.com/alihasan00/crypto/internal/market"
 	"github.com/alihasan00/crypto/internal/scanner"
 	"github.com/alihasan00/crypto/internal/selection"
 )
 
 const (
-	Version    = "0.13.1-26e07587190d"
+	Version = "0.13.1-26e07587190d+ichimoku.2"
+	// SourceHash identifies the upstream archive; local source hashes and the
+	// extension revision are recorded separately in provenance.json.
 	SourceHash = "26e07587190d24c66d62602e968ef24dafafb281b9b1a0140afa7f6c6d0a0d00"
 	// This is the deployed CLI's --max-age default, not a new screen.
 	MaxAge         = 2 * time.Minute
@@ -37,6 +41,7 @@ type InputHistory struct {
 
 type Request struct {
 	Now       int64          `json:"now"`
+	Scope     string         `json:"scope"`
 	Symbols   []string       `json:"symbols"`
 	Histories []InputHistory `json:"histories"`
 }
@@ -45,18 +50,20 @@ type Request struct {
 // are retained in Result; unrelated full indicator inventories are not copied
 // out of the WebAssembly heap on each publication.
 type Series struct {
-	Symbol        string   `json:"symbol"`
-	Interval      string   `json:"interval"`
-	Price         float64  `json:"price"`
-	PriceSource   string   `json:"priceSource"`
-	ObservedAt    int64    `json:"observedAt"`
-	LastClosedAt  int64    `json:"lastClosedAt"`
-	ClosedCandles int      `json:"closedCandles"`
-	Ready         bool     `json:"ready"`
-	Trend         string   `json:"trend"`
-	Momentum      string   `json:"momentum"`
-	InternalBias  string   `json:"internalBias"`
-	Warnings      []string `json:"warnings"`
+	Symbol         string                    `json:"symbol"`
+	Interval       string                    `json:"interval"`
+	Price          float64                   `json:"price"`
+	PriceSource    string                    `json:"priceSource"`
+	ObservedAt     int64                     `json:"observedAt"`
+	LastClosedAt   int64                     `json:"lastClosedAt"`
+	ClosedCandles  int                       `json:"closedCandles"`
+	Ready          bool                      `json:"ready"`
+	Trend          string                    `json:"trend"`
+	Momentum       string                    `json:"momentum"`
+	InternalBias   string                    `json:"internalBias"`
+	Warnings       []string                  `json:"warnings"`
+	Ichimoku       *ichimoku.LectureSnapshot `json:"ichimoku,omitempty"`
+	IchimokuSeries []ichimoku.Point          `json:"ichimokuSeries,omitempty"`
 }
 
 type Scan struct {
@@ -67,6 +74,7 @@ type Scan struct {
 
 type Response struct {
 	Version    string            `json:"version"`
+	Scope      string            `json:"scope"`
 	SourceHash string            `json:"sourceHash"`
 	Now        int64             `json:"now"`
 	MaxAgeMS   int64             `json:"maxAgeMs"`
@@ -154,6 +162,9 @@ func (f memoryFeed) CandlesWithEvidence(ctx context.Context, symbol, timeframe s
 
 func validateRequest(input Request) (memoryFeed, error) {
 	feed := memoryFeed{now: time.UnixMilli(input.Now).UTC(), histories: map[string]InputHistory{}}
+	if _, valid := requestScope(input.Scope); !valid {
+		return feed, errors.New("Scope must be all or ichimoku.")
+	}
 	if input.Now <= 0 || input.Now > maxSafeInteger {
 		return feed, errors.New("A valid current timestamp is required.")
 	}
@@ -188,8 +199,22 @@ func validateRequest(input Request) (memoryFeed, error) {
 	return feed, nil
 }
 
+// Empty scope preserves callers of the original mixed-watchlist contract.
+// Error responses retain a supported scope even for an unknown requested value.
+func requestScope(scope string) (string, bool) {
+	switch scope {
+	case "", "all":
+		return "all", true
+	case "ichimoku":
+		return "ichimoku", true
+	default:
+		return "all", false
+	}
+}
+
 func Run(input Request) Response {
-	response := Response{Version: Version, SourceHash: SourceHash, Now: input.Now, MaxAgeMS: MaxAge.Milliseconds(), Scan: Scan{Series: []Series{}, Errors: []scanner.ScanError{}}}
+	scope, _ := requestScope(input.Scope)
+	response := Response{Version: Version, Scope: scope, SourceHash: SourceHash, Now: input.Now, MaxAgeMS: MaxAge.Milliseconds(), Scan: Scan{Series: []Series{}, Errors: []scanner.ScanError{}}}
 	feed, err := validateRequest(input)
 	if err != nil {
 		response.Error = err.Error()
@@ -211,36 +236,66 @@ func Run(input Request) Response {
 			}
 		}
 	}
-	result := selection.Build(snapshot, histories, input.Symbols, feed.now, MaxAge, selection.DefaultConfig())
+	var result selection.Result
+	if scope == "ichimoku" {
+		result = selection.BuildIchimoku(snapshot, histories, input.Symbols, feed.now, MaxAge, selection.DefaultConfig())
+	} else {
+		result = selection.Build(snapshot, histories, input.Symbols, feed.now, MaxAge, selection.DefaultConfig())
+	}
 	response.Result = &result
 	response.Scan.Errors = snapshot.Errors
 	response.Scan.Progress = snapshot.Progress
+	// Full chart paths only leave the worker for selected assets. The compact
+	// readings remain available on all valid frames; neither can promote a
+	// rejected observation into the selector's result.
+	selected := make(map[string]bool)
+	for _, candidate := range result.Items {
+		selected[candidate.Setup.Symbol] = true
+	}
+	for _, candidate := range result.Trends {
+		selected[candidate.Symbol] = true
+	}
+	for _, candidate := range result.Strategies.Items {
+		selected[candidate.Opportunity.Symbol] = true
+	}
 	for _, frame := range snapshot.Series {
-		response.Scan.Series = append(response.Scan.Series, Series{
+		series := Series{
 			Symbol: frame.Symbol, Interval: frame.Interval, Price: frame.Price, PriceSource: frame.PriceSource,
 			ObservedAt: frame.ObservedAt.UnixMilli(), LastClosedAt: frame.LastClosedAt, ClosedCandles: frame.ClosedCandles,
 			Ready: selection.SeriesReady(frame, feed.now, MaxAge), Trend: frame.Analysis.Regime.Direction,
 			Momentum: frame.Analysis.Regime.Momentum.Direction, InternalBias: frame.Analysis.Structure.Internal.Bias, Warnings: frame.Warnings,
-		})
+		}
+		if history, ok := histories[frame.Symbol+"/"+frame.Interval]; ok && series.Ready {
+			// History is scanner-owned completed input. Preview is deliberately
+			// excluded, including when it provides the evaluated live quote.
+			context := ichimoku.AnalyzeLecture(history.Candles, frame.Analysis.Regime.Volatility.ATR)
+			series.Ichimoku = &context
+			if selected[frame.Symbol] {
+				series.IchimokuSeries = ichimoku.Series(history.Candles)
+			}
+		}
+		response.Scan.Series = append(response.Scan.Series, series)
 	}
 	return response
 }
 
 func RunJSON(raw string) (encoded string) {
+	scope := "all"
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			body, _ := json.Marshal(Response{Version: Version, SourceHash: SourceHash, MaxAgeMS: MaxAge.Milliseconds(), Error: "The shared engine could not process this snapshot."})
+			body, _ := json.Marshal(Response{Version: Version, Scope: scope, SourceHash: SourceHash, MaxAgeMS: MaxAge.Milliseconds(), Error: "The shared engine could not process this snapshot."})
 			encoded = string(body)
 		}
 	}()
 	var input Request
 	if err := json.Unmarshal([]byte(raw), &input); err != nil {
-		body, _ := json.Marshal(Response{Version: Version, SourceHash: SourceHash, MaxAgeMS: MaxAge.Milliseconds(), Error: "Invalid shared-engine request: " + err.Error()})
+		body, _ := json.Marshal(Response{Version: Version, Scope: scope, SourceHash: SourceHash, MaxAgeMS: MaxAge.Milliseconds(), Error: "Invalid shared-engine request: " + err.Error()})
 		return string(body)
 	}
+	scope, _ = requestScope(input.Scope)
 	body, err := json.Marshal(Run(input))
 	if err != nil {
-		body, _ = json.Marshal(Response{Version: Version, SourceHash: SourceHash, MaxAgeMS: MaxAge.Milliseconds(), Error: "The shared engine could not serialize this snapshot."})
+		body, _ = json.Marshal(Response{Version: Version, Scope: scope, SourceHash: SourceHash, MaxAgeMS: MaxAge.Milliseconds(), Error: "The shared engine could not serialize this snapshot."})
 	}
 	return string(body)
 }

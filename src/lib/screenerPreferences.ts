@@ -14,7 +14,7 @@ export interface ScreenerPreferences {
   appView: AppView
   market: ScreenerMarket
   search: string
-  signal: RsiSignalFilter | 'fib' | 'sr' | 'harmonic'
+  signal: RsiSignalFilter | 'fib' | 'sr' | 'harmonic' | 'ichimoku'
   divergenceRecency: DivergenceRecency
   fibDirection: 'any' | 'long' | 'short'
   fibStage: FibStage
@@ -64,7 +64,12 @@ export const DEFAULT_SCREENER_PREFERENCES: Readonly<ScreenerPreferences> = Objec
   cardDensity: 'comfortable',
 })
 
-const SIGNALS = ['all', 'divergence', 'trendline', 'fib', 'sr', 'harmonic'] as const
+const SIGNALS = ['all', 'divergence', 'trendline', 'fib', 'sr', 'harmonic', 'ichimoku'] as const
+
+/** Ichimoku has its own four-frame feed; an open RSI chart may still subscribe separately. */
+export function usesMarketRsiFeed(appView: AppView, signal: ScreenerPreferences['signal']): boolean {
+  return appView === 'scanner' && signal !== 'ichimoku'
+}
 const SR_SOURCES = ['all', 'week', 'month', 'monday'] as const
 const SR_SIGNALS = ['all', 'near', 'near-atr', 'sfp', 'bullish', 'bearish'] as const
 const SR_SORTS = ['watchlist', 'nearest', 'atr', 'signals', 'symbol'] as const

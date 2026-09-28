@@ -20,6 +20,7 @@ rest of this application.
   from the same Go 1.26.8 toolchain used to build the artifact.
 
 The imported source is available under `engine/internal/`. Exact original
-hashes and the boundary-constant import adaptation are documented in
+hashes, the boundary-constant import adaptation and local Ichimoku amendments are documented in
 `provenance.json`. No indicator formula or selection gate is changed by that
-adaptation. `internal/browserengine` and `cmd/watchlist-*` are new adapters.
+adaptation. The separate Ichimoku lecture extension is identified by the local
+release suffix and per-file amendment notes. `internal/browserengine` and `cmd/watchlist-*` are new adapters.

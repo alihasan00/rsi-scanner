@@ -6,8 +6,14 @@ import { getWatchlistDisplayStatus } from './watchlistInstruments'
 import type { WatchlistInstrument, WatchlistInstrumentFilters } from './watchlistInstruments'
 import { getEvaluatedChartFrames } from './watchlistChart'
 import type { WatchlistChartEvent, WatchlistChartEvidence, WatchlistChartPoint, WatchlistChartSnapshot, WatchlistEvaluationInput } from './watchlistChart'
+import type { IchimokuLectureSnapshot, IchimokuPoint } from './watchlistIchimoku'
 
 export const GO_SHORTLIST_LIMIT = 12
+export type GoWatchlistScope = 'all' | 'ichimoku'
+const ICHIMOKU_FAMILIES = new Set(['kijun_reclaim', 'cloud_reclaim', 'tk_cross', 'pk_cross', 'cloud_edge_to_edge'])
+export function isIchimokuSetup(row: WatchlistRow): boolean {
+  return row.source === 'strategy' && ICHIMOKU_FAMILIES.has(row.reference?.strategyFamily ?? '')
+}
 export interface GoPlan {
   status: string; entry: number | null; stop: number | null; target: number | null
   grossRR: number | null; netRR: number | null; feeBps: number; slippageBps: number; minNetRR: number
@@ -16,6 +22,7 @@ export interface GoPlan {
 export interface GoSeries {
   symbol: string; interval: Timeframe; price: number; observedAt: number; lastClosedAt: number
   closedCandles: number; ready: boolean; trend: string; momentum: string; internalBias: string; warnings: string[]
+  ichimoku?: IchimokuLectureSnapshot | null; ichimokuSeries?: IchimokuPoint[] | null
 }
 export interface GoHarmonicPoint { index: number; time: number; price: number }
 export interface GoCandidate {
@@ -51,7 +58,7 @@ export interface GoStrategy {
   plan: GoPlan; price: number; status: string; eligible: boolean; reason: string
 }
 export interface GoWatchlistResult {
-  version: string; maxAgeMs: number; now?: number; error?: string
+  version: string; maxAgeMs: number; now?: number; error?: string; scope?: GoWatchlistScope
   result: {
     config: { feeBps: number; slippageBps: number; minNetRR: number }
     items: GoCandidate[]; trends: GoTrend[]; strategies: { items: GoStrategy[] }
@@ -59,7 +66,7 @@ export interface GoWatchlistResult {
   }
   scan: { series: GoSeries[]; errors: {symbol: string; interval: string; error: string}[]; progress: {done: number; total: number} }
 }
-const humanize = (value: string) => value.replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase())
+const humanize = (value: string) => value.replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase()).replace(/\b(tk|pk)\b/gi, (word) => word.toUpperCase())
 const finite = (value: number | null): value is number => value !== null && Number.isFinite(value)
 const activePlan = new Set(['ready_for_review', 'awaiting_trigger', 'awaiting_retest', 'confirmation_expired', 'observing', 'waiting_for_retest', 'awaiting_confirmation', 'entry_confirmed'])
 const timestamp = (value: number | null | undefined): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0
@@ -87,7 +94,7 @@ export function adaptGoWatchlist(output: GoWatchlistResult, market: ScreenerMark
     direction: WatchlistRow['direction']; status: WatchlistStatus; nativeStatus: string; statusLabel: string
     price: number; zone: {low: number; high: number}; distanceAtr: number | null; entry: number | null
     confirmedAt: number | null; reason: string; next: string; caution: string; plan: GoPlan; mode: string
-    chart: ChartGeometry
+    chart: ChartGeometry; strategyFamily?: string
   }) => {
     const frames = output.scan.series.filter((frame) => frame.symbol === data.symbol)
     const frame = frames.find((item) => item.interval === data.timeframe)
@@ -124,6 +131,7 @@ export function adaptGoWatchlist(output: GoWatchlistResult, market: ScreenerMark
       cautions: [...new Set(cautions)], evidence: [], families: [], conflict: false,
       reference: {
         engineVersion: output.version, maxAgeMs: output.maxAgeMs, nativeStatus: data.nativeStatus,
+        ...(data.strategyFamily ? {strategyFamily: data.strategyFamily} : {}),
         statusLabel: confirmationExpired ? 'Confirmation expired' : status === 'blocked' ? humanize(data.plan.status) : data.statusLabel,
         mode: data.mode, planStatus: data.plan.status, netRiskReward: data.plan.netRR,
         feeBps: data.plan.feeBps, slippageBps: data.plan.slippageBps, minNetRR: data.plan.minNetRR,
@@ -184,6 +192,7 @@ export function adaptGoWatchlist(output: GoWatchlistResult, market: ScreenerMark
     const entry = opportunity.entryReference ?? opportunity.level
     create({
       id: opportunity.id, symbol: opportunity.symbol, timeframe: opportunity.interval, source: 'strategy',
+      strategyFamily: opportunity.family,
       name: `${humanize(opportunity.family)} · ${opportunity.interval}`, direction: opportunity.direction,
       status: candidate.eligible && candidate.plan.status === 'ready_for_review' ? 'confirmed' : opportunity.state === 'awaiting_confirmation' ? 'testing' : 'waiting',
       nativeStatus: candidate.status, statusLabel: candidate.eligible ? 'Entry confirmed' : humanize(candidate.status),
@@ -195,7 +204,7 @@ export function adaptGoWatchlist(output: GoWatchlistResult, market: ScreenerMark
         ...chartEvent('source', 'Location available', opportunity.interval, opportunity.locationAvailableAt, opportunity.level),
         ...chartEvent('detected', 'Setup detected', opportunity.interval, opportunity.availableAt, opportunity.level),
         ...chartEvent('retest', 'Closed retest', opportunity.interval, opportunity.retestAt, null),
-        ...chartEvent('trigger', 'Entry follow-through', opportunity.interval, opportunity.triggerAt, opportunity.entryReference),
+        ...chartEvent('trigger', 'Entry confirmed', opportunity.interval, opportunity.triggerAt, opportunity.entryReference),
       ], ...(timestamp(opportunity.sourceStartAt) && timestamp(opportunity.sourceEndAt) ? {sourceWindow: {
         timeframe: opportunity.interval, startTime: opportunity.sourceStartAt, endTime: opportunity.sourceEndAt,
       }} : {}), evidence: [{label: 'Method evidence', detail: opportunity.reason ?? candidate.reason, timeframe: opportunity.interval}],
@@ -207,13 +216,16 @@ export function adaptGoWatchlist(output: GoWatchlistResult, market: ScreenerMark
 }
 
 /** One asset across methods AND timeframes. The cap never admits a rejected detector row. */
-export function selectGoWatchlist(rows: readonly WatchlistRow[], now: number, filters: WatchlistInstrumentFilters & {stage?: 'all' | 'confirmed' | 'developing'} = {}): WatchlistInstrument[] {
+export function selectGoWatchlist(rows: readonly WatchlistRow[], now: number, filters: WatchlistInstrumentFilters & {stage?: 'all' | 'confirmed' | 'developing'; scope?: GoWatchlistScope} = {}): WatchlistInstrument[] {
   const query = (filters.search ?? '').toUpperCase().replace(/[\s/_-]/g, '')
   const groups = new Map<string, WatchlistRow[]>()
   // Each source arrives ranked by Go. Interleave the three source lists without
   // re-ranking their candidates by a different browser-side scoring system.
   const sources = ['harmonic', 'trend', 'strategy'] as const
-  const lanes = sources.map((source) => rows.filter((row) => row.source === source))
+  // Scope before grouping so other methods cannot leak into detail tabs,
+  // opposing-direction counts or portable reviews for this indicator.
+  const scopedRows = filters.scope === 'ichimoku' ? rows.filter(isIchimokuSetup) : rows
+  const lanes = sources.map((source) => scopedRows.filter((row) => row.source === source))
   const ordered: WatchlistRow[] = []
   for (let index = 0; lanes.some((lane) => index < lane.length); index++) {
     for (const lane of lanes) if (lane[index]) ordered.push(lane[index])
@@ -240,7 +252,8 @@ export function selectGoWatchlist(rows: readonly WatchlistRow[], now: number, fi
       hasMixedDirections: new Set(all.map((row) => row.direction)).size > 1, sources: [...new Set(setups.map((row) => row.source))]})
   }
   const ranks = new Map(ordered.map((row, index) => [row.id, index]))
-  return instruments.sort((a, b) => ranks.get(a.lead.id)! - ranks.get(b.lead.id)!).slice(0, GO_SHORTLIST_LIMIT)
+  instruments.sort((a, b) => ranks.get(a.lead.id)! - ranks.get(b.lead.id)!)
+  return filters.scope === 'ichimoku' ? instruments : instruments.slice(0, GO_SHORTLIST_LIMIT)
 }
 
 /** Withhold an old evaluation at a close/expiry boundary; only Go can readmit it. */

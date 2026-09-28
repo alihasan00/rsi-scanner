@@ -8,7 +8,7 @@ const provenance = verifySources()
 const go = process.env.WATCHLIST_GO || 'go'
 const env = { ...process.env, GOTOOLCHAIN: 'local', GOPROXY: 'off' }
 const goVersion = execFileSync(go, ['version'], { cwd: engineDirectory, env, encoding: 'utf8' }).trim()
-if (!goVersion.startsWith('go version go1.26.8 ')) throw new Error('Build this frozen engine with Go 1.26.8; set WATCHLIST_GO to its executable.')
+if (!goVersion.startsWith('go version go1.26.8 ')) throw new Error('Build this engine with Go 1.26.8; set WATCHLIST_GO to its executable.')
 const goRoot = execFileSync(go, ['env', 'GOROOT'], { cwd: engineDirectory, env, encoding: 'utf8' }).trim()
 const publicDirectory = resolve(engineDirectory, '..', 'public')
 mkdirSync(publicDirectory, { recursive: true })
@@ -24,6 +24,7 @@ const artifacts = Object.fromEntries(['public/watchlist-engine.wasm', 'public/wa
 const adapterFiles = Object.fromEntries(['go.mod', 'internal/browserengine/engine.go', 'cmd/watchlist-wasm/main_js.go'].map((path) => [path, hash(resolve(engineDirectory, path))]))
 writeFileSync(resolve(engineDirectory, 'build-manifest.json'), JSON.stringify({
   release: provenance.release, sourceHash: provenance.sourceHash, schemaVersion: provenance.schemaVersion,
+  localRevision: provenance.localRevision, upstreamRelease: provenance.upstreamRelease,
   goVersion, artifacts, adapterFiles,
 }, null, 2) + '\n')
 process.stdout.write(`Built browser watchlist engine from ${provenance.release}.\n`)

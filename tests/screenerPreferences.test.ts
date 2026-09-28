@@ -3,6 +3,7 @@ import {
   DEFAULT_SCREENER_PREFERENCES,
   readScreenerPreferencesFromSearch,
   restoreScreenerPreferences,
+  usesMarketRsiFeed,
   writeScreenerPreferencesToSearch,
 } from '../src/lib/screenerPreferences'
 import type { ScreenerPreferences } from '../src/lib/screenerPreferences'
@@ -22,6 +23,30 @@ const SELECTED: ScreenerPreferences = {
 }
 
 describe('stored screener preferences', () => {
+  test('Ichimoku is a shareable scanner indicator in either market, preserving other indicator preferences', () => {
+    for (const market of ['spot', 'tradfi'] as const) {
+      const preferences: ScreenerPreferences = { ...SELECTED, appView: 'scanner', market, signal: 'ichimoku' }
+      expect(restoreScreenerPreferences(JSON.parse(JSON.stringify(preferences)))).toEqual(preferences)
+      const search = writeScreenerPreferencesToSearch('?indicator=fib&indicator=harmonic&campaign=cloud', preferences)
+      expect(new URLSearchParams(search).getAll('indicator')).toEqual(['ichimoku'])
+      expect(new URLSearchParams(search).get('campaign')).toBe('cloud')
+      expect(new URLSearchParams(search).has('view')).toBe(false)
+      expect(readScreenerPreferencesFromSearch(search)).toEqual(preferences)
+    }
+    expect(readScreenerPreferencesFromSearch('?indicator=ichimoku')).toEqual({ ...DEFAULT_SCREENER_PREFERENCES, signal: 'ichimoku' })
+  })
+
+  test('the independent Ichimoku view does not request the full RSI market feed', () => {
+    expect(usesMarketRsiFeed('scanner', 'ichimoku')).toBe(false)
+    for (const indicator of ['all', 'divergence', 'trendline', 'fib', 'sr', 'harmonic'] as const) {
+      expect(usesMarketRsiFeed('scanner', indicator)).toBe(true)
+    }
+    for (const view of ['watchlist', 'families'] as const) {
+      expect(usesMarketRsiFeed(view, 'all')).toBe(false)
+      expect(usesMarketRsiFeed(view, 'ichimoku')).toBe(false)
+    }
+  })
+
   test('watchlist restores either market and round-trips shared scope', () => {
     for (const market of ['spot', 'tradfi'] as const) {
       const prefs = { ...SELECTED, appView: 'watchlist' as const, market }
@@ -315,7 +340,7 @@ describe('canonical screener URL writing', () => {
     const choices: { [Key in keyof ScreenerPreferences]: readonly ScreenerPreferences[Key][] } = {
       market: ['spot', 'tradfi'],
       search: ['', 'SOL / USDT'],
-      signal: ['all', 'divergence', 'trendline', 'fib', 'sr', 'harmonic'],
+      signal: ['all', 'divergence', 'trendline', 'fib', 'sr', 'harmonic', 'ichimoku'],
       srSource: ['all', 'week', 'month', 'monday'],
       srSignal: ['all', 'near', 'near-atr', 'sfp', 'bullish', 'bearish'],
       srSort: ['watchlist', 'nearest', 'atr', 'signals', 'symbol'],

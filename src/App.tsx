@@ -5,6 +5,7 @@ import { useRsiFeed } from './hooks/useRsiFeed'
 import { useMarketUniverse } from './hooks/useMarketUniverse'
 import { useScannerStore } from './store/scannerStore'
 import { useSrContextFeed } from './hooks/useSrContext'
+import { usesMarketRsiFeed } from './lib/screenerPreferences'
 
 const ChartModal = lazy(() => import('./components/ChartModal').then(
   (module) => ({ default: module.ChartModal }),
@@ -25,13 +26,14 @@ function App() {
   const market = useScannerStore((state) => state.market)
   const selectedSymbol = useScannerStore((state) => state.selectedSymbol)
   const settingsOpen = useScannerStore((state) => state.settingsOpen)
+  const signal = useScannerStore((state) => state.screenerFilters.signal)
   const showLiquidity = useScannerStore((state) => state.appView === 'scanner' && state.screenerFilters.signal === 'sr')
 
   const universe = useMarketUniverse(market)
   const rsiSymbols = useMemo(() => {
-    if (appView === 'scanner') return universe.symbols
+    if (usesMarketRsiFeed(appView, signal)) return universe.symbols
     return selectedSymbol ? [selectedSymbol] : NO_SYMBOLS
-  }, [appView, selectedSymbol, universe.symbols])
+  }, [appView, signal, selectedSymbol, universe.symbols])
   useRsiFeed(rsiSymbols, market)
   const contextSymbols = useMemo(() => showLiquidity ? universe.symbols : selectedSymbol ? [selectedSymbol] : NO_SYMBOLS, [showLiquidity, universe.symbols, selectedSymbol])
   useSrContextFeed(contextSymbols, market, contextSymbols.length > 0, showLiquidity ? 'liquidity' : 'selected')

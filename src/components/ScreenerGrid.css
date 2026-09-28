@@ -1,5 +1,9 @@
 .screener { overflow-y: auto; flex: 1; min-height: 0; scrollbar-gutter: stable; }
 .screener__content { max-width: 1840px; margin: 0 auto; padding: 22px 36px 24px; }
+.screener.is-ichimoku { display:flex; overflow:hidden; }
+.screener.is-ichimoku > .screener__content { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; width:100%; padding-bottom:0; }
+.screener.is-ichimoku .screener__view-nav,.screener.is-ichimoku .screener__market-description { flex-shrink:0; }
+.screener.is-ichimoku .watchlist__content { padding:22px 0 24px; }
 .screener__view-nav .ant-tabs-nav { margin: 0; }
 .screener__view-nav .ant-tabs-tab { padding: 8px 8px 14px; font-size: 16px; font-weight: 600; }
 .screener__view-nav .ant-tabs-content-holder { display: none; }

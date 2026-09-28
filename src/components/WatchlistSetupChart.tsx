@@ -5,6 +5,7 @@ import { TIMEFRAME_MILLISECONDS } from '../lib/binanceHistory'
 import { formatQuotePrice } from '../lib/priceFormatting'
 import type { WatchlistRow } from '../lib/watchlist'
 import { chartCandleAt, chartZoneAvailableAt, layoutChartCallouts, selectWatchlistChartCandles } from '../lib/watchlistChartGeometry'
+import { ichimokuCloudBands, isIchimokuMethod, selectIchimokuPlot } from '../lib/watchlistIchimoku'
 import './WatchlistSetupChart.css'
 
 const positive = (value: number | null | undefined): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -28,13 +29,14 @@ function priceTicks(low: number, high: number): number[] {
 }
 
 /** Drawing only. Every candle, pivot and event belongs to the captured Go evaluation. */
-export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, compact = false }: { row: WatchlistRow; compact?: boolean }) {
+export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, compact = false, onTimeframeChange }: { row: WatchlistRow; compact?: boolean; onTimeframeChange?: (timeframe: Timeframe) => void }) {
   const snapshot = row.reference?.chart
   const identity = `${row.id}:${snapshot?.snapshotId ?? 'unavailable'}`
   const [selection, setSelection] = useState<{ identity: string; timeframe: Timeframe; view: 'setup' | 'recent' } | null>(null)
   const [hover, setHover] = useState<{ key: string; index: number } | null>(null)
   const [keyboardAnnouncement, setKeyboardAnnouncement] = useState<{ key: string; message: string } | null>(null)
   const [width, setWidth] = useState(compact ? 380 : 960)
+  const [overlay, setOverlay] = useState<{ identity: string; enabled: boolean } | null>(null)
   const container = useRef<HTMLDivElement>(null)
   const clipId = `watch-plot-${useId().replaceAll(':', '')}`
   const titleId = `watch-title-${useId().replaceAll(':', '')}`
@@ -65,9 +67,15 @@ export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, comp
   const first = candles[0].candle
   const last = candles.at(-1)!.candle
   const duration = first.closeTime - first.openTime + 1
+  const frame = snapshot.frames.find((item) => item.timeframe === timeframe)!
+  const ichimokuAvailable = !!frame.ichimokuSeries?.length
+  const showIchimoku = ichimokuAvailable && (compact ? isIchimokuMethod(row.name) : overlay?.identity === identity ? overlay.enabled : true)
+  const ichimoku = showIchimoku ? selectIchimokuPlot(frame, first.openTime, last.closeTime, !compact) : null
+  const cloudBands = ichimoku ? ichimokuCloudBands(ichimoku.cloud, duration) : []
   const start = first.openTime - duration * 0.7
-  const end = last.closeTime + duration * 1.7
+  const end = Math.max(last.closeTime, ichimoku?.lastDisplayedAt ?? 0) + duration * 1.7
   const x = (time: number) => plot.left + (time - start) / (end - start) * (plot.right - plot.left)
+  const displayX = (closeTime: number) => x(closeTime - (duration - 1) / 2)
   const candleX = (time: number) => {
     const observed = chartCandleAt(time, candles)?.candle
     return observed ? x((observed.openTime + observed.closeTime) / 2) : null
@@ -87,6 +95,8 @@ export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, comp
   if (positive(row.price)) levels.push({ id: 'quote', label: sameQuoteAndEntry ? 'Evaluated price' : 'Evaluated quote', price: row.price, tone: 'quote' })
   const prices = [...candles.flatMap(({ candle }) => [candle.low, candle.high]), ...points.map((point) => point.price),
     ...[row.zone.low, row.zone.high, row.price].filter(positive),
+    ...(ichimoku?.lines.flatMap((point) => [point.tenkan, point.kijun].filter(positive)) ?? []),
+    ...(ichimoku?.cloud.flatMap((point) => [point.spanA, point.spanB]) ?? []),
     ...(compact ? [] : [...levels.map((level) => level.price), ...events.flatMap((event) => [event.price, event.low, event.high].filter(positive))])]
   const min = Math.min(...prices)
   const max = Math.max(...prices)
@@ -94,6 +104,16 @@ export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, comp
   const low = Math.max(min - padding, Math.min(min * 0.5, min))
   const high = max + padding
   const y = (price: number) => plot.bottom - (price - low) / (high - low) * (plot.bottom - plot.top)
+  const linePath = (field: 'tenkan' | 'kijun') => {
+    let previousTime: number | null = null
+    return (ichimoku?.lines ?? []).map((point) => {
+      const value = point[field]
+      if (!positive(value)) { previousTime = null; return '' }
+      const command = previousTime !== null && point.time - previousTime === duration ? 'L' : 'M'
+      previousTime = point.time
+      return `${command}${displayX(point.time)},${y(value)}`
+    }).join(' ')
+  }
   const ticks = priceTicks(low, high)
   const candleWidth = clamp(duration / (end - start) * (plot.right - plot.left) * 0.65, compact ? 0.8 : 1, compact ? 5 : 10)
   const zoneValid = positive(row.zone.low) && positive(row.zone.high) && row.zone.low <= row.zone.high
@@ -117,8 +137,11 @@ export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, comp
   const inspected = candles[hoverIndex ?? candles.length - 1]
   const inspectionX = x((inspected.candle.openTime + inspected.candle.closeTime) / 2)
   const base = row.symbol.replace(/USDT$/, '')
-  const summary = `${base} ${row.name}, ${timeframe} ${view === 'setup' ? 'Setup' : 'Recent'} view. ${candles.length} captured candles from ${utcStamp(first.openTime)} to ${utcStamp(last.closeTime)}.${candles.at(-1)?.preview ? ' The outlined final candle is open and provisional.' : ''} ${points.length ? `Observed anchors ${points.map((point) => point.label).join(', ')}. ` : ''}Evaluated quote ${positive(row.price) ? formatQuotePrice(row.price) : 'unavailable'}. Stop ${positive(row.stop) ? formatQuotePrice(row.stop) : 'unavailable'}, first target ${positive(row.target) ? formatQuotePrice(row.target) : 'unavailable'}.`
-  const switchView = (nextTimeframe: Timeframe, nextView: 'setup' | 'recent') => setSelection({ identity, timeframe: nextTimeframe, view: nextView })
+  const summary = `${base} ${row.name}, ${timeframe} ${view === 'setup' ? 'Setup' : 'Recent'} view. ${candles.length} captured candles from ${utcStamp(first.openTime)} to ${utcStamp(last.closeTime)}.${candles.at(-1)?.preview ? ' The outlined final candle is open and provisional.' : ''} ${points.length ? `Observed anchors ${points.map((point) => point.label).join(', ')}. ` : ''}Evaluated quote ${positive(row.price) ? formatQuotePrice(row.price) : 'unavailable'}. Stop ${positive(row.stop) ? formatQuotePrice(row.stop) : 'unavailable'}, first target ${positive(row.target) ? formatQuotePrice(row.target) : 'unavailable'}.${showIchimoku ? ` Ichimoku 20/60/120: orange Tenkan, red Kijun and green/red cloud. ${ichimoku?.firstProjectionAt ? 'Dashed forward cloud is already calculated from closed candles and displayed 30 bars ahead, not forecast prices.' : ''}` : ''}`
+  const switchView = (nextTimeframe: Timeframe, nextView: 'setup' | 'recent') => {
+    setSelection({ identity, timeframe: nextTimeframe, view: nextView })
+    onTimeframeChange?.(nextTimeframe)
+  }
   const inspectPointer = (event: ReactPointerEvent<SVGSVGElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect()
     const pointerX = (event.clientX - bounds.left) / bounds.width * width
@@ -143,7 +166,7 @@ export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, comp
             && snapshot.events.some((event) => event.timeframe === '15m' && ['confirmation', 'trigger', 'retest'].includes(event.kind))
           return <button key={frame.timeframe} type="button" aria-pressed={timeframe === frame.timeframe} onClick={() => switchView(frame.timeframe, 'setup')}>{frame.timeframe}{frame.timeframe === snapshot.defaultTimeframe ? <span>setup</span> : isTrigger ? <span>trigger</span> : null}</button>
         })}</div>
-        <div className="watch-setup-chart__range" role="group" aria-label="Chart range"><button type="button" aria-pressed={view === 'setup'} onClick={() => switchView(timeframe, 'setup')}>Setup</button><button type="button" aria-pressed={view === 'recent'} onClick={() => switchView(timeframe, 'recent')}>Recent</button></div>
+        <div className="watch-setup-chart__controls">{ichimokuAvailable && <button type="button" aria-pressed={showIchimoku} onClick={() => setOverlay({ identity, enabled: !showIchimoku })}>Ichimoku</button>}<div className="watch-setup-chart__range" role="group" aria-label="Chart range"><button type="button" aria-pressed={view === 'setup'} onClick={() => switchView(timeframe, 'setup')}>Setup</button><button type="button" aria-pressed={view === 'recent'} onClick={() => switchView(timeframe, 'recent')}>Recent</button></div></div>
       </div>
       <div className="watch-setup-chart__readout" aria-live="off"><time dateTime={new Date(inspected.candle.openTime).toISOString()}>{utcDate(inspected.candle.openTime)} · {utcTime(inspected.candle.openTime)} UTC</time><span className={inspected.preview ? 'is-preview' : ''}>{inspected.preview ? 'Open candle' : 'Closed candle'}</span><div>{(['open', 'high', 'low', 'close'] as const).map((field) => <span key={field}><b>{field[0].toUpperCase()}</b>{formatQuotePrice(inspected.candle[field])}</span>)}</div></div>
       <div className="watch-setup-chart__sr-only" role="status" aria-live="polite" aria-atomic="true">{keyboardAnnouncement?.key === chartKey ? keyboardAnnouncement.message : ''}</div>
@@ -162,6 +185,14 @@ export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, comp
       <defs><clipPath id={clipId}><rect x={plot.left} y={plot.top - 5} width={plot.right - plot.left} height={plot.bottom - plot.top + 10} /></clipPath></defs>
       {ticks.map((price) => <g key={price} className="watch-setup-chart__grid"><line x1={plot.left} x2={plot.right} y1={y(price)} y2={y(price)} />{!compact && <text x={plot.left + 3} y={y(price) - 5}>{formatQuotePrice(price)}</text>}</g>)}
       <g clipPath={`url(#${clipId})`}>
+        {ichimoku && <g className="watch-setup-chart__ichimoku">
+          {cloudBands.map((band, index) => <polygon key={index} className={`watch-setup-chart__cloud is-${band.color}${band.projected ? ' is-projected' : ''}`} points={band.points.map((point) => `${displayX(point.time)},${y(point.price)}`).join(' ')} />)}
+          {ichimoku.firstProjectionAt !== null && !compact && <g className="watch-setup-chart__projection">
+            <line x1={x(frame.lastClosedAt + 1)} x2={x(frame.lastClosedAt + 1)} y1={plot.top} y2={plot.bottom} />
+            <text x={Math.min(plot.right - 85, x(frame.lastClosedAt + 1) + 6)} y={plot.top + 10}>Known forward cloud</text>
+            <title>{`Cloud already calculated by ${utcStamp(frame.lastClosedAt)}, displayed up to ${utcStamp(ichimoku.lastDisplayedAt!)}. No future candles are used.`}</title>
+          </g>}
+        </g>}
         {!compact && sourceWindow && <rect className="watch-setup-chart__source-window" x={clamp(x(sourceWindow.startTime), plot.left, plot.right)} y={plot.top} width={Math.max(0, clamp(x(sourceWindow.endTime), plot.left, plot.right) - clamp(x(sourceWindow.startTime), plot.left, plot.right))} height={plot.bottom - plot.top} />}
         {zoneValid && <g className="watch-setup-chart__zone">
           {zoneStart !== null && zoneStart < plot.right && <rect x={zoneStart} y={zoneTop} width={plot.right - zoneStart} height={Math.max(2, zoneBottom - zoneTop)} />}
@@ -177,24 +208,25 @@ export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, comp
             <rect x={center - candleWidth / 2} y={top} width={candleWidth} height={Math.max(1, Math.abs(y(candle.open) - y(candle.close)))} />
           </g>
         })}
+        {ichimoku && <g className="watch-setup-chart__ichimoku-lines"><path className="is-tenkan" d={linePath('tenkan')} /><path className="is-kijun" d={linePath('kijun')} /></g>}
         {triangles.map((triangle, index) => <polygon key={index} className="watch-setup-chart__pattern-fill" points={triangle.map((point) => `${point!.x},${y(point!.price)}`).join(' ')} />)}
         {path && <path className="watch-setup-chart__pattern" d={path} />}
         {points.map((point, index) => {
           const before = points[index - 1]
           const after = points[index + 1]
           const above = (!before || point.price >= before.price) && (!after || point.price >= after.price)
-          return <g key={`${point.label}:${point.time}`} className="watch-setup-chart__point"><circle cx={point.x} cy={y(point.price)} r={compact ? 2 : 3.5} />{!compact && <text x={clamp(point.x, plot.left + 9, plot.right - 9)} y={clamp(y(point.price) + (above ? -12 : 20), plot.top + 8, plot.bottom - 2)}>{point.label}</text>}<title>{point.label}: {formatQuotePrice(point.price)} · {utcStamp(point.time)}</title></g>
+          return <g key={`${point.label}:${point.time}`} className="watch-setup-chart__point"><circle cx={point.x} cy={y(point.price)} r={compact ? 2 : 3.5} />{!compact && <text x={clamp(point.x, plot.left + 9, plot.right - 9)} y={clamp(y(point.price) + (above ? -12 : 20), plot.top + 8, plot.bottom - 2)}>{point.label}</text>}<title>{`${point.label}: ${formatQuotePrice(point.price)} · ${utcStamp(point.time)}`}</title></g>
         })}
         {!compact && events.map((event, index) => <g key={`${event.kind}:${event.time}:${event.label}`} className={`watch-setup-chart__event is-${event.kind}`} data-event-label={`${event.timeframe} ${event.label}`}>
           <line x1={event.x} x2={event.x} y1={positive(event.price) ? y(event.price) : plot.top + 10} y2={plot.bottom - 5} />
           {positive(event.price) && <circle cx={event.x} cy={y(event.price)} r={3.5} />}
           <rect x={event.x - 7} y={plot.bottom - 15 - index % 2 * 16} width={14} height={14} rx={4} /><text x={event.x} y={plot.bottom - 5 - index % 2 * 16}>{index + 1}</text>
-          <title>{event.label} · {event.timeframe} · {utcStamp(event.time)}{positive(event.price) ? ` · ${formatQuotePrice(event.price)}` : ''}</title>
+          <title>{`${event.label} · ${event.timeframe} · ${utcStamp(event.time)}${positive(event.price) ? ` · ${formatQuotePrice(event.price)}` : ''}`}</title>
         </g>)}
         {!compact && hoverIndex !== null && <g className="watch-setup-chart__crosshair"><line x1={inspectionX} x2={inspectionX} y1={plot.top} y2={plot.bottom} /><line x1={plot.left} x2={plot.right} y1={y(inspected.candle.close)} y2={y(inspected.candle.close)} /><circle cx={inspectionX} cy={y(inspected.candle.close)} r={4} /></g>}
       </g>
       {!compact && <>
-        {callouts.map((level) => <g key={level.id} className={`watch-setup-chart__callout is-${level.tone}`}><path d={`M${plot.right},${level.y} H${plot.right + 5} L${plot.right + 13},${level.labelY}`} /><rect x={plot.right + 13} y={level.labelY - 15} width={width - plot.right - 17} height={30} rx={5} /><text className="watch-setup-chart__callout-label" x={plot.right + 21} y={level.labelY - 3}>{level.label}</text><text className="watch-setup-chart__callout-price" x={plot.right + 21} y={level.labelY + 10}>{formatQuotePrice(level.price)}</text><title>{level.label}: {formatQuotePrice(level.price)}</title></g>)}
+        {callouts.map((level) => <g key={level.id} className={`watch-setup-chart__callout is-${level.tone}`}><path d={`M${plot.right},${level.y} H${plot.right + 5} L${plot.right + 13},${level.labelY}`} /><rect x={plot.right + 13} y={level.labelY - 15} width={width - plot.right - 17} height={30} rx={5} /><text className="watch-setup-chart__callout-label" x={plot.right + 21} y={level.labelY - 3}>{level.label}</text><text className="watch-setup-chart__callout-price" x={plot.right + 21} y={level.labelY + 10}>{formatQuotePrice(level.price)}</text><title>{`${level.label}: ${formatQuotePrice(level.price)}`}</title></g>)}
         <line className="watch-setup-chart__axis" x1={plot.left} x2={plot.right} y1={plot.bottom + 4} y2={plot.bottom + 4} />
         {dateIndices.map((index, tickIndex) => {
           const candle = candles[index].candle
@@ -203,6 +235,7 @@ export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, comp
       </>}
     </svg>
     {!compact && <div className="watch-setup-chart__footer">
+      {showIchimoku && <div className="watch-setup-chart__legend"><span className="is-tenkan">Tenkan · 20</span><span className="is-kijun">Kijun · 60</span><span>Cloud · 120 / +30 bars</span>{ichimoku?.firstProjectionAt !== null && <span>Dashed cloud: known now, displayed ahead</span>}</div>}
       {events.length > 0 && <div className="watch-setup-chart__events">{events.map((event, index) => <span key={`${event.kind}:${event.time}:${event.label}`} title={utcStamp(event.time)}><i>{index + 1}</i>{event.label}<small>{event.timeframe}</small></span>)}</div>}
       <div className="watch-setup-chart__caption"><span>{candles.length} {timeframe} candles · UTC{candles.at(-1)?.preview ? ' · outlined candle is open' : ''}</span><time dateTime={new Date(snapshot.evaluatedAt).toISOString()}>Evaluated {utcStamp(snapshot.evaluatedAt)}</time></div>
       {noD && <p className="watch-setup-chart__note">D has no recorded candle yet; the entry zone is shown without a dated D point.</p>}

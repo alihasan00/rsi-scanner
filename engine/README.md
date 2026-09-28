@@ -1,19 +1,25 @@
 # Shared Go watchlist engine
 
-This subtree embeds the actual scanner and selector from the Go crypto
-dashboard release `0.13.1-26e07587190d` (scan schema 12). The browser provides
+This subtree embeds the scanner and selector from the Go crypto dashboard
+release `0.13.1-26e07587190d` (upstream scan schema 12), with the local
+`+ichimoku.2` extension. The browser provides
 completed candle histories; a Web Worker executes the Go code as WebAssembly.
 There is no local server, database, AI worker, account ledger or trading action.
 
 The frozen upstream files and their SHA256 hashes are recorded in
 `provenance.json`, extracted from that release's verified `source.tar.gz`.
-The scanner, harmonic detector, regime, structure and selection calculations
-are retained. The sole production source adaptation replaces the database
+The harmonic detector, regime, structure and shared selection/risk calculations
+are retained. The original production source adaptation replaces the database
 adapter's `cachefeed.BoundaryGrace` import with existing
 `market.BoundaryGrace`; both constants are exactly five seconds. Two tests use
 the same alias adaptation. This keeps the dependency closure in Go's standard
 library. Copyright and license notices remain in the imported files; see
 `THIRD_PARTY_NOTICES.md`.
+
+The local extension adds the lecture measurement/plot contract, TK/PK Kijun
+retests and cloud edge-to-edge strategies, and improves cloud-zone retests.
+`provenance.json` preserves upstream hashes and records local amendments.
+See [source coverage and conventions](../docs/ichimoku-lecture.md).
 
 ## Browser interface
 
@@ -24,6 +30,7 @@ initializes, the worker has a synchronous function:
 ```ts
 globalThis.goWatchlistScan(JSON.stringify({
   now: Date.now(),
+  scope: 'all', // optional; 'ichimoku' returns the uncapped active Ichimoku screener
   symbols: ['BTCUSDT'],
   histories: [{
     symbol: 'BTCUSDT',
@@ -57,7 +64,8 @@ The returned JSON contains:
 
 ```ts
 {
-  version: '0.13.1-26e07587190d',
+  version: '0.13.1-26e07587190d+ichimoku.2',
+  scope: 'all', // echoed normalized scope; 'all' when omitted
   sourceHash: '26e07587190d24c66d62602e968ef24dafafb281b9b1a0140afa7f6c6d0a0d00',
   now: number,
   maxAgeMs: 120000,
@@ -70,11 +78,21 @@ The returned JSON contains:
 }
 ```
 
-`result` is the unchanged `selection.Build` contract, including the original
+`result` retains the `selection.Build` contract, including the original
 12-item limit in each section. It is absent on invalid top-level input.
+With `scope: 'ichimoku'`, `selection.BuildIchimoku` filters the five Ichimoku
+families before ranking and returns all active observations with `limit: 0`.
+Harmonic/trend lists are empty, terminal observations are excluded, and the
+same freshness, lifecycle and cost gates apply. Any other scope is rejected.
+The browser includes scope in its evaluation identity and validates the echoed
+scope before publishing results.
 `scan.series` is a compact diagnostic list: symbol, interval, price,
 priceSource, observedAt, lastClosedAt, closedCandles, ready, trend, momentum,
-internalBias and warnings. The UI can group the selected sources into a
+internalBias, warnings and `ichimoku` lecture readings on valid frames.
+Selected assets also carry `ichimokuSeries` chart coordinates on each frame.
+The readings distinguish current displayed spans from known forward display
+positions. Every value comes from completed scanner history; previews never
+enter Ichimoku. The UI can group the selected sources into a
 12-instrument list without promoting any excluded observation.
 
 The default scanner requests 500 candles, minimum harmonic geometry score 90,
@@ -96,11 +114,12 @@ separate concepts. These rules do not establish trading profitability.
 ## Rebuild and verify
 
 Normal frontend deployment serves the committed browser artifacts and does
-not require Go on the hosting platform. Rebuild only after adapter changes:
+not require Go on the hosting platform. Rebuild after changing engine or adapter sources and recording their provenance:
 
 ```sh
 WATCHLIST_GO=/path/to/go1.26.8/bin/go node engine/scripts/build.mjs
 node engine/scripts/verify.mjs
+node engine/scripts/parity.mjs
 cd engine
 go test ./internal/...
 ```

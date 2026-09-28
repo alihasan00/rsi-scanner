@@ -1,6 +1,6 @@
 {
   "upstreamRepository": "https://github.com/alihasan00/crypto",
-  "release": "0.13.1-26e07587190d",
+  "release": "0.13.1-26e07587190d+ichimoku.2",
   "sourceHash": "26e07587190d24c66d62602e968ef24dafafb281b9b1a0140afa7f6c6d0a0d00",
   "schemaVersion": "12",
   "archiveSha256": "4881028a24f4045a4cfc16b03c632c98b9fa032d3cedf59bc55ea4664a7d06f8",
@@ -304,8 +304,9 @@
     {
       "path": "internal/selection/selection.go",
       "upstreamSha256": "6ef0f605ec13bab06dcdfa5440f8503a51ca7e75488bc0a954adc0d480ddf78b",
-      "sha256": "7cce4cda8735a05665f71d5303cd395b88240bc5a8e4db45bff420252b340f13",
-      "adaptation": "Use identical existing market.BoundaryGrace (5 seconds) rather than importing database cache adapter."
+      "sha256": "ab25fcee757409bad5e6cfcdddad730e2ce1c77a7a2d58546eed370d6a7f7da0",
+      "adaptation": "Use identical existing market.BoundaryGrace (5 seconds) rather than importing database cache adapter.",
+      "localAdaptation": "Ichimoku lecture integration and dedicated active-family selection; upstream hash retained."
     },
     {
       "path": "internal/selection/selection_test.go",
@@ -316,7 +317,8 @@
     {
       "path": "internal/selection/strategies.go",
       "upstreamSha256": "b90185e3f33af8001832194fc3dda0650364df4a0e942614aedf080135ead324",
-      "sha256": "b90185e3f33af8001832194fc3dda0650364df4a0e942614aedf080135ead324"
+      "sha256": "619583705e216c237a803a68401ff5629f918e2da4955931bb827665883618e0",
+      "localAdaptation": "Ichimoku lecture integration and dedicated active-family selection; upstream hash retained."
     },
     {
       "path": "internal/selection/strategies_test.go",
@@ -352,7 +354,8 @@
     {
       "path": "internal/strategies/engine.go",
       "upstreamSha256": "5a2ed0a56174140d0d9cd5326ad0cf7541be4d36ebc747f30fcfd07bdec9a0fd",
-      "sha256": "5a2ed0a56174140d0d9cd5326ad0cf7541be4d36ebc747f30fcfd07bdec9a0fd"
+      "sha256": "b2c6ccdbcc4f07074f5cc63b76759a16e722b6aae090dc39df382c06daf1dc8f",
+      "localAdaptation": "Ichimoku lecture integration and regression coverage; upstream hash retained."
     },
     {
       "path": "internal/strategies/helpers.go",
@@ -367,7 +370,8 @@
     {
       "path": "internal/strategies/pullbacks.go",
       "upstreamSha256": "4be8903a1b0c966709e8594fca292597216a5e4a8fd3494b34aea155e9d289f1",
-      "sha256": "4be8903a1b0c966709e8594fca292597216a5e4a8fd3494b34aea155e9d289f1"
+      "sha256": "75ea6bbf9e708ba415aac23193b58de1d8b2bb479225ac644ce36fc2ffe0de02",
+      "localAdaptation": "Ichimoku lecture integration and regression coverage; upstream hash retained."
     },
     {
       "path": "internal/strategies/pullbacks_test.go",
@@ -408,7 +412,8 @@
     {
       "path": "internal/strategies/types.go",
       "upstreamSha256": "c39d59ac3a1d9999d5305778a6d8da41cfcf9e106a44ad01605d1545c9b64e50",
-      "sha256": "c39d59ac3a1d9999d5305778a6d8da41cfcf9e106a44ad01605d1545c9b64e50"
+      "sha256": "7563f0ec682a29048edd7bddd1f145948c256ccebd802afdd1ca73e18bd21a0b",
+      "localAdaptation": "Ichimoku lecture integration and regression coverage; upstream hash retained."
     },
     {
       "path": "internal/structure/analyze.go",
@@ -454,6 +459,65 @@
       "path": "internal/volumeresponse/volumeresponse_test.go",
       "upstreamSha256": "0260567b2be293c031e9a9241ee870505c49143e33588a169b1a7470224a6a26",
       "sha256": "0260567b2be293c031e9a9241ee870505c49143e33588a169b1a7470224a6a26"
+    },
+    {
+      "path": "internal/browserengine/engine.go",
+      "sha256": "23dd1a4a02ce2027180d2b7d7f725409bc338312529c010a18cc191494db1a55",
+      "provenance": "Local watchlist adapter or Ichimoku lecture extension and its regression fixtures; not part of the upstream archive."
+    },
+    {
+      "path": "internal/browserengine/engine_test.go",
+      "sha256": "d782c144d7e01817a9186a6b062f7568af1b7bfcdfecf40848c368fc4ae32a7c",
+      "provenance": "Local watchlist adapter or Ichimoku lecture extension and its regression fixtures; not part of the upstream archive."
+    },
+    {
+      "path": "internal/browserengine/ichimoku_test.go",
+      "sha256": "d494ff91fabecbcd43abf60122e509bb2e4b7679c5fa36a420a0693c5c24aef4",
+      "provenance": "Local watchlist adapter or Ichimoku lecture extension and its regression fixtures; not part of the upstream archive."
+    },
+    {
+      "path": "internal/browserengine/testdata/ichimoku-selection.json",
+      "sha256": "8d508a7f6994fd72c176fa4b08142b270471f96b06eec6d254652036b01149d6",
+      "provenance": "Local watchlist adapter or Ichimoku lecture extension and its regression fixtures; not part of the upstream archive."
+    },
+    {
+      "path": "internal/ichimoku/lecture.go",
+      "sha256": "acedbc44d927ca610454db6a463445410f176a874d584c1fd4889f819c05edaf",
+      "provenance": "Local watchlist adapter or Ichimoku lecture extension and its regression fixtures; not part of the upstream archive."
+    },
+    {
+      "path": "internal/ichimoku/lecture_test.go",
+      "sha256": "8c257b5e401841289d2795a45469c2e9af6d051d51f6d12abb5ad61595f8730a",
+      "provenance": "Local watchlist adapter or Ichimoku lecture extension and its regression fixtures; not part of the upstream archive."
+    },
+    {
+      "path": "internal/selection/ichimoku_strategies_test.go",
+      "sha256": "70e901acb5acaaf96d7ea3fbeba9045ed8082a62b84dfc3b430d51714aa029da",
+      "provenance": "Local watchlist adapter or Ichimoku lecture extension and its regression fixtures; not part of the upstream archive."
+    },
+    {
+      "path": "internal/strategies/ichimoku.go",
+      "sha256": "568bcedeba423199d4536c4cc92e3310fa8cb9ccefb106411e02a43ab908fc6a",
+      "provenance": "Local watchlist adapter or Ichimoku lecture extension and its regression fixtures; not part of the upstream archive."
+    },
+    {
+      "path": "internal/strategies/ichimoku_test.go",
+      "sha256": "6453e2056a4ede089cdd7074da0751e7b53caecc03dbd3354d85a7d481723e85",
+      "provenance": "Local watchlist adapter or Ichimoku lecture extension and its regression fixtures; not part of the upstream archive."
+    },
+    {
+      "path": "internal/selection/ichimoku_scope_test.go",
+      "sha256": "a06281917a07273359ca8b2409a9323eb4085c599cee0dcb9759cc263aca0526",
+      "provenance": "Local dedicated Ichimoku scope regression coverage; not part of the upstream archive."
+    },
+    {
+      "path": "internal/browserengine/scope_test.go",
+      "sha256": "3941b0e0d2188bc42a8c4779b9e081e698551dafeef4e1a2a485404520d5f6a4",
+      "provenance": "Local dedicated Ichimoku scope regression coverage; not part of the upstream archive."
     }
-  ]
+  ],
+  "upstreamRelease": "0.13.1-26e07587190d",
+  "localRevision": "ichimoku-lecture-v2",
+  "browserSchemaVersion": 3,
+  "localChanges": "Lecture 103 measurement and plot contract, TK/PK crosses, cloud edge-to-edge, current Kijun/cloud retests. Shared data freshness and risk/cost checks retained. See docs/ichimoku-lecture.md. Dedicated Ichimoku scope filters active families before ranking and removes mixed-watchlist caps; default all scope retains original selection."
 }

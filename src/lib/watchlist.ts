@@ -43,6 +43,8 @@ export interface WatchlistRow {
   conflict: boolean
   reference?: {
     engineVersion: string
+    /** Exact Go strategy family, independent of the presentation label. */
+    strategyFamily?: string
     maxAgeMs: number
     nativeStatus: string
     statusLabel: string

@@ -18,6 +18,7 @@ func Analyze(in Input) []Opportunity {
 	out := ReversalOpportunities(in)
 	out = append(out, RangeOpportunities(in)...)
 	out = append(out, PullbackOpportunities(in)...)
+	out = append(out, IchimokuOpportunities(in)...)
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].AvailableAt != out[j].AvailableAt {
 			return out[i].AvailableAt > out[j].AvailableAt

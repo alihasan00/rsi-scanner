@@ -19,7 +19,8 @@ The interface uses Ant Design components with the supplied dark purple theme.
 It groups the scanner's coins into ecosystems, sectors, and memes, showing live
 rolling 24-hour performance, leaders, and gaps between family members.
 
-**Watchlist** runs the frozen Go crypto dashboard's scanner and selection rules
+**Watchlist** runs the Go crypto dashboard's scanner and selection rules, with
+the local Ichimoku lecture extension,
 in the browser. It checks 15m, 1h, 4h and 1d together and shows at most 12 unique
 assets for either market. Each asset has one clickable card with its leading
 setup and chart preview. Open it for the exact evaluated setup, alternative
@@ -91,11 +92,18 @@ quotes and calculates comparisons. `useFamilyMarketData.ts` owns polling, and
 
 ## Live watchlist
 
-Open **Watchlist** and choose Crypto or TradFi. The actual Go engine from the
-crypto dashboard release **0.13.1-26e07587190d** checks all four timeframes:
-15m, 1h, 4h and 1d. It selects six harmonic patterns, trend pullbacks and nine
-independent methods using the original direction, lifecycle, target-history
-and cost rules.
+Open **Crypto → Ichimoku Cloud** for only Ichimoku setups: Kijun/cloud reclaims,
+TK/PK crosses and cloud edge-to-edge. This indicator tab shows every active
+selected setup, grouped by asset, with charts, details, stars and direction/status
+filters. It is also available under TradFi. The selected indicator is saved and
+can be shared with `?indicator=ichimoku`.
+
+Open **Watchlist** and choose Crypto or TradFi for the mixed shortlist. The Go engine based on crypto
+dashboard release **0.13.1-26e07587190d**, extended as **+ichimoku.2**, checks
+15m, 1h, 4h and 1d. It selects six harmonic patterns, trend pullbacks and twelve
+independent methods. The Ichimoku additions include TK/PK crosses with Kijun
+retests and cloud edge-to-edge targets, with the shared lifecycle, history and
+cost safeguards. See [lecture coverage and conventions](docs/ichimoku-lecture.md).
 
 - **One card per asset:** at most 12 unique assets, with the leading setup,
   captured chart, evaluated quote and next checkpoint visible together. Open
@@ -134,6 +142,11 @@ and cost rules.
   setups inside the detail. The open candle is clearly provisional; a projected
   D has no invented pivot. A saved evaluation stays fixed until **Load latest**
   is selected, with a notice when it has aged or left the current selection.
+- **Ichimoku lecture:** the detail chart shows Tenkan, Kijun, cloud color and
+  the known forward cloud. Captured readings cover twists, flat edges, cloud
+  width, TK/PK validity, edge-to-edge and cloud Fibonacci references, plus the
+  thinning-cloud/widening-gap warning. Qualitative guidance remains context;
+  it does not bypass entry or cost checks. Chikou is excluded as in the lecture.
 - **Share for review:** **Copy setup** copies the selected evaluation's exact
   levels, evidence, costs and timestamps as a brief for an agent chat.
   **Save HTML** includes the visible chart and full captured candle data in

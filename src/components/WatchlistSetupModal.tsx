@@ -9,6 +9,8 @@ import { buildWatchlistReview } from '../lib/watchlistReview'
 import { captureWatchlistChart } from '../lib/watchlistShare'
 import { WatchlistSetupChart } from './WatchlistSetupChart'
 import { WatchlistReviewActions } from './WatchlistReviewActions'
+import type { Timeframe } from '../types'
+import { ICHIMOKU_EXCLUSIONS, ichimokuEvidence } from '../lib/watchlistIchimoku'
 import './WatchlistSetupModal.css'
 
 const quote = (value: number | null | undefined) => value == null || !Number.isFinite(value) ? 'Not established' : formatQuotePrice(value)
@@ -19,11 +21,17 @@ export function WatchlistSetupModal({instrument, latestInstrument, now, onClose,
   instrument: WatchlistInstrument; latestInstrument?: WatchlistInstrument; now: number; onClose: () => void; onRefresh: () => void
 }) {
   const [setupId,setSetupId] = useState(instrument.lead.id)
+  const [inspectedFrame, setInspectedFrame] = useState<{identity: string; timeframe: Timeframe} | null>(null)
   const chartContainer = useRef<HTMLElement>(null)
   const row = instrument.allSetups.find((item) => item.id === setupId) ?? instrument.lead
   const latest = latestInstrument?.allSetups.find((item) => item.id === row.id)
   const ref = row.reference
   const chart = ref?.chart
+  const chartIdentity = `${row.id}:${chart?.snapshotId ?? ''}`
+  const selectedTimeframe = inspectedFrame?.identity === chartIdentity ? inspectedFrame.timeframe : chart?.defaultTimeframe ?? row.timeframe
+  const ichimoku = chart?.frames.find((frame) => frame.timeframe === selectedTimeframe)?.ichimoku
+  const ichimokuItems = ichimoku ? ichimokuEvidence(ichimoku) : []
+  const primaryLabels = new Set(['Cloud', 'Tenkan / Kijun', 'TK cross', 'PK cross', 'Edge to edge', 'Retracement context'])
   const current = !!latest && isGoWatchlistRowCurrent(latest, now)
   const snapshotCurrent = current && isGoWatchlistRowCurrent(row, now)
   const newer = latest?.reference?.chart?.snapshotId !== undefined && latest.reference.chart.snapshotId !== chart?.snapshotId
@@ -48,11 +56,19 @@ export function WatchlistSetupModal({instrument, latestInstrument, now, onClose,
     {instrument.allSetups.length > 1 && <div className="watch-detail__setups" role="group" aria-label={`Setups for ${base}`}>{instrument.allSetups.map((setup) => <button type="button" key={setup.id} aria-pressed={setup.id === row.id} className={setup.id === row.id ? 'is-active' : ''} onClick={() => setSetupId(setup.id)}><span>{setup.name}</span><small className={`is-${setup.direction}`}>{setup.direction === 'bullish' ? 'Bullish' : 'Bearish'}{!matchingIds.has(setup.id) && ' · outside filters'}</small></button>)}</div>}
     <WatchlistReviewActions key={`${row.id}:${chart?.snapshotId ?? ''}`} buildReview={createReview} />
     <div className="watch-detail__snapshot" role="status"><span>{!current ? 'This setup is no longer in the current selection. Displaying its saved evaluation.' : !snapshotCurrent ? 'This evaluation has aged. Load the latest check before assessing the setup.' : newer ? 'A newer evaluation is available.' : 'Showing the evaluated setup and its original price references.'}</span>{(newer || replacementAvailable) && <Button size="small" icon={<ReloadOutlined />} onClick={onRefresh}>{replacementAvailable ? 'View current setup' : 'Load latest'}</Button>}</div>
-    <div className="watch-detail__layout"><section ref={chartContainer} className="watch-detail__visual" aria-label="Selected setup chart"><header className="watch-detail__chart-heading"><div><span className="watch-detail__eyebrow">THE SETUP</span><h2>{row.name}</h2></div><div className="watch-detail__badges"><span className={`watch-direction is-${row.direction}`}>{bullish ? <ArrowUpOutlined /> : <ArrowDownOutlined />}{bullish ? 'Bullish' : 'Bearish'}</span><span className={`watch-status is-${row.status}`}><i />{statusLabel}</span></div></header><WatchlistSetupChart key={`${row.id}:${chart?.snapshotId ?? ''}`} row={row} />
+    <div className="watch-detail__layout"><section ref={chartContainer} className="watch-detail__visual" aria-label="Selected setup chart"><header className="watch-detail__chart-heading"><div><span className="watch-detail__eyebrow">THE SETUP</span><h2>{row.name}</h2></div><div className="watch-detail__badges"><span className={`watch-direction is-${row.direction}`}>{bullish ? <ArrowUpOutlined /> : <ArrowDownOutlined />}{bullish ? 'Bullish' : 'Bearish'}</span><span className={`watch-status is-${row.status}`}><i />{statusLabel}</span></div></header><WatchlistSetupChart key={chartIdentity} row={row} onTimeframeChange={(timeframe) => setInspectedFrame({identity: chartIdentity, timeframe})} />
       <div className="watch-detail__context" aria-label="Four-timeframe context">{['15m','1h','4h','1d'].map((timeframe) => {
         const frame = ref?.frames.find((item) => item.timeframe === timeframe)
         return <div key={timeframe}><b>{timeframe}</b><span className={`is-${frame?.trend}`}>{frame ? words(frame.trend) : 'Unavailable'} <small>trend</small></span><span className={`is-${frame?.structure}`}>{frame ? words(frame.structure) : 'Unavailable'} <small>structure</small></span></div>
       })}</div>
+      {ichimoku && <section className="watch-detail__ichimoku" aria-label={`${selectedTimeframe} captured Ichimoku context`}>
+        <header><h3>Ichimoku · {selectedTimeframe}</h3><span>{words(ichimoku.status)} · Closed-candle readings</span></header>
+        <dl>{ichimokuItems.filter((item) => primaryLabels.has(item.label)).map((item) => <div key={item.label} className={item.caution ? 'is-caution' : ''}><dt>{item.label}</dt><dd>{item.detail}</dd></div>)}</dl>
+        <details><summary>Twists, flat edges, Fibonacci and calculation details</summary><dl>{ichimokuItems.filter((item) => !primaryLabels.has(item.label)).map((item) => <div key={item.label} className={item.caution ? 'is-caution' : ''}><dt>{item.label}</dt><dd>{item.detail}</dd></div>)}</dl>
+          <p>{ICHIMOKU_EXCLUSIONS}</p><p>Widths and distances describe the captured chart. “Significant” width and overextension have no numerical threshold in the lecture; an opposite edge or Fib level is a reference, not a guaranteed target.</p>
+          {!!ichimoku.conventions?.length && <ul>{ichimoku.conventions.map((convention) => <li key={convention}>{convention}</li>)}</ul>}
+        </details>
+      </section>}
     </section><aside className="watch-detail__insight"><section><span className="watch-detail__eyebrow">NEXT CHECKPOINT</span><h3>{row.status === 'confirmed' ? 'Trigger confirmed' : row.status === 'blocked' ? 'Entry is blocked' : 'What needs to happen'}</h3><p>{row.next}</p></section>
       <section className="watch-detail__why"><h3>Why this setup</h3><p>{row.reason}</p>{instrument.hasMixedDirections && <p className="watch-detail__opposing">This asset also has an opposing setup. Use the setup tabs to compare both directions.</p>}</section>
       <section className="watch-detail__plan"><h3>Price references</h3><dl><div><dt>{row.source === 'trend' ? 'Pullback level' : 'Entry reference'}</dt><dd>{quote(ref?.entry)}</dd></div><div className="is-stop"><dt>Invalidation / stop</dt><dd>{quote(row.stop)}</dd></div><div className="is-target"><dt>First target</dt><dd>{quote(row.target)}</dd></div></dl><div className="watch-detail__rr"><span>Reward / risk after costs</span><strong>{ref?.netRiskReward != null ? `${ref.netRiskReward.toFixed(2)}R` : 'Not established'}</strong></div><p className="watch-detail__costs">{ref ? `${ref.feeBps / 100}% fees + ${ref.slippageBps / 100}% slippage round trip. Minimum ${ref.minNetRR}R after costs.` : ''}</p></section>

@@ -1,5 +1,5 @@
 /* global importScripts, Go */
-// Runs the frozen Go rules away from the interface. This worker has no order,
+// Runs the Go rules and local Ichimoku extension away from the interface. This worker has no order,
 // account, database or AI connection; market history arrives from the page.
 importScripts(new URL('./watchlist-wasm-exec.js', self.location.href).href)
 const boot = (async () => {

@@ -18,10 +18,14 @@ const (
 	FibonacciPullback      = "fibonacci_pullback"
 	KijunReclaim           = "kijun_reclaim"
 	CloudReclaim           = "cloud_reclaim"
+	TKCross                = "tk_cross"
+	PKCross                = "pk_cross"
+	CloudEdgeToEdge        = "cloud_edge_to_edge"
 )
 
 var Families = []string{SweepReversal, DivergenceReversal, DivergenceContinuation,
-	RangeRejection, CompressionBreakout, FVGPullback, FibonacciPullback, KijunReclaim, CloudReclaim}
+	RangeRejection, CompressionBreakout, FVGPullback, FibonacciPullback, KijunReclaim, CloudReclaim,
+	TKCross, PKCross, CloudEdgeToEdge}
 
 // Input contains only the symbol's completed histories and measured context.
 // Map keys are intervals (1d,4h,1h,15m), not symbol/interval keys. The selection

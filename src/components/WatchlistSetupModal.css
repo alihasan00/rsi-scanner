@@ -40,6 +40,18 @@
 .watch-detail__context > div:last-child { border:0; }
 .watch-detail__context b { color:#c4afd7; font-size:11px; margin-bottom:2px; }
 .watch-detail__context small { font-size:9px; color:#8d7b9d; }
+.watch-detail__ichimoku { margin:0 16px 16px; padding:14px; border:1px solid #3c3043; border-radius:9px; background:#19151e; }
+.watch-detail__ichimoku header { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:7px; }
+.watch-detail__ichimoku h3 { margin:0; color:#d5c1e3; font-size:12px; font-weight:550; }
+.watch-detail__ichimoku header > span { color:#9a86aa; font-size:9px; }
+.watch-detail__ichimoku dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:13px 20px; margin:14px 0 0; }
+.watch-detail__ichimoku dt { color:#c1a9d2; font-size:10px; font-weight:550; margin-bottom:5px; }
+.watch-detail__ichimoku dd { margin:0; color:#9e8cac; font-size:10px; line-height:1.75; overflow-wrap:anywhere; }
+.watch-detail__ichimoku .is-caution dt,.watch-detail__ichimoku .is-caution dd { color:#d8b481; }
+.watch-detail__ichimoku details { border-top:1px solid #34283e; margin-top:14px; padding-top:11px; }
+.watch-detail__ichimoku summary { cursor:pointer; color:#b79acb; font-size:10px; }
+.watch-detail__ichimoku details p,.watch-detail__ichimoku details ul { color:#8f7b9e; font-size:9px; line-height:1.75; margin:12px 0 0; }
+.watch-detail__ichimoku details ul { padding-left:16px; }
 .watch-detail .is-bullish { color:var(--watch-green); }
 .watch-detail .is-bearish { color:var(--watch-red); }
 .watch-detail__insight { border:1px solid #392d43; border-radius:12px; background:#1d1723; padding:19px 18px; align-self:start; }
@@ -66,6 +78,7 @@
 .watch-detail__footer { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; padding-top:16px; margin-top:12px; border-top:1px solid #302636; color:#806c90; font-size:9px; }
 @media (max-width:1100px) { .watch-detail__layout { grid-template-columns:minmax(0,1fr); } .watch-detail__insight { display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; padding:18px; } .watch-detail__insight > section + section { padding:0 0 0 18px; margin:0; border-top:0; border-left:1px solid #372a40; } }
 @media (max-width:640px) {
+ .watch-detail__ichimoku { margin:0 10px 12px; padding:11px; } .watch-detail__ichimoku dl { grid-template-columns:minmax(0,1fr); gap:11px; }
  .watch-detail__share { padding:12px; } .watch-detail__share-row { flex-direction:column; align-items:stretch; } .watch-detail__share-actions .ant-btn { flex:1; min-height:36px; }
  .watch-detail .ant-modal-container { padding:17px 13px; border-radius:12px; } .watch-detail__symbol { font-size:20px; } .watch-detail__quote strong { font-size:15px; } .watch-detail__title { gap:12px; padding-right:26px; }
  .watch-detail__quote > span { max-width:110px; text-align:right; font-size:8px; } .watch-detail__symbol small { display:none; } .watch-detail__snapshot { font-size:9px; line-height:1.6; }

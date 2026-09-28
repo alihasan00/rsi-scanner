@@ -1,5 +1,7 @@
 import type { Candle, Timeframe } from '../types'
 import type { GoWatchlistFrameUpdate } from './goWatchlistFeed'
+import { captureIchimoku } from './watchlistIchimoku'
+import type { IchimokuLectureSnapshot, IchimokuPoint } from './watchlistIchimoku'
 
 export interface WatchlistChartFrame {
   readonly timeframe: Timeframe
@@ -7,6 +9,8 @@ export interface WatchlistChartFrame {
   readonly preview: Candle | null
   readonly receivedAt: number
   readonly lastClosedAt: number
+  readonly ichimoku?: IchimokuLectureSnapshot
+  readonly ichimokuSeries?: readonly IchimokuPoint[]
 }
 
 export interface WatchlistChartPoint {
@@ -93,7 +97,8 @@ export function captureWatchlistEvaluation(
 export function getEvaluatedChartFrames(
   input: WatchlistEvaluationInput | undefined,
   symbol: string,
-  evidence: readonly {interval: Timeframe; observedAt: number; lastClosedAt: number; ready: boolean}[],
+  evidence: readonly {interval: Timeframe; observedAt: number; lastClosedAt: number; ready: boolean;
+    ichimoku?: IchimokuLectureSnapshot | null; ichimokuSeries?: readonly IchimokuPoint[] | null}[],
 ): readonly WatchlistChartFrame[] {
   if (!input) return []
   const frames: WatchlistChartFrame[] = []
@@ -106,6 +111,7 @@ export function getEvaluatedChartFrames(
       timeframe: history.timeframe, candles: history.candles,
       preview: history.preview && history.preview.openTime <= input.evaluatedAt ? history.preview : null,
       receivedAt: history.receivedAt, lastClosedAt: frame.lastClosedAt,
+      ...captureIchimoku(frame.ichimoku, frame.ichimokuSeries, history.candles, input.evaluatedAt),
     }))
   }
   return Object.freeze(frames)

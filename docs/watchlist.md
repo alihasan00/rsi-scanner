@@ -1,7 +1,17 @@
 # Live setup watchlist
 
-The Watchlist runs the actual scanner and selector from the frozen Go crypto
-dashboard release **0.13.1-26e07587190d** (scan schema 12). It checks Crypto or
+**Crypto → Ichimoku Cloud** (also available under TradFi) reuses the charts,
+details and filters below with a dedicated engine scope. It selects only
+`kijun_reclaim`, `cloud_reclaim`, `tk_cross`, `pk_cross` and `cloud_edge_to_edge`
+before ranking, returns all active setups without the mixed Watchlist caps, and
+excludes terminal inventory. Unrelated methods cannot appear in cards, detail
+tabs or exported reviews. The browser disables the ordinary market-wide RSI feed
+while this indicator is open. The underlying Go scanner still supplies the
+shared four-frame analysis and all freshness, lifecycle and cost gates.
+
+The Watchlist runs the Go scanner and selector based on crypto dashboard
+release **0.13.1-26e07587190d** (upstream scan schema 12), extended locally as
+**+ichimoku.2** for the Ichimoku lecture. It checks Crypto or
 TradFi across **15m, 1h, 4h and 1d together**, then presents at most **12 unique
 assets**. A symbol appears once; open its card to compare the selected setups.
 Stars are a personal filter and never make an asset analytically eligible.
@@ -15,7 +25,8 @@ The original Go engine selects three sources:
 - **Trend pullbacks:** the original multi-timeframe trend and pullback watches.
 - **Independent methods:** sweep reversal, regular-divergence reversal,
   hidden-divergence continuation, range rejection, compression breakout,
-  fair-value-gap pullback, Fibonacci pullback, Kijun reclaim and cloud reclaim.
+  fair-value-gap pullback, Fibonacci pullback, Kijun reclaim, cloud reclaim,
+  TK cross, PK cross and cloud edge-to-edge.
   Experimental methods remain labeled in setup detail.
 
 Every asset requires fresh, usable context on all four timeframes. The engine
@@ -32,7 +43,7 @@ and blocked lifecycles. The Go selector includes some blocked observations in
 these sections. A selected watch is not necessarily an entry: a developing
 watch may still lack a complete reference plan.
 
-The unchanged `selection.Build` result keeps at most 12 items in each original
+The `selection.Build` result keeps at most 12 items in each original
 source section. The browser interleaves those sections in round-robin order,
 preserving the Go order within each section. It then groups the selected
 methods and timeframes by asset and caps the display at 12 unique assets.
@@ -63,6 +74,14 @@ A projected D is never presented as an observed pivot. Trend break events keep
 their hourly timestamps, while retests and triggers retain their 15m context.
 Independent methods retain their frozen source window, location and events.
 Unavailable anchors or event prices are not replaced with guessed coordinates.
+
+The **Ichimoku** chart toggle draws the exact Go Tenkan/Kijun and cloud paths.
+Known forward cloud spans are marked as projections from completed prices.
+The selected-timeframe detail exposes cloud position/color/width, flat edges,
+cross validity, twists, edge-to-edge references, cloud Fibonacci levels and
+the combined thinning-cloud/widening-line-gap warning. These readings and the
+visible overlays survive review export. See [the lecture coverage audit](ichimoku-lecture.md)
+for the source rules, deliberate Chikou exclusion and numerical conventions.
 
 The timeframe controls inspect the four captured histories, with **Setup** and
 **Recent** views and pointer or keyboard candle inspection. The outlined open
@@ -161,7 +180,7 @@ Closed histories are frozen at publication and shared safely with later
 evaluation snapshots. A completed candle or historical correction replaces the
 array; preview-only ticks keep the same closed history. Mutable caller data is
 still copied defensively. Reusing a history never refreshes its receipt time or
-reuses an eligibility decision: every evaluation still runs the original Go
+reuses an eligibility decision: every evaluation still runs the Go
 scanner and selector with the captured quote, receipts and evaluation time.
 Chart rendering is memoized so coverage timers do not redraw unchanged charts.
 
@@ -184,23 +203,23 @@ clears the current results rather than substituting an older publication.
 
 ## Browser deployment and verification
 
-The frozen Go engine runs as WebAssembly in a browser Web Worker. Normal Vite
+The Go engine runs as WebAssembly in a browser Web Worker. Normal Vite
 or Vercel deployment serves the committed browser artifacts and needs no Go
 installation on the host, crypto service, database, AI worker or trading
-worker. The imported source is the deployed schema-12 release, not pending
-changes in the sibling crypto working tree.
+worker. The base source is the deployed schema-12 release. The explicit local Ichimoku
+amendments are recorded separately; pending sibling-project changes are not imported.
 
-The engine's source hash is:
+The upstream archive's source hash is:
 
 ```text
 26e07587190d24c66d62602e968ef24dafafb281b9b1a0140afa7f6c6d0a0d00
 ```
 
-`engine/provenance.json` records upstream and adapted file hashes. The only
-production source adaptation replaces the database feed's boundary-grace
-constant with the already-existing identical five-second market constant.
-The scanner and selector calculations are retained. The generated artifacts
-and adapter hashes can be checked with:
+`engine/provenance.json` records upstream and adapted file hashes. The original
+boundary-grace import adaptation retains the identical five-second constant.
+The local Ichimoku extension adds measurements, strategies and cloud-zone
+retests; shared freshness, structural protection and cost gates are retained.
+The generated artifacts, extension revision and source hashes can be checked with:
 
 ```sh
 node engine/scripts/verify.mjs

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ScreenerMarket } from '../lib/markets'
 import { adaptGoWatchlist, isGoWatchlistRowCurrent } from '../lib/goWatchlist'
-import type { GoWatchlistResult } from '../lib/goWatchlist'
+import type { GoWatchlistResult, GoWatchlistScope } from '../lib/goWatchlist'
 import { GO_WATCHLIST_TIMEFRAMES, startGoWatchlistFeed } from '../lib/goWatchlistFeed'
 import type { GoWatchlistFrameUpdate } from '../lib/goWatchlistFeed'
 import { captureWatchlistEvaluation } from '../lib/watchlistChart'
@@ -22,8 +22,8 @@ interface PendingScan {
   allSeedsAttempted: boolean
 }
 
-export function useGoWatchlist(symbols: readonly string[], market: ScreenerMarket) {
-  const identity = `${market}:${symbols.join(',')}`
+export function useGoWatchlist(symbols: readonly string[], market: ScreenerMarket, scope: GoWatchlistScope = 'all') {
+  const identity = `${scope}:${market}:${symbols.join(',')}`
   const [now, setNow] = useState(Date.now)
   const [state, setState] = useState<State | null>(null)
   useEffect(() => {
@@ -59,7 +59,7 @@ export function useGoWatchlist(symbols: readonly string[], market: ScreenerMarke
       pending = {...scheduled, input, sources}
       current = {...current, evaluating: true}
       publish()
-      worker.postMessage({id: scheduled.id, input: {now: input.evaluatedAt, symbols: [...symbols], histories: input.histories}})
+      worker.postMessage({id: scheduled.id, input: {now: input.evaluatedAt, symbols: [...symbols], histories: input.histories, scope}})
       watchdog = setTimeout(() => {
         if (stopped || !scheduler.busy) return
         worker.terminate()
@@ -81,6 +81,7 @@ export function useGoWatchlist(symbols: readonly string[], market: ScreenerMarke
         try {
           const output = message.data as GoWatchlistResult
           if (output.now !== completed.input.evaluatedAt) throw new Error('The watchlist response does not match its evaluated candle snapshot.')
+          if ((output.scope ?? 'all') !== scope) throw new Error('The watchlist response does not match the selected indicator.')
           const rows = adaptGoWatchlist(output, market, completed.input)
           scheduler.publish(completed.id)
           current = {...current, rows, evaluation: output.scan, evaluatedSources: completed.sources,
@@ -107,7 +108,7 @@ export function useGoWatchlist(symbols: readonly string[], market: ScreenerMarke
     }})
     const timer = setInterval(() => { publish(); evaluate() }, 2_000)
     return () => { stopped = true; pending = null; stopFeed(); worker.terminate(); clearInterval(timer); clearTimeout(watchdog); clearTimeout(bootWatchdog) }
-  }, [symbols, market, identity])
+  }, [symbols, market, identity, scope])
   return useMemo(() => {
     const current = state?.identity === identity ? state : null
     const frames = current?.frames ?? []

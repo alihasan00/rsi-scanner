@@ -5,6 +5,7 @@ import type { WatchlistInstrument } from '../src/lib/watchlistInstruments'
 import type { WatchlistChartSnapshot } from '../src/lib/watchlistChart'
 import { TIMEFRAME_MILLISECONDS } from '../src/lib/binanceHistory'
 import type { Candle } from '../src/types'
+import { ichimokuFixture } from './fixtures/watchlistIchimoku'
 
 const EVALUATED_AT = Date.parse('2026-09-28T12:05:00Z')
 const COPIED_AT = EVALUATED_AT + 10_000
@@ -119,6 +120,26 @@ async function inspectHtml(html: string) {
 }
 
 describe('saved watchlist review', () => {
+  test('includes all captured Ichimoku readings, projection timing and exclusions in text and complete inert HTML', () => {
+    const input = fixture()
+    const chart = input.row.reference!.chart!
+    const source = chart.frames[1]
+    const { reading, series } = ichimokuFixture(source.candles)
+    Object.assign(source, { ichimoku: reading, ichimokuSeries: series })
+    const result = buildWatchlistReview(input, '<svg><title>Ichimoku chart · known forward display</title><path class="is-kijun" d="M1,2 L3,4" stroke="#e46c79"/><polygon class="is-projected" points="1,2 3,4 5,6" stroke-dasharray="3 4"/></svg>')
+    expect(result.text).toContain('Captured Ichimoku lecture observations')
+    expect(result.text).toContain('97.12345')
+    expect(result.text).toContain('94.30345')
+    expect(result.text).toContain('Known forward twist')
+    expect(result.text).toContain('Excluded geometry')
+    expect(result.text).toContain('Chikou is excluded')
+    expect(result.text).toContain('No numeric significant-width threshold')
+    const captured = snapshotFrom(result.html).frames[1]
+    expect(captured.ichimoku).toEqual(reading)
+    expect(captured.ichimokuSeries).toEqual(series)
+    expect(result.html).toContain('stroke-dasharray="3 4"')
+    expect(result.html).toContain('class="is-kijun"')
+  })
   test('keeps geometric entry, plan entry and evaluated quote distinct in the written review', () => {
     const input = fixture()
     const { text, html } = buildWatchlistReview(input)

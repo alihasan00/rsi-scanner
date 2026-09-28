@@ -1,5 +1,6 @@
 import type { WatchlistRow } from './watchlist'
 import type { WatchlistInstrument } from './watchlistInstruments'
+import { ICHIMOKU_EXCLUSIONS, ichimokuEvidence } from './watchlistIchimoku'
 
 export interface WatchlistReviewInput {
   row: WatchlistRow
@@ -196,6 +197,15 @@ export function buildWatchlistReview(input: WatchlistReviewInput, chartMarkup?: 
       const captured = chart?.frames.find((item) => item.timeframe === timeframe)
       return `| ${timeframe} | ${markdown(frame?.trend ?? 'Unavailable')} | ${markdown(frame?.structure ?? 'Unavailable')} | ${stamp(frame?.asOf)} | ${captured?.candles.length ?? 'Unavailable'} |`
     }),
+    '', '## Captured Ichimoku lecture observations', '',
+    ...(chart?.frames.some((frame) => frame.ichimoku) ? chart.frames.filter((frame) => frame.ichimoku).flatMap((frame) => [
+      `### ${frame.timeframe} · ${markdown(frame.ichimoku!.status)} · ${stamp(frame.ichimoku!.asOf)}`, '',
+      ...ichimokuEvidence(frame.ichimoku!, String).map((item) => `- ${markdown(item.label)}${item.caution ? ' — caution' : ''}: ${markdown(item.detail)}`),
+      ...(frame.ichimoku!.conventions ?? []).map((item) => `- Implementation convention: ${markdown(item)}`),
+      '',
+    ]) : ['- Ichimoku readings were not supplied for the matching captured candles.']),
+    `- ${ICHIMOKU_EXCLUSIONS}`,
+    '- Significant width and overextension are qualitative lecture terms. Recorded widths and distances are measurements, not validated probability thresholds. Cloud Fibonacci levels and the opposite edge are references, not guaranteed targets.',
     '', '## Recorded geometry and events', '',
     ...(chart?.points.length ? chart.points.map((point) => `- ${markdown(point.label)}: ${exact(point.price)} · ${point.timeframe} candle open ${stamp(point.time)}.`) : ['- No timestamped pivot path was supplied; do not invent missing anchors.']),
     ...(chart?.sourceWindow ? [`- Historical source window: ${chart.sourceWindow.timeframe}, ${stamp(chart.sourceWindow.startTime)} to ${stamp(chart.sourceWindow.endTime)}. Availability is recorded separately in the events.`] : []),

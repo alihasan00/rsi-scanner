@@ -52,13 +52,26 @@ type StrategyResult struct {
 // BuildStrategies shares production discovery and gates with detail, journal
 // and replay. A zero limit retains terminal/rejected observations as well.
 func BuildStrategies(snapshot scanner.Snapshot, histories map[string]scanner.History, symbols []string, now time.Time, maxAge time.Duration, limit int, cfg Config, prepared ...*Prepared) StrategyResult {
+	return buildStrategies(snapshot, histories, symbols, now, maxAge, limit, cfg, strategies.Families, limit > 0, prepared...)
+}
+
+var ichimokuFamilies = []string{strategies.KijunReclaim, strategies.CloudReclaim, strategies.TKCross, strategies.PKCross, strategies.CloudEdgeToEdge}
+
+// BuildIchimokuStrategies filters families before ranking/display selection and
+// returns every active Ichimoku setup. Zero Limit here means an uncapped active
+// screener, not the terminal inventory returned by BuildStrategies with zero.
+func BuildIchimokuStrategies(snapshot scanner.Snapshot, histories map[string]scanner.History, symbols []string, now time.Time, maxAge time.Duration, cfg Config, prepared ...*Prepared) StrategyResult {
+	return buildStrategies(snapshot, histories, symbols, now, maxAge, 0, cfg, ichimokuFamilies, true, prepared...)
+}
+
+func buildStrategies(snapshot scanner.Snapshot, histories map[string]scanner.History, symbols []string, now time.Time, maxAge time.Duration, limit int, cfg Config, families []string, activeOnly bool, prepared ...*Prepared) StrategyResult {
 	var cached *Prepared
 	if len(prepared) > 0 {
 		cached = prepared[0]
 	}
 	out := StrategyResult{Version: strategies.Version, Experimental: true, Items: []StrategyCandidate{}, Summary: []StrategySummary{}, Contexts: []strategies.Context{}, Coverage: []StrategyCoverage{}, Unavailable: []string{}, Limit: limit}
 	index := map[string]int{}
-	for _, family := range strategies.Families {
+	for _, family := range families {
 		index[family] = len(out.Summary)
 		out.Summary = append(out.Summary, StrategySummary{Family: family})
 	}
@@ -85,7 +98,7 @@ func BuildStrategies(snapshot scanner.Snapshot, histories map[string]scanner.His
 		context.AsOf = clonePointer(context.AsOf)
 		context.Range = clonePointer(context.Range)
 		out.Contexts = append(out.Contexts, context)
-		for _, family := range strategies.Families {
+		for _, family := range families {
 			frames, warmup := strategyRequirements(family)
 			for _, tf := range frames {
 				c := StrategyCoverage{Symbol: symbol, Family: family, Interval: tf, Status: "data_unavailable", HistoryBars: len(in.Histories[tf].Candles)}
@@ -115,6 +128,9 @@ func BuildStrategies(snapshot scanner.Snapshot, histories map[string]scanner.His
 			opportunities = strategies.Analyze(in)
 		}
 		for _, opportunity := range opportunities {
+			if _, selected := index[opportunity.Family]; !selected {
+				continue
+			}
 			candidate := assessStrategy(opportunity, in, now, cfg)
 			summary := &out.Summary[index[opportunity.Family]]
 			summary.Observed++
@@ -142,12 +158,18 @@ func BuildStrategies(snapshot scanner.Snapshot, histories map[string]scanner.His
 		}
 		return a.Opportunity.ID < b.Opportunity.ID
 	})
-	if limit > 0 {
+	if activeOnly {
 		// Round-robin families within each priority group avoids a prolific
 		// source monopolizing the cards, while eligible entries remain first.
 		inventory := out.Items
 		out.Items = []StrategyCandidate{}
-		for tier := 0; tier < 2 && len(out.Items) < limit; tier++ {
+		// A zero configured limit removes the display bound while preserving
+		// the same active-only tiers and per-family round-robin ordering.
+		displayLimit := limit
+		if displayLimit <= 0 {
+			displayLimit = len(inventory)
+		}
+		for tier := 0; tier < 2 && len(out.Items) < displayLimit; tier++ {
 			queues := map[string][]StrategyCandidate{}
 			for _, c := range inventory {
 				t := 2
@@ -160,11 +182,11 @@ func BuildStrategies(snapshot scanner.Snapshot, histories map[string]scanner.His
 					queues[c.Opportunity.Family] = append(queues[c.Opportunity.Family], c)
 				}
 			}
-			for added := true; added && len(out.Items) < limit; {
+			for added := true; added && len(out.Items) < displayLimit; {
 				added = false
-				for _, family := range strategies.Families {
+				for _, family := range families {
 					q := queues[family]
-					if len(q) == 0 || len(out.Items) >= limit {
+					if len(q) == 0 || len(out.Items) >= displayLimit {
 						continue
 					}
 					out.Items = append(out.Items, q[0])
@@ -189,6 +211,10 @@ func strategyRequirements(family string) ([]string, int) {
 	case strategies.KijunReclaim:
 		return []string{"1h", "4h"}, 61
 	case strategies.CloudReclaim:
+		return []string{"1h", "4h"}, 151
+	case strategies.TKCross, strategies.PKCross:
+		return []string{"1h", "4h"}, 150
+	case strategies.CloudEdgeToEdge:
 		return []string{"1h", "4h"}, 151
 	case strategies.CompressionBreakout:
 		return []string{"1h", "4h"}, 41

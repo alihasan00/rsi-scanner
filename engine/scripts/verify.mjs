@@ -10,7 +10,7 @@ export function verifySources() {
   const provenance = JSON.parse(readFileSync(resolve(engineDirectory, 'provenance.json'), 'utf8'))
   for (const file of provenance.files) {
     const actual = sha256(readFileSync(resolve(engineDirectory, file.path)))
-    if (actual !== file.sha256) throw new Error(`Frozen source changed without provenance update: ${file.path}`)
+    if (actual !== file.sha256) throw new Error(`Engine source changed without provenance update: ${file.path}`)
   }
   return provenance
 }
@@ -19,6 +19,7 @@ export function verifyArtifacts() {
   const provenance = verifySources()
   const manifest = JSON.parse(readFileSync(resolve(engineDirectory, 'build-manifest.json'), 'utf8'))
   if (manifest.sourceHash !== provenance.sourceHash) throw new Error('Built engine uses a different frozen release.')
+  if (manifest.release !== provenance.release || manifest.localRevision !== provenance.localRevision) throw new Error('Rebuild the engine after changing its local revision.')
   for (const [path, expected] of Object.entries(manifest.artifacts)) {
     if (sha256(readFileSync(resolve(engineDirectory, '..', path))) !== expected) throw new Error(`Shared-engine artifact changed: ${path}`)
   }

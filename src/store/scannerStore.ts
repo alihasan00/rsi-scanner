@@ -75,7 +75,7 @@ interface ScannerState {
   setAppView: (appView: AppView) => void
   toggleStarredSymbol: (symbol: string) => void
   setCardDensity: (density: 'comfortable' | 'compact') => void
-  setScreenerTab: (tab: 'rsi' | 'fib' | 'sr' | 'harmonic') => void
+  setScreenerTab: (tab: 'rsi' | 'fib' | 'sr' | 'harmonic' | 'ichimoku') => void
   updateScreenerFilters: (patch: Partial<ScreenerFilterPreferences>) => void
   resetScreenerFilters: () => void
   applyScreenerPreferences: (preferences: ScreenerPreferences) => void

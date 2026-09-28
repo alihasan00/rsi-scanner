@@ -77,9 +77,35 @@ func BuildAll(snapshot scanner.Snapshot, histories map[string]scanner.History, s
 	return build(snapshot, histories, symbols, now, maxAge, 0, selectedConfig(configs))
 }
 
+// BuildIchimoku returns the uncapped active Ichimoku screener. It uses the same
+// four-frame freshness and reference-plan checks as the mixed watchlist, while
+// excluding harmonics, trend watches and other strategy families before caps.
+func BuildIchimoku(snapshot scanner.Snapshot, histories map[string]scanner.History, symbols []string, now time.Time, maxAge time.Duration, configs ...Config) Result {
+	return buildScoped(snapshot, histories, symbols, now, maxAge, 0, selectedConfig(configs), true)
+}
+
 func build(snapshot scanner.Snapshot, histories map[string]scanner.History, symbols []string, now time.Time, maxAge time.Duration, limit int, cfg Config, prepared ...*Prepared) Result {
+	return buildScoped(snapshot, histories, symbols, now, maxAge, limit, cfg, false, prepared...)
+}
+
+func buildScoped(snapshot scanner.Snapshot, histories map[string]scanner.History, symbols []string, now time.Time, maxAge time.Duration, limit int, cfg Config, ichimokuOnly bool, prepared ...*Prepared) Result {
 	result := Result{Config: cfg, Benchmarks: benchmarks(snapshot, now, maxAge), Items: []Candidate{}, Breadth: []Breadth{}, Examined: len(snapshot.Rows), Limit: limit}
-	result.Strategies = BuildStrategies(snapshot, histories, symbols, now, maxAge, limit, cfg, prepared...)
+	if ichimokuOnly {
+		result.Trends = []TrendWatch{}
+		result.Strategies = BuildIchimokuStrategies(snapshot, histories, symbols, now, maxAge, cfg, prepared...)
+		result.Examined = 0
+		for _, summary := range result.Strategies.Summary {
+			result.Examined += summary.Observed
+			result.Eligible += summary.Eligible
+		}
+		for _, candidate := range result.Strategies.Items {
+			if candidate.Status == "cost_blocked" {
+				result.CostFiltered++
+			}
+		}
+	} else {
+		result.Strategies = BuildStrategies(snapshot, histories, symbols, now, maxAge, limit, cfg, prepared...)
+	}
 	allowed := make(map[string]bool, len(symbols))
 	for _, symbol := range symbols {
 		allowed[symbol] = true
@@ -121,6 +147,9 @@ func build(snapshot scanner.Snapshot, histories map[string]scanner.History, symb
 			}
 		}
 		result.Breadth = append(result.Breadth, breadth)
+	}
+	if ichimokuOnly {
+		return result
 	}
 	if snapshot.Running {
 		result.Trends = []TrendWatch{}

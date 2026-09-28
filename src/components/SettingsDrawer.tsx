@@ -11,16 +11,26 @@ import './Liquidity.css'
 const { Text, Paragraph } = Typography
 
 export function SettingsDrawer() {
-  const { settings, closeSettings, updateSettings, isFib, isLiquidity, isHarmonic, isWatchlist } = useScannerStore(useShallow((state) => ({
+  const { settings, closeSettings, updateSettings, isFib, isLiquidity, isHarmonic, isIchimoku, isWatchlist } = useScannerStore(useShallow((state) => ({
     settings: state.settings,
     closeSettings: state.closeSettings,
     updateSettings: state.updateSettings,
     isFib: state.screenerFilters.signal === 'fib',
     isLiquidity: state.screenerFilters.signal === 'sr',
     isHarmonic: state.screenerFilters.signal === 'harmonic',
+    isIchimoku: state.appView === 'scanner' && state.screenerFilters.signal === 'ichimoku',
     isWatchlist: state.appView === 'watchlist',
   })))
   const [draftLineWidth, setDraftLineWidth] = useState(settings.lineWidth)
+
+  if (isIchimoku) return <Drawer title="Ichimoku Cloud settings" open onClose={closeSettings} size={440}>
+    <Paragraph>This indicator view shows Ichimoku setups: cloud breakouts and retests, Kijun reclaims, TK and PK crosses, and cloud edge-to-edge opportunities. Use the view’s filters to choose direction, stage and starred pairs.</Paragraph>
+    <Divider />
+    <Text strong>Lecture settings · 20 / 60 / 120 / 30</Text>
+    <Paragraph style={{ marginTop: 12 }}>Tenkan is orange and Kijun is red. The shaded cloud is green or red; the dashed forward cloud is already calculated from completed candles and displayed 30 bars ahead. It does not forecast future prices.</Paragraph>
+    <Paragraph>Setups are checked on 1h and 4h candles with 15m, 1h, 4h and 1d context. Open a setup to change the displayed chart timeframe, toggle Ichimoku overlays, and inspect the recorded crosses, flat edges and retracement cautions.</Paragraph>
+    <Paragraph type="secondary">The lecture’s periods stay fixed in this view. Chikou is intentionally omitted. Entry references, invalidation, targets and reward/risk after modeled costs belong to each saved evaluation.</Paragraph>
+  </Drawer>
 
   if (isWatchlist) return <Drawer title="Watchlist settings" open onClose={closeSettings} size={440}>
     <Paragraph>Setups use the selected timeframe. A zone test must close before a later aligned trigger can confirm it. The trigger stays recent for four completed candles, while the live price must remain within one ATR of the zone (0.5% when ATR is unavailable).</Paragraph>

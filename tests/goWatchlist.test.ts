@@ -5,6 +5,59 @@ import { TIMEFRAME_MILLISECONDS } from '../src/lib/binanceHistory'
 import { captureWatchlistEvaluation } from '../src/lib/watchlistChart'
 import type { GoWatchlistFrameUpdate } from '../src/lib/goWatchlistFeed'
 import type { Candle, Timeframe } from '../src/types'
+import { ichimokuFixture } from './fixtures/watchlistIchimoku'
+
+describe('Go Ichimoku adapter transparency', () => {
+  test('keeps exact engine readings with the matching captured candle publication, without changing the selected plan', () => {
+    const { result, histories, hour } = chartFixture()
+    const source = result.scan.series.find((frame) => frame.interval === '1h')!
+    const { reading, series } = ichimokuFixture(hour.candles)
+    Object.assign(source, { ichimoku: reading, ichimokuSeries: series })
+    const before = structuredClone(reading)
+    const [row] = adaptGoWatchlist(result, 'spot', captureWatchlistEvaluation('ichimoku-exact', NOW, histories))
+    const captured = row.reference!.chart!.frames.find((frame) => frame.timeframe === '1h')!
+    Object.assign(reading.kijun, { value: 1 })
+    expect(captured.ichimoku).toEqual(before)
+    expect(captured.ichimokuSeries).toEqual(series)
+    expect(row.status).toBe('confirmed')
+    expect(row.target).toBe(result.result.items[0].plan.target)
+    expect(row.reference!.netRiskReward).toBe(result.result.items[0].plan.netRR)
+    expect(adaptGoWatchlist(result, 'spot')[0].reference!.chart!.frames).toHaveLength(0)
+  })
+
+  test('never attaches readings when the provider receipt or completed-candle evidence belongs to a different input', () => {
+    for (const mismatch of ['receipt', 'candle'] as const) {
+      const { result, histories, hour } = chartFixture()
+      const source = result.scan.series.find((frame) => frame.interval === '1h')!
+      const { reading, series } = ichimokuFixture(hour.candles)
+      Object.assign(source, { ichimoku: reading, ichimokuSeries: series })
+      if (mismatch === 'receipt') source.observedAt++
+      else source.lastClosedAt--
+      const [row] = adaptGoWatchlist(result, 'spot', captureWatchlistEvaluation('ichimoku-mismatch', NOW, histories))
+      expect(row.reference!.chart!.frames.some((frame) => frame.timeframe === '1h')).toBe(false)
+    }
+  })
+
+  test('displays a selected Ichimoku strategy with the engine status and immutable source events', () => {
+    const { result, histories, hour } = chartFixture()
+    const triggerAt = hour.candles.at(-1)!.closeTime
+    const setupAt = hour.candles.at(-2)!.closeTime
+    result.result.items = []
+    result.result.strategies.items = [{ opportunity: { id: 'tk-recorded', family: 'tk_cross', symbol: 'BTCUSDT', interval: '1h',
+      direction: 'bullish', state: 'entry_confirmed', asOf: triggerAt, availableAt: setupAt, triggerAt,
+      level: 97.12345, zoneLow: 96.5, zoneHigh: 98, entryReference: 97.12345, referenceAtr: 2,
+      next: 'Engine next step', caution: 'Engine caution', reason: 'Original engine crossing evidence' },
+      plan: plan(), price: 102, status: 'entry_confirmed', eligible: true, reason: 'Original engine reason' }]
+    const [row] = adaptGoWatchlist(result, 'spot', captureWatchlistEvaluation('tk-strategy', NOW, histories))
+    expect(row.name).toBe('TK cross · 1h')
+    expect(row.reference!.strategyFamily).toBe('tk_cross')
+    expect(row.reference!.nativeStatus).toBe('entry_confirmed')
+    expect(row.reference!.entry).toBe(97.12345)
+    expect(row.reference!.chart!.events.find((event) => event.kind === 'trigger')?.time).toBe(triggerAt)
+    expect(row.reference!.chart!.evidence.find((item) => item.label === 'Method evidence')?.detail).toBe('Original engine crossing evidence')
+    expect(row.reason).toBe('Original engine reason')
+  })
+})
 
 const NOW = Date.parse('2026-09-28T12:05:00Z')
 const plan = (patch: Partial<GoPlan> = {}): GoPlan => ({
@@ -82,6 +135,37 @@ describe('Go watchlist presentation', () => {
     expect(instrument.allSetups).toHaveLength(2)
     expect(instrument.hasMixedDirections).toBe(true)
     expect(selectGoWatchlist([...rows, trend], NOW, {source: 'trend', direction: 'bullish'})).toEqual([])
+  })
+
+  test('Ichimoku scope filters exact family IDs before grouping, including details and opposing evidence', () => {
+    const [base] = adaptGoWatchlist(output([candidate('BTCUSDT')]), 'spot')
+    const families = ['kijun_reclaim', 'cloud_reclaim', 'tk_cross', 'pk_cross', 'cloud_edge_to_edge']
+    const ichimoku = families.map((family, index) => ({...base, id: `ichimoku-${index}`, source: 'strategy' as const,
+      name: 'Localized method name', reference: {...base.reference!, strategyFamily: family}}))
+    const other = {...base, id: 'unrelated', source: 'strategy' as const, name: 'Cloud lookalike', direction: 'bearish' as const,
+      reference: {...base.reference!, strategyFamily: 'unrelated_cloud'}}
+    const unlabeled = {...base, id: 'no-family', source: 'strategy' as const, name: 'TK cross · 1h'}
+    const wrongSource = {...base, id: 'wrong-source', reference: {...base.reference!, strategyFamily: 'tk_cross'}}
+    const [instrument] = selectGoWatchlist([base, other, unlabeled, wrongSource, ...ichimoku], NOW, {scope: 'ichimoku'})
+    expect(instrument.setups).toEqual(ichimoku)
+    expect(instrument.allSetups).toEqual(ichimoku)
+    expect(instrument.hasMixedDirections).toBe(false)
+    expect(instrument.sources).toEqual(['strategy'])
+    expect(selectGoWatchlist([base, other, unlabeled, wrongSource], NOW, {scope: 'ichimoku'})).toEqual([])
+  })
+
+  test('Ichimoku scope retains every selected asset beyond twelve with normal direction and stage filters', () => {
+    const bases = adaptGoWatchlist(output(Array.from({length: 18}, (_, index) => candidate(`COIN${index}USDT`))), 'spot')
+    const rows = bases.map((row, index) => ({...row, source: 'strategy' as const,
+      direction: index % 2 ? 'bearish' as const : 'bullish' as const,
+      status: index % 2 ? 'waiting' as const : 'confirmed' as const,
+      reference: {...row.reference!, strategyFamily: 'tk_cross'}}))
+    expect(selectGoWatchlist(rows, NOW)).toHaveLength(12)
+    expect(selectGoWatchlist(rows, NOW, {scope: 'ichimoku'}).map((item) => item.symbol)).toEqual(rows.map((row) => row.symbol))
+    const triggered = selectGoWatchlist(rows, NOW, {scope: 'ichimoku', stage: 'confirmed', direction: 'bullish'})
+    expect(triggered).toHaveLength(9)
+    expect(triggered.every((item) => item.lead.status === 'confirmed' && item.direction === 'bullish')).toBe(true)
+    expect(selectGoWatchlist(rows, NOW, {scope: 'ichimoku', starredOnly: true, starredSymbols: new Set(['COIN17USDT'])})[0].symbol).toBe('COIN17USDT')
   })
 
   test('Triggered finds a confirmed secondary setup before grouping and retains the unconfirmed lead for comparison', () => {
