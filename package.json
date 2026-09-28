@@ -5,14 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node engine/scripts/verify.mjs && tsc -b && vite build",
     "lint": "eslint .",
     "test": "bun test",
     "backtest:divergence": "bun run scripts/backtest-divergence.ts",
     "backtest:research": "bun run scripts/backtest-research.ts",
     "backtest:harmonics": "bun run scripts/backtest-harmonics.ts",
     "check:symbols": "bun run scripts/check-symbols.ts",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "engine:verify": "node engine/scripts/verify.mjs",
+    "engine:build": "node engine/scripts/build.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",

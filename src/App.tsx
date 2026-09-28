@@ -29,12 +29,12 @@ function App() {
 
   const universe = useMarketUniverse(market)
   const rsiSymbols = useMemo(() => {
-    if (appView !== 'families') return universe.symbols
+    if (appView === 'scanner') return universe.symbols
     return selectedSymbol ? [selectedSymbol] : NO_SYMBOLS
   }, [appView, selectedSymbol, universe.symbols])
   useRsiFeed(rsiSymbols, market)
-  const contextSymbols = useMemo(() => showLiquidity || appView === 'watchlist' ? universe.symbols : selectedSymbol ? [selectedSymbol] : NO_SYMBOLS, [showLiquidity, appView, universe.symbols, selectedSymbol])
-  useSrContextFeed(contextSymbols, market, contextSymbols.length > 0, appView === 'watchlist' ? 'watchlist' : showLiquidity ? 'liquidity' : 'selected')
+  const contextSymbols = useMemo(() => showLiquidity ? universe.symbols : selectedSymbol ? [selectedSymbol] : NO_SYMBOLS, [showLiquidity, universe.symbols, selectedSymbol])
+  useSrContextFeed(contextSymbols, market, contextSymbols.length > 0, showLiquidity ? 'liquidity' : 'selected')
 
   return (
     <div className="app-shell">

@@ -1,0 +1,76 @@
+.watch-detail { --watch-green:#81d6b0; --watch-red:#f099a4; }
+.watch-detail .ant-modal-container { background:#141318; border:1px solid #3a3045; border-radius:16px; padding:22px 25px; }
+.watch-detail .ant-modal-title { background:transparent; }
+.watch-detail .ant-modal-header { background:transparent; margin-bottom:18px; }
+.watch-detail__title { display:flex; justify-content:space-between; gap:20px; align-items:center; padding-right:38px; }
+.watch-detail__symbol { color:#f2e9fb; font-size:23px; font-weight:650; letter-spacing:-.6px; }
+.watch-detail__symbol small { margin-left:8px; color:#a596b3; font-size:11px; font-weight:400; letter-spacing:0; }
+.watch-detail__market { color:#9e8caa; display:block; font-size:10px; font-weight:400; margin-top:5px; }
+.watch-detail__quote { display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
+.watch-detail__quote strong { color:#f0e4fa; font:500 20px var(--font-numeric); }
+.watch-detail__quote > span { color:#ab98bb; font-size:9px; font-weight:400; }
+.watch-detail__setups { display:flex; gap:8px; overflow-x:auto; padding-bottom:12px; }
+.watch-detail__setups > button { cursor:pointer; flex-shrink:0; display:flex; flex-direction:column; gap:6px; text-align:left; border:1px solid #3d3248; background:#1d1825; border-radius:9px; color:#bfaacd; padding:10px 14px; font-size:11px; }
+.watch-detail__setups > button.is-active { background:#382445; border-color:#9160b8; color:#eed7ff; }
+.watch-detail__setups small { font-size:9px; }
+.watch-detail__share { padding:13px 15px; margin:0 0 10px; background:#201a27; border:1px solid #44334f; border-radius:10px; }
+.watch-detail__share-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.watch-detail__share strong { color:#e3d2ef; font-size:11px; font-weight:550; }
+.watch-detail__share p { color:#a992bb; font-size:10px; line-height:1.6; margin:4px 0 0; }
+.watch-detail__share-actions { display:flex; flex-shrink:0; gap:8px; }
+.watch-detail__share .ant-btn { background:#241b2d; border-color:#5b426c; color:#d3b9e6; border-radius:7px; font-size:11px; box-shadow:none; }
+.watch-detail__share .watch-detail__copy { background:#634182; border-color:#9465b5; color:#f5eaff; }
+.watch-detail__share .ant-btn:hover { background:#3b284b !important; border-color:#b68ed4 !important; color:#fff !important; }
+.watch-detail__share .ant-btn:focus-visible { outline:2px solid #c798eb; outline-offset:3px; }
+.watch-detail__share-notice { color:#c1afcf; font-size:10px; line-height:1.6; }
+.watch-detail__share-notice:not(:empty) { padding-top:9px; }
+.watch-detail__download-link { display:inline-block; margin-top:6px; color:#d2a9ef; font-size:10px; text-decoration:underline; text-underline-offset:3px; }
+.watch-detail__copy-fallback { display:block; margin-top:12px; color:#d5bfE4; font-size:10px; }
+.watch-detail__copy-fallback textarea { display:block; width:100%; box-sizing:border-box; margin-top:7px; resize:vertical; border:1px solid #75558c; border-radius:7px; padding:10px; background:#151219; color:#d8c9e4; font:10px/1.7 var(--font-numeric); }
+.watch-detail__snapshot { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:35px; color:#b7a3c7; font-size:10px; margin:0 0 13px; }
+.watch-detail__snapshot .ant-btn { font-size:10px; background:#221a2b; border-color:#5d426f; color:#dcc2ee; }
+.watch-detail__layout { display:grid; grid-template-columns:minmax(0,1fr) 265px; gap:20px; }
+.watch-detail__visual { min-width:0; border:1px solid #352b3f; border-radius:12px; overflow:hidden; background:#121116; }
+.watch-detail__chart-heading { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:18px 20px 13px; }
+.watch-detail__eyebrow { color:#a38bb7; font-size:9px; letter-spacing:1.5px; font-weight:600; }
+.watch-detail__chart-heading h2 { font-size:18px; font-weight:550; letter-spacing:-.4px; color:#e9d9f4; margin:5px 0 0; }
+.watch-detail__badges { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px 15px; font-size:11px; }
+.watch-detail__context { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin:0 16px 16px; border:1px solid #332b3a; background:#19141e; border-radius:9px; overflow:hidden; }
+.watch-detail__context > div { display:flex; flex-direction:column; gap:5px; padding:11px 13px; border-right:1px solid #332b3a; font-size:10px; }
+.watch-detail__context > div:last-child { border:0; }
+.watch-detail__context b { color:#c4afd7; font-size:11px; margin-bottom:2px; }
+.watch-detail__context small { font-size:9px; color:#8d7b9d; }
+.watch-detail .is-bullish { color:var(--watch-green); }
+.watch-detail .is-bearish { color:var(--watch-red); }
+.watch-detail__insight { border:1px solid #392d43; border-radius:12px; background:#1d1723; padding:19px 18px; align-self:start; }
+.watch-detail__insight h3 { margin:7px 0 8px; color:#e1cceb; font-size:13px; font-weight:550; }
+.watch-detail__insight p { color:#bbaaC6; font-size:11px; line-height:1.8; margin:0; }
+.watch-detail__insight > section + section { padding-top:16px; margin-top:17px; border-top:1px solid #372a40; }
+.watch-detail__insight .watch-detail__opposing { color:#d7b583; margin-top:10px; }
+.watch-detail__plan dl { margin:14px 0; }
+.watch-detail__plan dl > div { display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin:11px 0; }
+.watch-detail__plan dt { color:#a18ab3; font-size:10px; }
+.watch-detail__plan dd { margin:0; color:#d9c8e6; font:11px var(--font-numeric); overflow-wrap:anywhere; text-align:right; }
+.watch-detail__plan .is-stop dd { color:#f099a4; }
+.watch-detail__plan .is-target dd { color:#81d6b0; }
+.watch-detail__rr { border-top:1px solid #3d2e47; padding:13px 0 9px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.watch-detail__rr > span { font-size:10px; color:#ad94bf; }
+.watch-detail__rr > strong { color:#d4b1f1; font:500 20px var(--font-numeric); }
+.watch-detail__insight p.watch-detail__costs { font-size:9px; color:#9780a8; }
+.watch-detail__support { display:grid; grid-template-columns:1fr 1fr; gap:24px; padding:22px 4px 3px; }
+.watch-detail__support h3 { color:#cfb8de; font-size:12px; font-weight:550; margin:0 0 12px; }
+.watch-detail__support ul { padding-left:16px; color:#9e8aaf; font-size:10px; line-height:1.85; margin:0; }
+.watch-detail__support li { margin-bottom:8px; padding-left:2px; }
+.watch-detail__support li b { color:#bea5cf; display:block; font-weight:500; }
+.watch-detail__support p { color:#9e8aaf; font-size:10px; line-height:1.8; }
+.watch-detail__footer { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; padding-top:16px; margin-top:12px; border-top:1px solid #302636; color:#806c90; font-size:9px; }
+@media (max-width:1100px) { .watch-detail__layout { grid-template-columns:minmax(0,1fr); } .watch-detail__insight { display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; padding:18px; } .watch-detail__insight > section + section { padding:0 0 0 18px; margin:0; border-top:0; border-left:1px solid #372a40; } }
+@media (max-width:640px) {
+ .watch-detail__share { padding:12px; } .watch-detail__share-row { flex-direction:column; align-items:stretch; } .watch-detail__share-actions .ant-btn { flex:1; min-height:36px; }
+ .watch-detail .ant-modal-container { padding:17px 13px; border-radius:12px; } .watch-detail__symbol { font-size:20px; } .watch-detail__quote strong { font-size:15px; } .watch-detail__title { gap:12px; padding-right:26px; }
+ .watch-detail__quote > span { max-width:110px; text-align:right; font-size:8px; } .watch-detail__symbol small { display:none; } .watch-detail__snapshot { font-size:9px; line-height:1.6; }
+ .watch-detail__chart-heading { flex-direction:column; align-items:flex-start; padding:15px 13px 10px; } .watch-detail__chart-heading h2 { font-size:17px; } .watch-detail__badges { font-size:10px; }
+ .watch-detail__context { margin:0 10px 12px; grid-template-columns:repeat(2,minmax(0,1fr)); } .watch-detail__context > div { padding:9px 11px; } .watch-detail__context > div:nth-child(2) { border-right:0; } .watch-detail__context > div:nth-child(-n+2) { border-bottom:1px solid #332b3a; }
+ .watch-detail__insight { display:block; padding:17px; } .watch-detail__insight > section + section { padding:15px 0 0; margin-top:15px; border-left:0; border-top:1px solid #372a40; }
+ .watch-detail__support { grid-template-columns:1fr; gap:20px; padding:19px 3px 0; }
+}

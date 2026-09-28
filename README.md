@@ -19,10 +19,11 @@ The interface uses Ant Design components with the supplied dark purple theme.
 It groups the scanner's coins into ecosystems, sectors, and memes, showing live
 rolling 24-hour performance, leaders, and gaps between family members.
 
-**Watchlist** brings Fib, harmonic and structure setups into one automatic
-shortlist for either market. It shows completed-candle triggers, developing
-locations, conflicts, current first-target reward/risk and delayed data.
-It uses the existing live feeds without a database or trading service.
+**Watchlist** runs the frozen Go crypto dashboard's scanner and selection rules
+in the browser. It checks 15m, 1h, 4h and 1d together and shows at most 12 unique
+assets for either market. Each asset has one clickable card with its leading
+setup and chart preview. Open it for the exact evaluated setup, alternative
+selected setups, reference plans, costs and next checkpoint.
 
 This repository contains the frontend only. The standalone Rust data tool lives
 in the separate sibling project `../cli` and fetches and analyzes market
@@ -90,41 +91,62 @@ quotes and calculates comparisons. `useFamilyMarketData.ts` owns polling, and
 
 ## Live watchlist
 
-Open **Watchlist**, choose Crypto or TradFi, and select a timeframe. The automatic
-list combines golden-pocket pullbacks, harmonic D zones and structure retests.
-Each setup shows **Why**, **Next**, its zone, stop/invalidation and first target.
-Expand **Review notes** for limitations and **Evidence & timing** for the
-completed-candle observations. **Open chart & Context** opens the existing detail
-view with calendar and higher-timeframe evidence.
+Open **Watchlist** and choose Crypto or TradFi. The actual Go engine from the
+crypto dashboard release **0.13.1-26e07587190d** checks all four timeframes:
+15m, 1h, 4h and 1d. It selects six harmonic patterns, trend pullbacks and nine
+independent methods using the original direction, lifecycle, target-history
+and cost rules.
 
-- **Trigger confirmed:** a completed zone test was followed by a relevant,
-  aligned trigger in the latest four completed candles. The quote is still
-  within one ATR of the zone (0.5% without ATR), its reference levels are usable,
-  and no nearby opposing location or recent opposing trigger blocks it.
-  This records an observation for review, not trade approval.
-- **Developing:** the setup is testing, approaching or waiting for its zone.
-  **Needs review** groups extended setups, conflicts and unusable references.
-  Data delays have their own state and never count as current confirmations.
-- **Current gross R/R:** reward to the first target divided by distance to the
-  reference stop, measured from the current quote. Costs, staged entries,
-  partial exits and later targets are excluded. Below 1R is flagged for review;
-  no target is moved to make a setup look better.
-- **Filters:** search, stars and timeframe are shared with the scanner. Direction,
-  setup type and status filter this view only. Indicator-tab filters do not
-  silently remove watchlist rows. Counts and market coverage describe the full
-  selected universe before filters. A pair can have more than one setup.
-- **Live operation:** REST seeds history; the existing WebSocket feed updates it.
-  Both recent receipt and current completed candles are required. A timer ages
-  data out even if the stream stops. Daily context uses the existing bounded
-  feed; higher-timeframe requests remain limited to the selected detail chart.
-- **Persistence:** stars and the selected view stay in this browser; URLs such as
-  `?view=watchlist&market=tradfi&timeframe=4h` share the market and timeframe.
-  There is no added database, background collector, AI, order execution or
-  trade ledger. The watchlist rebuilds from available history when opened and
-  updates only while the app is running.
+- **One card per asset:** at most 12 unique assets, with the leading setup,
+  captured chart, evaluated quote and next checkpoint visible together. Open
+  the card to compare other engine-selected setups and their individual plans.
+  Opposing directions are marked; stops and targets are never averaged.
+- **Shortlist, Triggered and Developing:** these views filter setups before
+  choosing each asset's lead. A secondary confirmation remains discoverable.
+  Developing watches may have incomplete plans, and some selected trend or
+  independent-method observations are blocked. A watch is not trade approval.
+- **Original selection:** the Go engine keeps its limit of 12 per source.
+  The interface interleaves source order, groups matching assets and caps the
+  display at 12 assets. Rejected detector inventory never pads the list.
+  Search, stars, direction, source and status filters cannot bypass eligibility.
+- **Plans and costs:** eligible plans show their original references and
+  modeled reward/risk. The original assumptions are 0.20% fees plus 0.10%
+  slippage/spread round trip, with a minimum net reward/risk of 1. Actual fees,
+  funding, liquidity and fills remain unverified; this is not a win-rate claim.
+- **Fresh context:** REST seeds 500 closed candles plus the current preview
+  per timeframe, then WebSockets maintain them. All four contexts must be
+  usable, with receipt age at most two minutes and the expected latest close.
+  Real TradFi session gaps are preserved and may block selection. The shared
+  request queue is bounded, retries failures and cancels when the view changes.
+- **Progressive loading:** assets appear as their four contexts are evaluated,
+  with a trailing loading card while initial feeds are checked. Initial
+  evaluations are batched at most once every six seconds, then every 30 seconds
+  after the initial scan. Freshness and confirmation expiry are checked between
+  scans; partial context cannot qualify an asset.
+- **Bounded performance:** eight histories can load concurrently under the
+  existing eight-starts-per-second limit. The first complete asset starts an
+  evaluation immediately. Immutable closed histories are shared between
+  snapshots, and unchanged charts skip redraws from coverage updates. Each
+  evaluation still runs the original Go rules with fresh captured inputs.
+- **Selected setup chart:** opening a card shows the captured Go evaluation's
+  candles, harmonic geometry or method source window, price references and
+  available confirmation events. Compare captured timeframes or other selected
+  setups inside the detail. The open candle is clearly provisional; a projected
+  D has no invented pivot. A saved evaluation stays fixed until **Load latest**
+  is selected, with a notice when it has aged or left the current selection.
+- **Share for review:** **Copy setup** copies the selected evaluation's exact
+  levels, evidence, costs and timestamps as a brief for an agent chat.
+  **Save HTML** includes the visible chart and full captured candle data in
+  a standalone file you can attach. Saved evaluations retain their freshness
+  warnings; nothing is uploaded automatically.
+- **Deployment and persistence:** the committed WebAssembly engine works on
+  static Vite/Vercel hosting without a Go server, database, AI or trading
+  worker. Stars and view preferences stay in this browser. There is no trade
+  execution or durable journal, and no monitoring while the app is closed.
 
-See [watchlist selection and live-data rules](docs/watchlist.md) for the
-adaptation from the crypto project and the exact limitations.
+See [watchlist selection and live-data rules](docs/watchlist.md) and
+[engine provenance, interface and rebuild instructions](engine/README.md).
+Verify the committed engine artifacts with `node engine/scripts/verify.mjs`.
 
 ## Screener
 

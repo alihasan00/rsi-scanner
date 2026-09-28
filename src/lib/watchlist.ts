@@ -8,9 +8,12 @@ import type { ScreenerMarket } from './markets'
 import { analyzeMarketStructure } from './marketStructure'
 import type { EvidenceFamily, SignalEvidence, analyzeSignalEvidence } from './signalEvidence'
 import { getClosedPriceSuffix, isValidPriceBar } from './volatility'
+import type { WatchlistChartSnapshot } from './watchlistChart'
+
+export type { WatchlistChartSnapshot, WatchlistChartFrame, WatchlistChartPoint, WatchlistChartEvent, WatchlistChartEvidence } from './watchlistChart'
 
 export type WatchlistStatus = 'confirmed' | 'testing' | 'approaching' | 'waiting' | 'extended' | 'conflict' | 'blocked' | 'delayed'
-export type WatchlistSource = 'fib' | 'harmonic' | 'retest'
+export type WatchlistSource = 'fib' | 'harmonic' | 'retest' | 'trend' | 'strategy'
 export type WatchlistAnalysis = ReturnType<typeof analyzeSignalEvidence>
 
 export interface WatchlistRow {
@@ -38,6 +41,25 @@ export interface WatchlistRow {
   evidence: SignalEvidence[]
   families: EvidenceFamily[]
   conflict: boolean
+  reference?: {
+    engineVersion: string
+    maxAgeMs: number
+    nativeStatus: string
+    statusLabel: string
+    mode: string
+    planStatus: string
+    netRiskReward: number | null
+    feeBps: number
+    slippageBps: number
+    minNetRR: number
+    entry: number | null
+    /** Go plan's evaluated entry/quote, distinct from the geometric entry reference. */
+    planEntry?: number | null
+    chart?: WatchlistChartSnapshot
+    distanceLabel: string
+    expiresAt: number | null
+    frames: { timeframe: string; trend: string; structure: string; asOf: number }[]
+  }
 }
 
 export interface WatchlistInput {
@@ -61,6 +83,7 @@ export const WATCHLIST_STATUS_LABELS: Record<WatchlistStatus, string> = {
 }
 export const WATCHLIST_SOURCE_LABELS: Record<WatchlistSource, string> = {
   fib: 'Fib pocket', harmonic: 'Harmonic D zone', retest: 'Structure retest',
+  trend: 'Trend pullback', strategy: 'Independent method',
 }
 
 const RECEIPT_LIMIT_MS = 60_000
