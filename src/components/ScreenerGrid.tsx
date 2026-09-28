@@ -111,7 +111,7 @@ export function ScreenerGrid({ universe }: { universe: MarketUniverse }) {
             tabBarExtraContent={activeTab !== 'ichimoku' && <span className="screener__view-summary">{loadedRows.length} / {rows.length} pairs{(activeTab === 'rsi' || activeTab === 'fib') && <> <span aria-hidden="true">·</span> <strong>{activeTab === 'fib' ? fibCount : rsiSignalCount}</strong> {activeTab === 'fib' ? 'setups' : rsiSignalLabel}</>}</span>}
           />
         </nav>
-        {activeTab === 'ichimoku' ? <Suspense fallback={<div className="app-view-loading" role="status">Loading Ichimoku Cloud…</div>}><Watchlist universe={universe} scope="ichimoku" /></Suspense> : activeTab === 'harmonic' ? <HarmonicScreener universe={universe} rows={rows} now={now} /> : activeTab === 'sr' ? <LiquidityScreener universe={universe} rows={rows} now={now} /> : <>
+        {activeTab === 'ichimoku' ? <Suspense fallback={<div className="app-view-loading" role="status">Loading Ichimoku Cloud…</div>}><Watchlist key={`${market}:${timeframe}`} universe={universe} scope="ichimoku" timeframe={timeframe} /></Suspense> : activeTab === 'harmonic' ? <HarmonicScreener universe={universe} rows={rows} now={now} /> : activeTab === 'sr' ? <LiquidityScreener universe={universe} rows={rows} now={now} /> : <>
         <p className="screener__view-description">{activeTab === 'fib' ? 'Follow the trend. Open a card for Fibonacci levels and the full trade plan.' : signal === 'trendline' ? 'Track RSI trendlines and closed-candle breaks. Open a card to inspect the anchors.' : 'Track price and RSI. Open a card to explore the chart.'}</p>
 
         <Card className="screener__controls" size="small">

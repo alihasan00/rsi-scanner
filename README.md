@@ -94,12 +94,20 @@ quotes and calculates comparisons. `useFamilyMarketData.ts` owns polling, and
 
 Open **Crypto → Ichimoku Cloud** for only Ichimoku setups: Kijun/cloud reclaims,
 TK/PK crosses and cloud edge-to-edge. This indicator tab shows every active
-selected setup, grouped by asset, with charts, details, stars and direction/status
-filters. It is also available under TradFi. The selected indicator is saved and
-can be shared with `?indicator=ichimoku`.
+selected setup on the timeframe chosen in its toolbar, grouped by asset, with
+charts, details, stars and direction/status filters. The existing picker supports
+1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 8h, 1d, 3d and 1w. It is also available under
+TradFi. The selected indicator and timeframe are saved and can be shared with
+`?indicator=ichimoku&timeframe=4h`.
+
+The chosen timeframe supplies the only candle history loaded by the Ichimoku
+scan. Its candles drive detection and each setup algorithm’s trigger, invalidation
+and expiry checks. Changing timeframe starts a new scan and closes the previous
+detail. Detail charts and review exports preserve the selected frame’s captured
+evidence.
 
 Open **Watchlist** and choose Crypto or TradFi for the mixed shortlist. The Go engine based on crypto
-dashboard release **0.13.1-26e07587190d**, extended as **+ichimoku.2**, checks
+dashboard release **0.13.1-26e07587190d**, extended as **+ichimoku.3**, checks
 15m, 1h, 4h and 1d. It selects six harmonic patterns, trend pullbacks and twelve
 independent methods. The Ichimoku additions include TK/PK crosses with Kijun
 retests and cloud edge-to-edge targets, with the shared lifecycle, history and

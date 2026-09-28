@@ -1,17 +1,17 @@
 {
-  "release": "0.13.1-26e07587190d+ichimoku.2",
+  "release": "0.13.1-26e07587190d+ichimoku.3",
   "sourceHash": "26e07587190d24c66d62602e968ef24dafafb281b9b1a0140afa7f6c6d0a0d00",
   "schemaVersion": "12",
-  "localRevision": "ichimoku-lecture-v2",
+  "localRevision": "ichimoku-timeframes-v3",
   "upstreamRelease": "0.13.1-26e07587190d",
   "goVersion": "go version go1.26.8 darwin/arm64",
   "artifacts": {
-    "public/watchlist-engine.wasm": "80558af81a96729d8d7e48825dca72ab45b71b83374bddfb339d5e742c910886",
+    "public/watchlist-engine.wasm": "4c2ccdb01d1b009538977ccd14b2032003787aeb4da20ba3b6168253f493ae1c",
     "public/watchlist-wasm-exec.js": "0c949f4996f9a89698e4b5c586de32249c3b69b7baadb64d220073cc04acba14"
   },
   "adapterFiles": {
     "go.mod": "aaa8c552728fc4161409f94cb73acd5608cb2b21cf3458e3c74ac894345badb8",
-    "internal/browserengine/engine.go": "23dd1a4a02ce2027180d2b7d7f725409bc338312529c010a18cc191494db1a55",
+    "internal/browserengine/engine.go": "b745629a6fc20f1b1600b89f224749fdf64e559a7330b3200a8d1831c2932eff",
     "cmd/watchlist-wasm/main_js.go": "b986a453108dec6fa0e2ace0c01ce5cc69976595d8627c7ca3f10cf65bcb62dd"
   }
 }

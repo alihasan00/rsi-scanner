@@ -1,6 +1,8 @@
 import type { WatchlistRow } from './watchlist'
 import type { WatchlistInstrument } from './watchlistInstruments'
 import { ICHIMOKU_EXCLUSIONS, ichimokuEvidence } from './watchlistIchimoku'
+import { TIMEFRAME_MILLISECONDS } from './binanceHistory'
+import type { Timeframe } from '../types'
 
 export interface WatchlistReviewInput {
   row: WatchlistRow
@@ -121,6 +123,10 @@ export function buildWatchlistReview(input: WatchlistReviewInput, chartMarkup?: 
   const {row, instrument, copiedAt, current, snapshotCurrent} = input
   const ref = row.reference
   const chart = ref?.chart
+  const scopedIchimoku = ref?.scope === 'ichimoku'
+  const contextFrames = scopedIchimoku ? [...new Set([...(ref?.frames.map((frame) => frame.timeframe) ?? []),
+    ...(chart?.frames.filter((frame) => frame.candles.length > 0).map((frame) => frame.timeframe) ?? [])])]
+    .sort((a, b) => TIMEFRAME_MILLISECONDS[a as Timeframe] - TIMEFRAME_MILLISECONDS[b as Timeframe]) : FRAMES
   const snapshotLabel = chart?.snapshotId && chart.snapshotId.length > 120
     ? `${ref?.engineVersion ?? 'Go'}@${stamp(chart.evaluatedAt)} (full snapshot ID in HTML JSON)`
     : chart?.snapshotId ?? 'Unavailable'
@@ -189,13 +195,15 @@ export function buildWatchlistReview(input: WatchlistReviewInput, chartMarkup?: 
     `- Why: ${markdown(row.reason)}`,
     `- Next: ${markdown(row.next)}`,
     `- Recorded trigger: ${stamp(row.confirmedAt)}.`,
-    '', '## Four-timeframe context', '',
+    '', scopedIchimoku ? '## Captured timeframe context' : '## Four-timeframe context', '',
+    ...(scopedIchimoku ? [`Setup detection and the algorithm’s trigger, invalidation and expiry rules use only ${row.timeframe} candles.`, ''] : []),
     '| Frame | Recorded trend | Recorded structure | Last completed candle | Captured closed candles |',
     '| --- | --- | --- | --- | --- |',
-    ...FRAMES.map((timeframe) => {
+    ...contextFrames.map((timeframe) => {
       const frame = ref?.frames.find((item) => item.timeframe === timeframe)
       const captured = chart?.frames.find((item) => item.timeframe === timeframe)
-      return `| ${timeframe} | ${markdown(frame?.trend ?? 'Unavailable')} | ${markdown(frame?.structure ?? 'Unavailable')} | ${stamp(frame?.asOf)} | ${captured?.candles.length ?? 'Unavailable'} |`
+      const role = scopedIchimoku ? timeframe === row.timeframe ? ' · setup' : ' · context' : ''
+      return `| ${timeframe}${role} | ${markdown(frame?.trend ?? 'Unavailable')} | ${markdown(frame?.structure ?? 'Unavailable')} | ${stamp(frame?.asOf ?? (scopedIchimoku ? captured?.lastClosedAt : undefined))} | ${captured?.candles.length ?? 'Unavailable'} |`
     }),
     '', '## Captured Ichimoku lecture observations', '',
     ...(chart?.frames.some((frame) => frame.ichimoku) ? chart.frames.filter((frame) => frame.ichimoku).flatMap((frame) => [

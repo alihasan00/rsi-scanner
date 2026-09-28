@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	Version = "0.13.1-26e07587190d+ichimoku.2"
+	Version = "0.13.1-26e07587190d+ichimoku.3"
 	// SourceHash identifies the upstream archive; local source hashes and the
 	// extension revision are recorded separately in provenance.json.
 	SourceHash = "26e07587190d24c66d62602e968ef24dafafb281b9b1a0140afa7f6c6d0a0d00"
@@ -42,6 +42,7 @@ type InputHistory struct {
 type Request struct {
 	Now       int64          `json:"now"`
 	Scope     string         `json:"scope"`
+	Timeframe string         `json:"timeframe,omitempty"`
 	Symbols   []string       `json:"symbols"`
 	Histories []InputHistory `json:"histories"`
 }
@@ -75,6 +76,7 @@ type Scan struct {
 type Response struct {
 	Version    string            `json:"version"`
 	Scope      string            `json:"scope"`
+	Timeframe  string            `json:"timeframe,omitempty"`
 	SourceHash string            `json:"sourceHash"`
 	Now        int64             `json:"now"`
 	MaxAgeMS   int64             `json:"maxAgeMs"`
@@ -162,8 +164,12 @@ func (f memoryFeed) CandlesWithEvidence(ctx context.Context, symbol, timeframe s
 
 func validateRequest(input Request) (memoryFeed, error) {
 	feed := memoryFeed{now: time.UnixMilli(input.Now).UTC(), histories: map[string]InputHistory{}}
-	if _, valid := requestScope(input.Scope); !valid {
+	scope, validScope := requestScope(input.Scope)
+	if !validScope {
 		return feed, errors.New("Scope must be all or ichimoku.")
+	}
+	if _, valid := requestTimeframe(scope, input.Timeframe); !valid {
+		return feed, errors.New("Choose a supported Ichimoku timeframe: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 8h, 1d, 3d or 1w.")
 	}
 	if input.Now <= 0 || input.Now > maxSafeInteger {
 		return feed, errors.New("A valid current timestamp is required.")
@@ -178,17 +184,30 @@ func validateRequest(input Request) (memoryFeed, error) {
 		}
 		symbols[symbol] = true
 	}
-	if len(input.Histories) > len(input.Symbols)*4 {
+	maximumFrames := 4
+	if scope == "ichimoku" {
+		maximumFrames = len(ichimokuTimeframes)
+	}
+	if len(input.Histories) > len(input.Symbols)*maximumFrames {
+		if scope == "ichimoku" {
+			return feed, errors.New("A maximum of twelve supported histories per instrument is supported.")
+		}
 		return feed, errors.New("A maximum of four histories per instrument is supported.")
 	}
 	for _, history := range input.Histories {
 		if !symbols[history.Symbol] {
 			return feed, errors.New("History does not belong to a requested instrument.")
 		}
-		switch history.Timeframe {
-		case "1d", "4h", "1h", "15m":
-		default:
-			return feed, errors.New("The shared engine requires 1d, 4h, 1h and 15m histories.")
+		if scope == "ichimoku" {
+			if _, valid := requestTimeframe(scope, history.Timeframe); history.Timeframe == "" || !valid {
+				return feed, errors.New("History uses an unsupported Ichimoku timeframe.")
+			}
+		} else {
+			switch history.Timeframe {
+			case "1d", "4h", "1h", "15m":
+			default:
+				return feed, errors.New("The shared engine requires 1d, 4h, 1h and 15m histories.")
+			}
 		}
 		key := history.Symbol + "/" + history.Timeframe
 		if _, found := feed.histories[key]; found {
@@ -212,16 +231,38 @@ func requestScope(scope string) (string, bool) {
 	}
 }
 
+var ichimokuTimeframes = []string{"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "8h", "1d", "3d", "1w"}
+
+func requestTimeframe(scope, timeframe string) (string, bool) {
+	if scope != "ichimoku" {
+		return "", true
+	}
+	if timeframe == "" {
+		return "1h", true
+	}
+	for _, supported := range ichimokuTimeframes {
+		if timeframe == supported {
+			return timeframe, true
+		}
+	}
+	return "", false
+}
+
 func Run(input Request) Response {
 	scope, _ := requestScope(input.Scope)
-	response := Response{Version: Version, Scope: scope, SourceHash: SourceHash, Now: input.Now, MaxAgeMS: MaxAge.Milliseconds(), Scan: Scan{Series: []Series{}, Errors: []scanner.ScanError{}}}
+	timeframe, _ := requestTimeframe(scope, input.Timeframe)
+	response := Response{Version: Version, Scope: scope, Timeframe: timeframe, SourceHash: SourceHash, Now: input.Now, MaxAgeMS: MaxAge.Milliseconds(), Scan: Scan{Series: []Series{}, Errors: []scanner.ScanError{}}}
 	feed, err := validateRequest(input)
 	if err != nil {
 		response.Error = err.Error()
 		return response
 	}
 	engine := scanner.New(feed, input.Symbols, "Browser supplied Binance OHLCV", 1, harmonic.DefaultConfig())
-	done, err := engine.Start(context.Background(), scanner.DefaultRequest())
+	scanRequest := scanner.DefaultRequest()
+	if scope == "ichimoku" {
+		scanRequest.Timeframes = []string{timeframe}
+	}
+	done, err := engine.Start(context.Background(), scanRequest)
 	if err != nil {
 		response.Error = err.Error()
 		return response
@@ -230,7 +271,7 @@ func Run(input Request) Response {
 	snapshot := engine.Snapshot()
 	histories := map[string]scanner.History{}
 	for _, symbol := range input.Symbols {
-		for _, timeframe := range scanner.DefaultRequest().Timeframes {
+		for _, timeframe := range scanRequest.Timeframes {
 			if history, ok := engine.History(symbol, timeframe); ok {
 				histories[symbol+"/"+timeframe] = history
 			}
@@ -238,7 +279,7 @@ func Run(input Request) Response {
 	}
 	var result selection.Result
 	if scope == "ichimoku" {
-		result = selection.BuildIchimoku(snapshot, histories, input.Symbols, feed.now, MaxAge, selection.DefaultConfig())
+		result = selection.BuildIchimokuTimeframe(snapshot, histories, input.Symbols, feed.now, MaxAge, timeframe, selection.DefaultConfig())
 	} else {
 		result = selection.Build(snapshot, histories, input.Symbols, feed.now, MaxAge, selection.DefaultConfig())
 	}
@@ -265,7 +306,11 @@ func Run(input Request) Response {
 			Ready: selection.SeriesReady(frame, feed.now, MaxAge), Trend: frame.Analysis.Regime.Direction,
 			Momentum: frame.Analysis.Regime.Momentum.Direction, InternalBias: frame.Analysis.Structure.Internal.Bias, Warnings: frame.Warnings,
 		}
-		if history, ok := histories[frame.Symbol+"/"+frame.Interval]; ok && series.Ready {
+		history, hasHistory := histories[frame.Symbol+"/"+frame.Interval]
+		if scope == "ichimoku" {
+			series.Ready = hasHistory && selection.IchimokuSeriesReady(frame, history, feed.now, MaxAge)
+		}
+		if hasHistory && series.Ready {
 			// History is scanner-owned completed input. Preview is deliberately
 			// excluded, including when it provides the evaluated live quote.
 			context := ichimoku.AnalyzeLecture(history.Candles, frame.Analysis.Regime.Volatility.ATR)
@@ -280,10 +325,10 @@ func Run(input Request) Response {
 }
 
 func RunJSON(raw string) (encoded string) {
-	scope := "all"
+	scope, timeframe := "all", ""
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			body, _ := json.Marshal(Response{Version: Version, Scope: scope, SourceHash: SourceHash, MaxAgeMS: MaxAge.Milliseconds(), Error: "The shared engine could not process this snapshot."})
+			body, _ := json.Marshal(Response{Version: Version, Scope: scope, Timeframe: timeframe, SourceHash: SourceHash, MaxAgeMS: MaxAge.Milliseconds(), Error: "The shared engine could not process this snapshot."})
 			encoded = string(body)
 		}
 	}()
@@ -293,9 +338,10 @@ func RunJSON(raw string) (encoded string) {
 		return string(body)
 	}
 	scope, _ = requestScope(input.Scope)
+	timeframe, _ = requestTimeframe(scope, input.Timeframe)
 	body, err := json.Marshal(Run(input))
 	if err != nil {
-		body, _ = json.Marshal(Response{Version: Version, Scope: scope, SourceHash: SourceHash, MaxAgeMS: MaxAge.Milliseconds(), Error: "The shared engine could not serialize this snapshot."})
+		body, _ = json.Marshal(Response{Version: Version, Scope: scope, Timeframe: timeframe, SourceHash: SourceHash, MaxAgeMS: MaxAge.Milliseconds(), Error: "The shared engine could not serialize this snapshot."})
 	}
 	return string(body)
 }

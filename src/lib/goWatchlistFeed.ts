@@ -1,13 +1,14 @@
-import type { Candle } from '../types'
+import type { Candle, Timeframe } from '../types'
 import { TIMEFRAME_MILLISECONDS, validateHistoryIdentity } from './binanceHistory'
 import { KlineStreamManager } from './binanceSocket'
 import type { KlineListener, KlineTick } from './binanceSocket'
 import { MARKETS } from './markets'
 import type { ScreenerMarket } from './markets'
 import { isValidCandle } from './rsiHistory'
+import { GO_WATCHLIST_TIMEFRAMES, isGoWatchlistCandleAligned } from './goWatchlistTimeframes'
 
-export const GO_WATCHLIST_TIMEFRAMES = ['15m', '1h', '4h', '1d'] as const
-export type GoWatchlistTimeframe = typeof GO_WATCHLIST_TIMEFRAMES[number]
+export { GO_WATCHLIST_TIMEFRAMES } from './goWatchlistTimeframes'
+export type GoWatchlistTimeframe = Timeframe
 export const GO_WATCHLIST_HISTORY_LIMIT = 500
 
 export interface GoWatchlistFrameUpdate {
@@ -24,6 +25,7 @@ export interface GoWatchlistFrameUpdate {
 export interface GoWatchlistFeedOptions {
   symbols: readonly string[]
   market: ScreenerMarket
+  timeframes?: readonly Timeframe[]
   onUpdate: (update: GoWatchlistFrameUpdate) => void
 }
 
@@ -68,7 +70,7 @@ class SeedRequestError extends Error {
 
 function validFrameCandle(candle: Candle, timeframe: GoWatchlistTimeframe): boolean {
   const duration = TIMEFRAME_MILLISECONDS[timeframe]
-  return isValidCandle(candle) && candle.openTime % duration === 0 && candle.closeTime - candle.openTime + 1 === duration
+  return isValidCandle(candle) && isGoWatchlistCandleAligned(candle.openTime, timeframe) && candle.closeTime - candle.openTime + 1 === duration
 }
 
 function numberField(value: unknown): number {
@@ -166,13 +168,15 @@ function retryAfter(response: Response, now: number): number | null {
   return response.status === 418 ? 120_000 : 60_000
 }
 
-/** Independent raw histories for the fixed Go watchlist universe. */
+/** Independent raw histories for only the requested chart frames. */
 export function startGoWatchlistFeed(options: GoWatchlistFeedOptions, overrides: Partial<GoWatchlistFeedDependencies> = {}): () => void {
   const { market, onUpdate } = options
   const symbols = [...new Set(options.symbols)]
+  const timeframes = [...new Set(options.timeframes ?? GO_WATCHLIST_TIMEFRAMES)]
   if (!symbols.length) return () => undefined
+  if (!timeframes.length) throw new TypeError('Choose at least one watchlist timeframe.')
   if (!Object.hasOwn(MARKETS, market)) throw new TypeError('Unsupported watchlist market.')
-  for (const symbol of symbols) validateHistoryIdentity(symbol, '15m')
+  for (const symbol of symbols) for (const timeframe of timeframes) validateHistoryIdentity(symbol, timeframe)
   const dependencies: GoWatchlistFeedDependencies = {
     fetcher: fetch, createStream: (listener, streamMarket) => new KlineStreamManager(listener, streamMarket),
     schedule: (callback, delay) => { const timer = setTimeout(callback, delay); return () => clearTimeout(timer) },
@@ -193,7 +197,7 @@ export function startGoWatchlistFeed(options: GoWatchlistFeedOptions, overrides:
   let cooldownUntil = 0
   let cancelDrain: (() => void) | null = null
   let stopped = false
-  for (const symbol of symbols) for (const timeframe of GO_WATCHLIST_TIMEFRAMES) {
+  for (const symbol of symbols) for (const timeframe of timeframes) {
     const key = `${symbol}:${timeframe}`
     frames.set(key, { symbol, timeframe, candles: [], preview: null, receivedAt: 0, seeded: false, status: 'error', error: null })
     queue.add(key)
@@ -330,7 +334,7 @@ export function startGoWatchlistFeed(options: GoWatchlistFeedOptions, overrides:
     }
   }
 
-  for (const timeframe of GO_WATCHLIST_TIMEFRAMES) {
+  for (const timeframe of timeframes) {
     const stream = dependencies.createStream((tick) => {
       if (stopped || typeof tick.isFinal !== 'boolean' || !validFrameCandle(tick, timeframe)) return
       const key = `${tick.symbol}:${timeframe}`

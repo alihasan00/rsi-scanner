@@ -7,9 +7,11 @@ import type { WatchlistInstrument, WatchlistInstrumentFilters } from './watchlis
 import { getEvaluatedChartFrames } from './watchlistChart'
 import type { WatchlistChartEvent, WatchlistChartEvidence, WatchlistChartPoint, WatchlistChartSnapshot, WatchlistEvaluationInput } from './watchlistChart'
 import type { IchimokuLectureSnapshot, IchimokuPoint } from './watchlistIchimoku'
+import { GO_WATCHLIST_TIMEFRAMES, getGoWatchlistExpectedClose, getGoWatchlistTimeframes } from './goWatchlistTimeframes'
+import type { GoWatchlistScope } from './goWatchlistTimeframes'
 
 export const GO_SHORTLIST_LIMIT = 12
-export type GoWatchlistScope = 'all' | 'ichimoku'
+export type { GoWatchlistScope } from './goWatchlistTimeframes'
 const ICHIMOKU_FAMILIES = new Set(['kijun_reclaim', 'cloud_reclaim', 'tk_cross', 'pk_cross', 'cloud_edge_to_edge'])
 export function isIchimokuSetup(row: WatchlistRow): boolean {
   return row.source === 'strategy' && ICHIMOKU_FAMILIES.has(row.reference?.strategyFamily ?? '')
@@ -58,7 +60,7 @@ export interface GoStrategy {
   plan: GoPlan; price: number; status: string; eligible: boolean; reason: string
 }
 export interface GoWatchlistResult {
-  version: string; maxAgeMs: number; now?: number; error?: string; scope?: GoWatchlistScope
+  version: string; maxAgeMs: number; now?: number; error?: string; scope?: GoWatchlistScope; timeframe?: Timeframe
   result: {
     config: { feeBps: number; slippageBps: number; minNetRR: number }
     items: GoCandidate[]; trends: GoTrend[]; strategies: { items: GoStrategy[] }
@@ -86,6 +88,8 @@ export function adaptGoWatchlist(output: GoWatchlistResult, market: ScreenerMark
   if (!output.version || output.maxAgeMs !== 120_000 || !Array.isArray(output.scan?.series)
     || !Array.isArray(output.result?.items) || !Array.isArray(output.result?.trends)
     || !Array.isArray(output.result?.strategies?.items)) throw new Error('Unsupported watchlist engine response')
+  const scoped = output.scope === 'ichimoku'
+  if (scoped && (!output.timeframe || !Object.hasOwn(TIMEFRAME_MILLISECONDS, output.timeframe))) throw new Error('Unsupported Ichimoku timeframe')
   const rows: WatchlistRow[] = []
   const evaluatedAt = input?.evaluatedAt ?? output.now ?? 0
   const matchingInput = input && (output.now === undefined || output.now === input.evaluatedAt) ? input : undefined
@@ -96,9 +100,13 @@ export function adaptGoWatchlist(output: GoWatchlistResult, market: ScreenerMark
     confirmedAt: number | null; reason: string; next: string; caution: string; plan: GoPlan; mode: string
     chart: ChartGeometry; strategyFamily?: string
   }) => {
-    const frames = output.scan.series.filter((frame) => frame.symbol === data.symbol)
+    if (scoped && (data.source !== 'strategy' || !ICHIMOKU_FAMILIES.has(data.strategyFamily ?? '') || data.timeframe !== output.timeframe)) return
+    const relevant = getGoWatchlistTimeframes(scoped ? 'ichimoku' : 'all', output.timeframe)
+    const frames = output.scan.series.filter((frame) => frame.symbol === data.symbol && relevant.includes(frame.interval))
     const frame = frames.find((item) => item.interval === data.timeframe)
-    if (frames.length !== 4 || frames.some((item) => !item.ready) || !frame) return
+    const requiredTimeframes = relevant
+    if (!frame || requiredTimeframes.some((tf) => frames.filter((item) => item.interval === tf).length !== 1 || !frames.find((item) => item.interval === tf)?.ready)) return
+    const readyFrames = frames.filter((item) => item.ready)
     const referenceDistance = finite(data.entry) && data.entry > 0 ? Math.abs(data.price - data.entry) / data.price * 100 : null
     const confirmationExpired = data.plan.status === 'confirmation_expired'
     const status = confirmationExpired ? 'waiting' : activePlan.has(data.plan.status) ? data.status : 'blocked'
@@ -125,19 +133,20 @@ export function adaptGoWatchlist(output: GoWatchlistResult, market: ScreenerMark
       source: data.source, name: data.name, direction: data.direction, status, price: data.price, zone: data.zone,
       stop: data.plan.stop, target: data.plan.target, riskReward: data.plan.grossRR,
       distancePercent: referenceDistance, distanceAtr: data.distanceAtr, confirmedAt: data.confirmedAt,
-      asOf: frame.lastClosedAt, updatedAt: Math.min(...frames.map((item) => item.observedAt)),
+      asOf: frame.lastClosedAt, updatedAt: Math.min(...readyFrames.filter((item) => requiredTimeframes.includes(item.interval)).map((item) => item.observedAt)),
       reason: data.reason,
       next: confirmationExpired ? 'The confirmation window has expired. Wait for a fresh completed-candle trigger, then reassess the reference plan.' : data.next,
       cautions: [...new Set(cautions)], evidence: [], families: [], conflict: false,
       reference: {
         engineVersion: output.version, maxAgeMs: output.maxAgeMs, nativeStatus: data.nativeStatus,
+        scope: scoped ? 'ichimoku' : 'all', requiredTimeframes,
         ...(data.strategyFamily ? {strategyFamily: data.strategyFamily} : {}),
         statusLabel: confirmationExpired ? 'Confirmation expired' : status === 'blocked' ? humanize(data.plan.status) : data.statusLabel,
         mode: data.mode, planStatus: data.plan.status, netRiskReward: data.plan.netRR,
         feeBps: data.plan.feeBps, slippageBps: data.plan.slippageBps, minNetRR: data.plan.minNetRR,
         entry: data.entry, planEntry: data.plan.entry, chart, expiresAt: data.plan.expiresAt,
         distanceLabel: finite(data.distanceAtr) ? `${data.distanceAtr.toFixed(2)} ATR from ${data.source === 'trend' ? 'pullback' : 'entry'}` : 'Entry distance unavailable',
-        frames: frames.map((item) => ({timeframe: item.interval, trend: item.trend, structure: item.internalBias, asOf: item.lastClosedAt})),
+        frames: readyFrames.map((item) => ({timeframe: item.interval, trend: item.trend, structure: item.internalBias, asOf: item.lastClosedAt})),
       },
     })
   }
@@ -216,7 +225,7 @@ export function adaptGoWatchlist(output: GoWatchlistResult, market: ScreenerMark
 }
 
 /** One asset across methods AND timeframes. The cap never admits a rejected detector row. */
-export function selectGoWatchlist(rows: readonly WatchlistRow[], now: number, filters: WatchlistInstrumentFilters & {stage?: 'all' | 'confirmed' | 'developing'; scope?: GoWatchlistScope} = {}): WatchlistInstrument[] {
+export function selectGoWatchlist(rows: readonly WatchlistRow[], now: number, filters: WatchlistInstrumentFilters & {stage?: 'all' | 'confirmed' | 'developing'; scope?: GoWatchlistScope; timeframe?: Timeframe} = {}): WatchlistInstrument[] {
   const query = (filters.search ?? '').toUpperCase().replace(/[\s/_-]/g, '')
   const groups = new Map<string, WatchlistRow[]>()
   // Each source arrives ranked by Go. Interleave the three source lists without
@@ -224,7 +233,7 @@ export function selectGoWatchlist(rows: readonly WatchlistRow[], now: number, fi
   const sources = ['harmonic', 'trend', 'strategy'] as const
   // Scope before grouping so other methods cannot leak into detail tabs,
   // opposing-direction counts or portable reviews for this indicator.
-  const scopedRows = filters.scope === 'ichimoku' ? rows.filter(isIchimokuSetup) : rows
+  const scopedRows = filters.scope === 'ichimoku' ? rows.filter((row) => isIchimokuSetup(row) && (!filters.timeframe || row.timeframe === filters.timeframe)) : rows
   const lanes = sources.map((source) => scopedRows.filter((row) => row.source === source))
   const ordered: WatchlistRow[] = []
   for (let index = 0; lanes.some((lane) => index < lane.length); index++) {
@@ -261,11 +270,11 @@ export function isGoWatchlistRowCurrent(row: WatchlistRow, now: number): boolean
   const reference = row.reference
   if (!reference || getWatchlistDisplayStatus(row, now) === 'delayed') return false
   if (reference.planStatus === 'ready_for_review' && reference.expiresAt !== null && now >= reference.expiresAt) return false
-  if (reference.frames.length !== 4 || new Set(reference.frames.map((frame) => frame.timeframe)).size !== 4) return false
-  return ['15m', '1h', '4h', '1d'].every((timeframe) => {
+  const required = reference.requiredTimeframes ?? GO_WATCHLIST_TIMEFRAMES
+  if (!required.length || required.some((tf) => reference.frames.filter((frame) => frame.timeframe === tf).length !== 1)) return false
+  return required.every((timeframe) => {
     const frame = reference.frames.find((item) => item.timeframe === timeframe)
-    const duration = TIMEFRAME_MILLISECONDS[timeframe as Timeframe]
-    const expectedClose = Math.floor((now - 5_000) / duration) * duration - 1
+    const expectedClose = getGoWatchlistExpectedClose(now, timeframe, frame?.asOf ?? 0)
     return frame && Number.isSafeInteger(frame.asOf) && frame.asOf <= now && frame.asOf >= expectedClose
   })
 }

@@ -5,6 +5,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/alihasan00/crypto/internal/market"
 	"github.com/alihasan00/crypto/internal/scanner"
 	"github.com/alihasan00/crypto/internal/strategies"
 )
@@ -142,6 +143,14 @@ func buildStrategies(snapshot scanner.Snapshot, histories map[string]scanner.His
 			}
 			out.Items = append(out.Items, candidate)
 		}
+	}
+	return finishStrategySelection(out, families, activeOnly, limit)
+}
+
+func finishStrategySelection(out StrategyResult, families []string, activeOnly bool, limit int) StrategyResult {
+	index := make(map[string]int, len(out.Summary))
+	for i, summary := range out.Summary {
+		index[summary.Family] = i
 	}
 	addOpposingStrategyCautions(out.Items)
 	sort.SliceStable(out.Items, func(i, j int) bool {
@@ -292,8 +301,15 @@ func strategyActive(state string) bool {
 }
 
 func assessStrategy(o strategies.Opportunity, in strategies.Input, now time.Time, cfg Config) StrategyCandidate {
+	return assessStrategyOnFrame(o, in, now, cfg, "15m", false)
+}
+
+// The original mixed selector always passes validated 15m monitoring. The
+// dedicated indicator uses its selected source for price, entry validation and
+// subsequent stop/target checks on every chart period.
+func assessStrategyOnFrame(o strategies.Opportunity, in strategies.Input, now time.Time, cfg Config, assessmentFrame string, sourceOnly bool) StrategyCandidate {
 	o = cloneOpportunity(o)
-	price := in.Frames["15m"].Price
+	price := in.Frames[assessmentFrame].Price
 	c := StrategyCandidate{Opportunity: o, Price: price, Status: o.State, Reason: o.Reason}
 	stop, target := 0.0, 0.0
 	if o.Stop != nil {
@@ -317,26 +333,38 @@ func assessStrategy(o strategies.Opportunity, in strategies.Input, now time.Time
 	if o.State != "entry_confirmed" {
 		return block(o.State, o.Reason)
 	}
-	if o.TriggerAt == nil || o.ExpiresAt == nil || o.EntryMin == nil || o.EntryMax == nil || o.ReferenceATR == nil || !positive(*o.ReferenceATR) || *o.EntryMin > *o.EntryMax || !positive(*o.EntryMin) || !positive(*o.EntryMax) || *o.TriggerAt > in.Frames["15m"].LastClosedAt || o.AvailableAt > *o.TriggerAt {
+	if o.TriggerAt == nil || o.ExpiresAt == nil || o.EntryMin == nil || o.EntryMax == nil || o.ReferenceATR == nil || !positive(*o.ReferenceATR) || *o.EntryMin > *o.EntryMax || !positive(*o.EntryMin) || !positive(*o.EntryMax) || o.AvailableAt > *o.TriggerAt {
 		return block("invalid_evidence", "Frozen completed trigger, entry bounds, ATR and expiry are required.")
 	}
 	if *o.ExpiresAt <= *o.TriggerAt || o.SourceStartAt > o.SourceEndAt || o.SourceEndAt > o.AvailableAt || o.LocationAvailableAt > o.AvailableAt {
 		return block("invalid_evidence", "Source and expiry timestamps must preserve causal order.")
 	}
+	if *o.TriggerAt > in.Frames[assessmentFrame].LastClosedAt {
+		return block("invalid_evidence", "Frozen completed trigger, entry bounds, ATR and expiry are required.")
+	}
 	// Source analyzers resolve on their own frame. Recheck every fully later
-	// 15m bar so a higher-frame signal cannot revive after an intrabar touch.
+	// assessment-frame bar so a signal cannot revive after a protective touch.
 	if o.Stop == nil || o.Target == nil {
 		return block("invalid_evidence", "Frozen structural stop and target are required.")
 	}
-	const width = int64(15 * time.Minute / time.Millisecond)
+	duration, supported := market.IntervalDuration(assessmentFrame)
+	if !supported || duration <= 0 {
+		return block("invalid_evidence", "A supported completed-candle assessment timeframe is required.")
+	}
+	width := duration.Milliseconds()
 	first := (*o.TriggerAt/width + 1) * width
-	last := in.Frames["15m"].LastClosedAt
-	bars := in.Histories["15m"].Candles
+	if sourceOnly {
+		// Inclusive source closes identify the next complete opening without
+		// imposing an epoch phase on three-day or Monday weekly candles.
+		first = *o.TriggerAt + 1
+	}
+	last := in.Frames[assessmentFrame].LastClosedAt
+	bars := in.Histories[assessmentFrame].Candles
 	if len(bars) == 0 {
-		return block("data_unavailable", "Completed 15m history is required.")
+		return block("data_unavailable", "Completed "+assessmentFrame+" history is required.")
 	}
 	if first <= last && (len(bars) == 0 || bars[0].OpenTime > first) {
-		return block("data_unavailable", "Complete post-trigger 15m history is required.")
+		return block("data_unavailable", "Complete post-trigger "+assessmentFrame+" history is required.")
 	}
 	for _, b := range bars {
 		if b.OpenTime < first {
@@ -344,9 +372,9 @@ func assessStrategy(o strategies.Opportunity, in strategies.Input, now time.Time
 		}
 		status, reason := "", ""
 		if o.Direction == "bullish" && b.Low <= stop || o.Direction == "bearish" && b.High >= stop {
-			status, reason = "invalidated", "A later completed 15m candle touched the frozen stop."
+			status, reason = "invalidated", "A later completed "+assessmentFrame+" candle touched the frozen stop."
 		} else if o.Direction == "bullish" && b.High >= target || o.Direction == "bearish" && b.Low <= target {
-			status, reason = "target_reached", "A later completed 15m candle touched the frozen target."
+			status, reason = "target_reached", "A later completed "+assessmentFrame+" candle touched the frozen target."
 		}
 		if status != "" {
 			at := b.CloseTime
@@ -367,7 +395,7 @@ func assessStrategy(o strategies.Opportunity, in strategies.Input, now time.Time
 			return block("entry_distance_or_levels", "Current quote and latest completed close must remain inside the frozen entry bounds, stop and target.")
 		}
 	}
-	applyTurnover(&c.Plan, in.Frames["15m"].Analysis.Volume, cfg)
+	applyTurnover(&c.Plan, in.Frames[assessmentFrame].Analysis.Volume, cfg)
 	applySizing(&c.Plan, o.Symbol, o.Direction, cfg, now)
 	if c.Plan.Status != "awaiting_trigger" {
 		c.Status = c.Plan.Status

@@ -3,15 +3,28 @@
 **Crypto → Ichimoku Cloud** (also available under TradFi) reuses the charts,
 details and filters below with a dedicated engine scope. It selects only
 `kijun_reclaim`, `cloud_reclaim`, `tk_cross`, `pk_cross` and `cloud_edge_to_edge`
-before ranking, returns all active setups without the mixed Watchlist caps, and
-excludes terminal inventory. Unrelated methods cannot appear in cards, detail
-tabs or exported reviews. The browser disables the ordinary market-wide RSI feed
-while this indicator is open. The underlying Go scanner still supplies the
-shared four-frame analysis and all freshness, lifecycle and cost gates.
+before ranking, returns all active setups on the selected timeframe without
+the mixed Watchlist caps, and excludes terminal inventory. Unrelated methods
+cannot appear in cards, detail tabs or exported reviews. The browser disables
+the ordinary market-wide RSI feed while this indicator is open.
+
+The Ichimoku toolbar uses the same timeframe picker as the other indicator tabs:
+**1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 8h, 1d, 3d and 1w**. That choice drives
+detection and is saved in the shared scanner preferences and `timeframe` URL
+parameter. The browser loads only the selected frame on every interval.
+Detection, trigger confirmation, subsequent stop/target touches and expiry all
+use that source’s completed candles. Other timeframes do not gate the dedicated
+scan. Source freshness and the shared cost and plan checks still apply. Changing market or timeframe cancels the previous scan, clears its
+results and closes any saved setup detail.
+
+The Ichimoku chart and context summary show the selected frame’s captured
+evidence. Unavailable histories are not offered as empty charts. Copied reviews
+and saved HTML retain this exact evidence scope. The four-frame requirements below describe the
+ordinary mixed Watchlist.
 
 The Watchlist runs the Go scanner and selector based on crypto dashboard
 release **0.13.1-26e07587190d** (upstream scan schema 12), extended locally as
-**+ichimoku.2** for the Ichimoku lecture. It checks Crypto or
+**+ichimoku.3** for the Ichimoku lecture. It checks Crypto or
 TradFi across **15m, 1h, 4h and 1d together**, then presents at most **12 unique
 assets**. A symbol appears once; open its card to compare the selected setups.
 Stars are a personal filter and never make an asset analytically eligible.
@@ -83,7 +96,7 @@ the combined thinning-cloud/widening-line-gap warning. These readings and the
 visible overlays survive review export. See [the lecture coverage audit](ichimoku-lecture.md)
 for the source rules, deliberate Chikou exclusion and numerical conventions.
 
-The timeframe controls inspect the four captured histories, with **Setup** and
+The timeframe controls inspect available captured histories, with **Setup** and
 **Recent** views and pointer or keyboard candle inspection. The outlined open
 candle is provisional. Chart annotations come from the Go result and its
 captured input; opening the chart does not rerun a different indicator engine.
@@ -95,7 +108,7 @@ as a saved evaluation.
 
 Open a card, select the setup to review, then use **Copy setup** to copy a
 plain-text Markdown brief for an agent chat. It includes exact price references,
-costs, confirmation evidence, four-timeframe context, cautions, opposing setup
+costs, confirmation evidence, captured timeframe context, cautions, opposing setup
 summaries and the saved evaluation's identity and timestamps. Freshness is
 checked again at the time of copying; an aged or no-longer-selected evaluation
 is not relabeled as a current confirmation. A clipboard failure exposes the
@@ -150,9 +163,9 @@ maintain the same bounded histories and request recovery when needed.
 The four timeframes share one bounded request queue: at most eight concurrent
 requests and eight starts per second, with a 15-second request timeout,
 retry backoff and exchange cooldown handling. Leaving the view or changing
-market or symbol universe cancels the feed and worker. Results are identified
-by both market and the exact symbol universe, so an earlier scan cannot be
-published under a new universe.
+market, Ichimoku timeframe or symbol universe cancels the feed and worker.
+Results are identified by scope, selected timeframe, market and the exact
+symbol universe, so an earlier scan cannot be published under a new view.
 
 The original successful provider receipt timestamp is preserved. Receipt age
 must be at most two minutes, and the latest completed candle must independently
@@ -161,10 +174,11 @@ Reading cached candles does not renew their freshness. Coverage incorporates
 Go analyzer readiness and scanner errors, not just successful HTTP responses.
 
 Evaluations run one at a time. During initial loading, the first asset with all
-four feeds ready can start an evaluation; further complete assets are batched
+four feeds ready can start a mixed Watchlist evaluation; the dedicated Ichimoku
+view can start when its selected source frame is ready. Further ready assets are batched
 at most once every six seconds. Qualifying cards appear progressively, followed
 by a loading card until the evaluation covering all initial feed attempts has
-returned. Missing context cannot qualify. Once that initial scan completes,
+returned. Missing required evidence cannot confirm an entry. Once that initial scan completes,
 evaluations run at most once every 30 seconds. The first usable asset can start
 an evaluation immediately when its feeds arrive, without waiting for the
 two-second coverage display timer. A five-second UI timer withholds
@@ -231,7 +245,7 @@ checks. Identical valid histories and settings produce identical native and
 browser engine decisions; venue, candle window, retention and session
 differences can change the result.
 
-`goWatchlistFeed.ts` owns the four-timeframe feed, `useGoWatchlist.ts` owns the
+`goWatchlistFeed.ts` owns the scope-specific candle feeds, `useGoWatchlist.ts` owns the
 worker lifecycle, and `goWatchlist.ts` adapts the Go result for presentation.
 `watchlistChart.ts` captures the evaluated histories; `WatchlistSetupChart`
 renders them inside the cards and `WatchlistSetupModal`.

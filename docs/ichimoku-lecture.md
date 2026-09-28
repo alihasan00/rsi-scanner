@@ -1,7 +1,7 @@
 # Ichimoku lecture coverage
 
 The watchlist includes a local extension of the imported Go engine, version
-`0.13.1-26e07587190d+ichimoku.2`. It implements the lecture's measurable signals
+`0.13.1-26e07587190d+ichimoku.3`. It implements the lecture's measurable signals
 and exposes its qualitative guidance as inspectable context. It does not treat
 the lecturer's example profits, “magnet” descriptions or target precision as
 verified trading performance.
@@ -76,19 +76,26 @@ Kijun extension, or significant width, and no numeric whipsaw window. These
 remain measurements and qualified context. No probability or Ichimoku score
 is manufactured from correlated signals.
 
-Trade methods use the watchlist's existing 1h/4h discovery scope and require
-fresh 15m/1h/4h/1d context. All four captured timeframes expose Ichimoku readings.
-The lecture prescribes no particular timeframe. Standard watchlist conventions
-remain: at most 24 bars to observe a retest, 0.1 ATR protective stop buffer,
+The dedicated **Crypto → Ichimoku Cloud** tab detects trade methods only on
+the selected toolbar timeframe: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 8h, 1d, 3d
+or 1w. It loads only that source history and applies the setup algorithm’s
+trigger, invalidation and expiry rules to the same completed candles. Another
+timeframe’s history or direction does not gate this tab. Its detail chart and
+exported context preserve the selected frame’s captured evidence.
+
+The ordinary mixed **Watchlist** keeps its existing 1h/4h Ichimoku discovery
+scope and requires fresh 15m/1h/4h/1d context. The lecture prescribes no particular
+timeframe. Standard watchlist conventions remain: at most 24 bars to observe a retest, 0.1 ATR protective stop buffer,
 0.25 ATR entry bounds, four-bar confirmation expiry and the existing structural
 target history where the lecture does not supply a target. Edge-to-edge uses
 its actual opposite cloud edge. These are product choices, not quotations from
 the lecture. Stops/targets are frozen at the trigger, with later consumed
 references and ambiguous stop/target candles handled conservatively.
 
-The shared fees, slippage, net reward/risk, data freshness and lower-timeframe
-protective-history checks still apply. Qualitative signal readings cannot
-bypass them. Orders, borrowing, leverage and real fills are outside this app.
+The shared fees, slippage, net reward/risk and data freshness checks still
+apply. The dedicated tab checks subsequent stop/target history on its selected
+source; the mixed Watchlist retains its original lower-timeframe protective
+checks. Qualitative signal readings cannot bypass these rules. Orders, borrowing, leverage and real fills are outside this app.
 
 ## Saved evidence and verification
 

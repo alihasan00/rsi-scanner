@@ -161,7 +161,7 @@ export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, comp
   return <div ref={container} className={`watch-setup-chart${compact ? ' is-compact' : ''}`}>
     {!compact && <>
       <div className="watch-setup-chart__toolbar">
-        <div className="watch-setup-chart__intervals" role="group" aria-label="View this captured setup across timeframes">{[...snapshot.frames].sort((a, b) => TIMEFRAME_MILLISECONDS[a.timeframe] - TIMEFRAME_MILLISECONDS[b.timeframe]).map((frame) => {
+        <div className="watch-setup-chart__intervals" role="group" aria-label="View this captured setup across timeframes">{snapshot.frames.filter((frame) => frame.candles.length > 0).sort((a, b) => TIMEFRAME_MILLISECONDS[a.timeframe] - TIMEFRAME_MILLISECONDS[b.timeframe]).map((frame) => {
           const isTrigger = frame.timeframe === '15m' && snapshot.defaultTimeframe !== '15m'
             && snapshot.events.some((event) => event.timeframe === '15m' && ['confirmation', 'trigger', 'retest'].includes(event.kind))
           return <button key={frame.timeframe} type="button" aria-pressed={timeframe === frame.timeframe} onClick={() => switchView(frame.timeframe, 'setup')}>{frame.timeframe}{frame.timeframe === snapshot.defaultTimeframe ? <span>setup</span> : isTrigger ? <span>trigger</span> : null}</button>

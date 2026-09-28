@@ -10,6 +10,7 @@ import { captureWatchlistChart } from '../lib/watchlistShare'
 import { WatchlistSetupChart } from './WatchlistSetupChart'
 import { WatchlistReviewActions } from './WatchlistReviewActions'
 import type { Timeframe } from '../types'
+import { TIMEFRAME_MILLISECONDS } from '../lib/binanceHistory'
 import { ICHIMOKU_EXCLUSIONS, ichimokuEvidence } from '../lib/watchlistIchimoku'
 import './WatchlistSetupModal.css'
 
@@ -27,6 +28,10 @@ export function WatchlistSetupModal({instrument, latestInstrument, now, onClose,
   const latest = latestInstrument?.allSetups.find((item) => item.id === row.id)
   const ref = row.reference
   const chart = ref?.chart
+  const scopedIchimoku = ref?.scope === 'ichimoku'
+  const contextFrames = scopedIchimoku ? [...new Set([...(ref?.frames.map((frame) => frame.timeframe) ?? []),
+    ...(chart?.frames.filter((frame) => frame.candles.length > 0).map((frame) => frame.timeframe) ?? [])])]
+    .sort((a, b) => TIMEFRAME_MILLISECONDS[a as Timeframe] - TIMEFRAME_MILLISECONDS[b as Timeframe]) : ['15m', '1h', '4h', '1d']
   const chartIdentity = `${row.id}:${chart?.snapshotId ?? ''}`
   const selectedTimeframe = inspectedFrame?.identity === chartIdentity ? inspectedFrame.timeframe : chart?.defaultTimeframe ?? row.timeframe
   const ichimoku = chart?.frames.find((frame) => frame.timeframe === selectedTimeframe)?.ichimoku
@@ -57,9 +62,10 @@ export function WatchlistSetupModal({instrument, latestInstrument, now, onClose,
     <WatchlistReviewActions key={`${row.id}:${chart?.snapshotId ?? ''}`} buildReview={createReview} />
     <div className="watch-detail__snapshot" role="status"><span>{!current ? 'This setup is no longer in the current selection. Displaying its saved evaluation.' : !snapshotCurrent ? 'This evaluation has aged. Load the latest check before assessing the setup.' : newer ? 'A newer evaluation is available.' : 'Showing the evaluated setup and its original price references.'}</span>{(newer || replacementAvailable) && <Button size="small" icon={<ReloadOutlined />} onClick={onRefresh}>{replacementAvailable ? 'View current setup' : 'Load latest'}</Button>}</div>
     <div className="watch-detail__layout"><section ref={chartContainer} className="watch-detail__visual" aria-label="Selected setup chart"><header className="watch-detail__chart-heading"><div><span className="watch-detail__eyebrow">THE SETUP</span><h2>{row.name}</h2></div><div className="watch-detail__badges"><span className={`watch-direction is-${row.direction}`}>{bullish ? <ArrowUpOutlined /> : <ArrowDownOutlined />}{bullish ? 'Bullish' : 'Bearish'}</span><span className={`watch-status is-${row.status}`}><i />{statusLabel}</span></div></header><WatchlistSetupChart key={chartIdentity} row={row} onTimeframeChange={(timeframe) => setInspectedFrame({identity: chartIdentity, timeframe})} />
-      <div className="watch-detail__context" aria-label="Four-timeframe context">{['15m','1h','4h','1d'].map((timeframe) => {
+      <div className={`watch-detail__context${scopedIchimoku ? ' is-selected-frame' : ''}`} aria-label={scopedIchimoku ? 'Captured timeframe context' : 'Four-timeframe context'}>{contextFrames.map((timeframe) => {
         const frame = ref?.frames.find((item) => item.timeframe === timeframe)
-        return <div key={timeframe}><b>{timeframe}</b><span className={`is-${frame?.trend}`}>{frame ? words(frame.trend) : 'Unavailable'} <small>trend</small></span><span className={`is-${frame?.structure}`}>{frame ? words(frame.structure) : 'Unavailable'} <small>structure</small></span></div>
+        const role = timeframe === row.timeframe ? 'setup' : 'context'
+        return <div key={timeframe}><b>{timeframe}{scopedIchimoku && <small> · {role}</small>}</b><span className={`is-${frame?.trend}`}>{frame ? words(frame.trend) : 'Unavailable'} <small>trend</small></span><span className={`is-${frame?.structure}`}>{frame ? words(frame.structure) : 'Unavailable'} <small>structure</small></span></div>
       })}</div>
       {ichimoku && <section className="watch-detail__ichimoku" aria-label={`${selectedTimeframe} captured Ichimoku context`}>
         <header><h3>Ichimoku · {selectedTimeframe}</h3><span>{words(ichimoku.status)} · Closed-candle readings</span></header>

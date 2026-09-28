@@ -4,7 +4,7 @@ import type { WatchlistRow } from '../src/lib/watchlist'
 import type { WatchlistInstrument } from '../src/lib/watchlistInstruments'
 import type { WatchlistChartSnapshot } from '../src/lib/watchlistChart'
 import { TIMEFRAME_MILLISECONDS } from '../src/lib/binanceHistory'
-import type { Candle } from '../src/types'
+import type { Candle, Timeframe } from '../src/types'
 import { ichimokuFixture } from './fixtures/watchlistIchimoku'
 
 const EVALUATED_AT = Date.parse('2026-09-28T12:05:00Z')
@@ -120,6 +120,43 @@ async function inspectHtml(html: string) {
 }
 
 describe('saved watchlist review', () => {
+  test('selected Ichimoku reviews preserve only the selected source frame on every supported interval', () => {
+    for (const timeframe of Object.keys(TIMEFRAME_MILLISECONDS) as Timeframe[]) {
+      const input = fixture()
+      const ref = input.row.reference!
+      const duration = TIMEFRAME_MILLISECONDS[timeframe]
+      const lastClosedAt = Math.floor(EVALUATED_AT / duration) * duration - 1
+      const captured = { ...ref.chart!.frames[1], timeframe, lastClosedAt, preview: null,
+        candles: ref.chart!.frames[1].candles.map((candle, index) => ({ ...candle,
+          openTime: lastClosedAt + 1 - (3 - index) * duration, closeTime: lastClosedAt - (2 - index) * duration })) }
+      input.row.timeframe = timeframe
+      input.row.source = 'strategy'
+      input.row.name = `TK cross · ${timeframe}`
+      input.instrument.setups = input.instrument.allSetups = [input.row]
+      ref.scope = 'ichimoku'
+      ref.statusLabel = 'Trigger confirmed'
+      ref.requiredTimeframes = [timeframe]
+      ref.frames = [{ timeframe, trend: 'bullish', structure: 'bullish', asOf: lastClosedAt }]
+      ref.chart = { ...ref.chart!, defaultTimeframe: timeframe, frames: [captured], points: [], events: [], evidence: [],
+        sourceWindow: { timeframe, startTime: captured.candles[0].openTime, endTime: lastClosedAt } }
+      const result = buildWatchlistReview(input)
+      const context = result.text.split('## Captured timeframe context')[1].split('## Captured Ichimoku lecture observations')[0]
+      expect(result.text).not.toContain('## Four-timeframe context')
+      expect(context).toContain(`Setup detection and the algorithm’s trigger, invalidation and expiry rules use only ${timeframe} candles.`)
+      expect(context).toContain(`| ${timeframe} · setup |`)
+      expect(context.split('\n').filter((line) => line.includes(' · setup |'))).toHaveLength(1)
+      expect(context).not.toContain('entry monitor')
+      expect(snapshotFrom(result.html).frames).toEqual([captured])
+    }
+  })
+
+  test('mixed reviews retain the original four-frame context', () => {
+    const result = buildWatchlistReview(fixture())
+    expect(result.text).toContain('## Four-timeframe context')
+    expect(result.text).not.toContain('## Captured timeframe context')
+    expect(snapshotFrom(result.html).frames.map((frame) => frame.timeframe)).toEqual([...FRAME_NAMES])
+  })
+
   test('includes all captured Ichimoku readings, projection timing and exclusions in text and complete inert HTML', () => {
     const input = fixture()
     const chart = input.row.reference!.chart!

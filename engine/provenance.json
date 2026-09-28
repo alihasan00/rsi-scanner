@@ -1,6 +1,6 @@
 {
   "upstreamRepository": "https://github.com/alihasan00/crypto",
-  "release": "0.13.1-26e07587190d+ichimoku.2",
+  "release": "0.13.1-26e07587190d+ichimoku.3",
   "sourceHash": "26e07587190d24c66d62602e968ef24dafafb281b9b1a0140afa7f6c6d0a0d00",
   "schemaVersion": "12",
   "archiveSha256": "4881028a24f4045a4cfc16b03c632c98b9fa032d3cedf59bc55ea4664a7d06f8",
@@ -317,8 +317,8 @@
     {
       "path": "internal/selection/strategies.go",
       "upstreamSha256": "b90185e3f33af8001832194fc3dda0650364df4a0e942614aedf080135ead324",
-      "sha256": "619583705e216c237a803a68401ff5629f918e2da4955931bb827665883618e0",
-      "localAdaptation": "Ichimoku lecture integration and dedicated active-family selection; upstream hash retained."
+      "sha256": "c9c290cd50e8144a31a22fc2baab1c8aa940e883d298a9da191846db6c7687df",
+      "localAdaptation": "Ichimoku lecture integration and selected-source timeframe support; upstream hash retained."
     },
     {
       "path": "internal/selection/strategies_test.go",
@@ -349,7 +349,8 @@
     {
       "path": "internal/strategies/context.go",
       "upstreamSha256": "288bc1d3d4c87376f519977d1a8ba6e6fb398e6a3437d43a78e29a9fdad40a9d",
-      "sha256": "288bc1d3d4c87376f519977d1a8ba6e6fb398e6a3437d43a78e29a9fdad40a9d"
+      "sha256": "2bb5b085ff5eca0c8d8e2a89cabe1d451f6e4bb2d2fdc3ae8cc1d427c4158262",
+      "localAdaptation": "Ichimoku lecture integration and selected-source timeframe support; upstream hash retained."
     },
     {
       "path": "internal/strategies/engine.go",
@@ -412,8 +413,8 @@
     {
       "path": "internal/strategies/types.go",
       "upstreamSha256": "c39d59ac3a1d9999d5305778a6d8da41cfcf9e106a44ad01605d1545c9b64e50",
-      "sha256": "7563f0ec682a29048edd7bddd1f145948c256ccebd802afdd1ca73e18bd21a0b",
-      "localAdaptation": "Ichimoku lecture integration and regression coverage; upstream hash retained."
+      "sha256": "cd1b934f036595b26aa6b60e2ec9e62354f7806dadc1a8f5cdf1e559eaba9eae",
+      "localAdaptation": "Ichimoku lecture integration and selected-source timeframe support; upstream hash retained."
     },
     {
       "path": "internal/structure/analyze.go",
@@ -462,7 +463,7 @@
     },
     {
       "path": "internal/browserengine/engine.go",
-      "sha256": "23dd1a4a02ce2027180d2b7d7f725409bc338312529c010a18cc191494db1a55",
+      "sha256": "b745629a6fc20f1b1600b89f224749fdf64e559a7330b3200a8d1831c2932eff",
       "provenance": "Local watchlist adapter or Ichimoku lecture extension and its regression fixtures; not part of the upstream archive."
     },
     {
@@ -497,7 +498,7 @@
     },
     {
       "path": "internal/strategies/ichimoku.go",
-      "sha256": "568bcedeba423199d4536c4cc92e3310fa8cb9ccefb106411e02a43ab908fc6a",
+      "sha256": "a0dc6201826b72bcc9f6e1a315cf805e033a5af390612c7d759fbf1f559e8758",
       "provenance": "Local watchlist adapter or Ichimoku lecture extension and its regression fixtures; not part of the upstream archive."
     },
     {
@@ -512,12 +513,32 @@
     },
     {
       "path": "internal/browserengine/scope_test.go",
-      "sha256": "3941b0e0d2188bc42a8c4779b9e081e698551dafeef4e1a2a485404520d5f6a4",
+      "sha256": "c1c433de5204851a1a4717eaa4b5350e7251408be5c3a270ba47a9e41c37818e",
       "provenance": "Local dedicated Ichimoku scope regression coverage; not part of the upstream archive."
+    },
+    {
+      "path": "internal/browserengine/timeframe_test.go",
+      "sha256": "f66bff021fb50f5af25df90d4eff321a4121d73aaa3e246cb6e02f352a6e8a7b",
+      "provenance": "Local selected-timeframe Ichimoku implementation and regression coverage; not part of the upstream archive."
+    },
+    {
+      "path": "internal/selection/ichimoku_timeframe.go",
+      "sha256": "aefb21036a2bd2a67a6864b9599946fa75753072d3f1b047b4c5933d82be462d",
+      "provenance": "Local selected-timeframe Ichimoku implementation and regression coverage; not part of the upstream archive."
+    },
+    {
+      "path": "internal/selection/ichimoku_timeframe_test.go",
+      "sha256": "015f51e79742c01296e7f33d517c87cbd9827b7708da1569e89e659981f21684",
+      "provenance": "Local selected-timeframe Ichimoku implementation and regression coverage; not part of the upstream archive."
+    },
+    {
+      "path": "internal/strategies/ichimoku_timeframe_test.go",
+      "sha256": "43ba6b6c87cfc8f1625f1eb70f1de598edb93dc5f9708d0924086427b2ebd6fa",
+      "provenance": "Local selected-timeframe Ichimoku implementation and regression coverage; not part of the upstream archive."
     }
   ],
   "upstreamRelease": "0.13.1-26e07587190d",
-  "localRevision": "ichimoku-lecture-v2",
-  "browserSchemaVersion": 3,
-  "localChanges": "Lecture 103 measurement and plot contract, TK/PK crosses, cloud edge-to-edge, current Kijun/cloud retests. Shared data freshness and risk/cost checks retained. See docs/ichimoku-lecture.md. Dedicated Ichimoku scope filters active families before ranking and removes mixed-watchlist caps; default all scope retains original selection."
+  "localRevision": "ichimoku-timeframes-v3",
+  "browserSchemaVersion": 4,
+  "localChanges": "Lecture 103 measurement and plot contract, TK/PK crosses, cloud edge-to-edge, current Kijun/cloud retests. Shared data freshness and risk/cost checks retained. See docs/ichimoku-lecture.md. Dedicated Ichimoku scope filters active families before ranking and removes mixed-watchlist caps; default all scope retains original selection. Dedicated Ichimoku accepts all twelve picker timeframes and uses only the selected source for discovery, readiness, entry and stop/target lifecycle. Weekly candles retain Monday UTC alignment and three-day candles retain the exchange phase; mixed Watchlist behavior is preserved."
 }

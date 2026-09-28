@@ -28,8 +28,10 @@ var Families = []string{SweepReversal, DivergenceReversal, DivergenceContinuatio
 	TKCross, PKCross, CloudEdgeToEdge}
 
 // Input contains only the symbol's completed histories and measured context.
-// Map keys are intervals (1d,4h,1h,15m), not symbol/interval keys. The selection
-// adapter additionally validates freshness and all four context timeframes.
+// Map keys are intervals, not symbol/interval keys. Mixed discovery requires
+// 1d/4h/1h/15m; selected-timeframe Ichimoku uses only its chosen source. The
+// selection adapter validates freshness and lifecycle on the chosen source for
+// Ichimoku, or on the 15m monitoring history for mixed discovery.
 type Input struct {
 	Symbol    string
 	Frames    map[string]scanner.SeriesSummary

@@ -22,6 +22,17 @@ function evaluation(frames: readonly GoWatchlistFrameUpdate[]): GoWatchlistResul
 }
 
 describe('progressive Go watchlist scheduling', () => {
+  test('a selected source finishes loading without waiting for or counting unrelated histories', () => {
+    const source = histories('BTCUSDT').find((frame) => frame.timeframe === '1h')!
+    const unrelated = histories('BTCUSDT').find((frame) => frame.timeframe === '1d')!
+    const progress = getWatchlistSeedProgress(['BTCUSDT'], [source, unrelated], ['1h'])
+    expect(progress).toEqual({completeSymbols: ['BTCUSDT'], attemptedFrames: 1, totalFrames: 1})
+    const scheduler = new GoWatchlistScheduler()
+    expect(scheduler.begin(NOW, progress)?.allSeedsAttempted).toBe(true)
+    const failed = {...histories('BTCUSDT')[0], status: 'error' as const, error: 'Unavailable'}
+    expect(getWatchlistSeedProgress(['BTCUSDT'], [source, failed], ['1h']))
+      .toEqual({completeSymbols: ['BTCUSDT'], attemptedFrames: 1, totalFrames: 1})
+  })
   test('starts when one complete asset is seeded while incomplete assets remain outside the ready set', () => {
     const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']
     const scheduler = new GoWatchlistScheduler()

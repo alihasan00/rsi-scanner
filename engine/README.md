@@ -2,7 +2,7 @@
 
 This subtree embeds the scanner and selector from the Go crypto dashboard
 release `0.13.1-26e07587190d` (upstream scan schema 12), with the local
-`+ichimoku.2` extension. The browser provides
+`+ichimoku.3` extension. The browser provides
 completed candle histories; a Web Worker executes the Go code as WebAssembly.
 There is no local server, database, AI worker, account ledger or trading action.
 
@@ -31,6 +31,7 @@ initializes, the worker has a synchronous function:
 globalThis.goWatchlistScan(JSON.stringify({
   now: Date.now(),
   scope: 'all', // optional; 'ichimoku' returns the uncapped active Ichimoku screener
+  // timeframe: '4h', // Ichimoku only: one chosen chart period, default '1h'
   symbols: ['BTCUSDT'],
   histories: [{
     symbol: 'BTCUSDT',
@@ -57,14 +58,15 @@ required frames and provider errors become scanner errors. A recent receipt
 does not make a missing latest candle fresh. The deployed `--max-cache-age`
 default is two minutes, retained here and returned as `maxAgeMs: 120000`.
 The selector independently requires expected latest closes and complete
-four-timeframe evidence. Do not overwrite receipts on cached reads or when the
+evidence on the requested frames: all four for the mixed Watchlist, or only the
+selected timeframe for the Ichimoku tab. Do not overwrite receipts on cached reads or when the
 watchlist is opened.
 
 The returned JSON contains:
 
 ```ts
 {
-  version: '0.13.1-26e07587190d+ichimoku.2',
+  version: '0.13.1-26e07587190d+ichimoku.3',
   scope: 'all', // echoed normalized scope; 'all' when omitted
   sourceHash: '26e07587190d24c66d62602e968ef24dafafb281b9b1a0140afa7f6c6d0a0d00',
   now: number,
@@ -80,12 +82,18 @@ The returned JSON contains:
 
 `result` retains the `selection.Build` contract, including the original
 12-item limit in each section. It is absent on invalid top-level input.
-With `scope: 'ichimoku'`, `selection.BuildIchimoku` filters the five Ichimoku
-families before ranking and returns all active observations with `limit: 0`.
-Harmonic/trend lists are empty, terminal observations are excluded, and the
-same freshness, lifecycle and cost gates apply. Any other scope is rejected.
-The browser includes scope in its evaluation identity and validates the echoed
-scope before publishing results.
+With `scope: 'ichimoku'`, `timeframe` selects one of `1m`, `3m`, `5m`, `15m`,
+`30m`, `1h`, `2h`, `4h`, `8h`, `1d`, `3d` or `1w` (default `1h` when omitted).
+`selection.BuildIchimokuTimeframe` discovers only the five Ichimoku families on
+that timeframe and returns all active observations with `limit: 0`. Only the
+selected history is read. It supplies the quote, triggers, entry validation and
+subsequent stop/target checks; there is no automatic 15m or higher-frame gate.
+Unrelated supplied histories cannot affect the scan. Monday weekly boundaries
+and the exchange's three-day phase are retained. Harmonic/trend lists are empty,
+terminal observations are excluded, and the existing cost and plan rules apply.
+The response echoes the selected `timeframe` for Ichimoku only. Invalid scopes
+or unsupported Ichimoku timeframes are rejected. The browser includes scope and
+timeframe in its evaluation identity and validates both before publishing.
 `scan.series` is a compact diagnostic list: symbol, interval, price,
 priceSource, observedAt, lastClosedAt, closedCandles, ready, trend, momentum,
 internalBias, warnings and `ichimoku` lecture readings on valid frames.
@@ -95,7 +103,7 @@ positions. Every value comes from completed scanner history; previews never
 enter Ichimoku. The UI can group the selected sources into a
 12-instrument list without promoting any excluded observation.
 
-The default scanner requests 500 candles, minimum harmonic geometry score 90,
+The mixed Watchlist scanner requests 500 candles, minimum harmonic geometry score 90,
 all six pattern types, both directions and all four timeframes. The original
 adaptive SuperTrend and internal/swing structure rules remain unchanged.
 Costs use the original disclosed model: 20bps fees + 10bps slippage/spread

@@ -43,6 +43,9 @@ export interface WatchlistRow {
   conflict: boolean
   reference?: {
     engineVersion: string
+    scope?: 'all' | 'ichimoku'
+    /** Only the selected chart frame for Ichimoku; all four for the mixed Watchlist. */
+    requiredTimeframes?: readonly Timeframe[]
     /** Exact Go strategy family, independent of the presentation label. */
     strategyFamily?: string
     maxAgeMs: number

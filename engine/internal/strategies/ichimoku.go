@@ -2,10 +2,61 @@ package strategies
 
 import (
 	"math"
+	"sort"
 
 	"github.com/alihasan00/crypto/internal/ichimoku"
 	"github.com/alihasan00/crypto/internal/market"
 )
+
+// IchimokuTimeframeSupported is the indicator tab's fixed set of chart periods.
+// Its chosen source is independent of the mixed watchlist's four-frame input.
+func IchimokuTimeframeSupported(interval string) bool {
+	switch interval {
+	case "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "8h", "1d", "3d", "1w":
+		return true
+	}
+	return false
+}
+
+// IchimokuTimeframeOpportunities discovers only the five Ichimoku methods on
+// the selected completed source. No unrelated hourly/daily histories, other
+// method discovery, or cross-timeframe confirmation are required. Selection
+// validates live freshness, entry references and protective lifecycle using
+// that same selected source.
+func IchimokuTimeframeOpportunities(in Input, interval string) []Opportunity {
+	out := []Opportunity{}
+	frame, present := in.Frames[interval]
+	if !IchimokuTimeframeSupported(interval) || !present || frame.Symbol != in.Symbol || frame.Interval != interval ||
+		frame.ObservedAt.IsZero() || frame.LastClosedAt == 0 {
+		return out
+	}
+	bars, ok := pbCandles(in, interval)
+	if !ok {
+		return out
+	}
+	appendRetained := func(found []Opportunity) {
+		for _, op := range found {
+			if pbRetained(op, bars) {
+				out = append(out, op)
+			}
+		}
+	}
+	for _, family := range []string{KijunReclaim, CloudReclaim} {
+		appendRetained(pbIchimoku(in, interval, bars, family))
+	}
+	points := ichimoku.Series(bars)
+	for _, family := range []string{TKCross, PKCross} {
+		appendRetained(ichCrossOpportunities(in, interval, bars, points, family))
+	}
+	appendRetained(ichEdgeOpportunities(in, interval, bars, points))
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].AvailableAt != out[j].AvailableAt {
+			return out[i].AvailableAt > out[j].AvailableAt
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
 
 // IchimokuOpportunities makes the lecture's TK, PK and cloud edge-to-edge
 // observations independently reviewable. All prices come from completed

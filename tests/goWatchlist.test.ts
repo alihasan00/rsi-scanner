@@ -6,6 +6,7 @@ import { captureWatchlistEvaluation } from '../src/lib/watchlistChart'
 import type { GoWatchlistFrameUpdate } from '../src/lib/goWatchlistFeed'
 import type { Candle, Timeframe } from '../src/types'
 import { ichimokuFixture } from './fixtures/watchlistIchimoku'
+import { getGoWatchlistExpectedClose } from '../src/lib/goWatchlistTimeframes'
 
 describe('Go Ichimoku adapter transparency', () => {
   test('keeps exact engine readings with the matching captured candle publication, without changing the selected plan', () => {
@@ -82,6 +83,74 @@ function output(items: GoCandidate[]): GoWatchlistResult {
     examined: items.length, eligible: items.length, directionFiltered: 0, costFiltered: 0,
   }, scan: {series, errors: [], progress: {done: series.length, total: series.length}}}
 }
+
+function selectedFrameOutput(timeframe: Timeframe, patch: Partial<GoPlan> = {}): GoWatchlistResult {
+  const result = output([candidate('BTCUSDT')])
+  result.scope = 'ichimoku'
+  result.timeframe = timeframe
+  const lastClosedAt = getGoWatchlistExpectedClose(NOW, timeframe, Date.parse('2026-09-27T23:59:59.999Z'))
+  result.scan.series = [{...result.scan.series[0], interval: timeframe, lastClosedAt}]
+  result.scan.progress = {done: 1, total: 1}
+  result.result.items = []
+  result.result.strategies.items = [{opportunity: {
+    id: `tk:${timeframe}`, family: 'tk_cross', symbol: 'BTCUSDT', interval: timeframe, direction: 'bullish',
+    state: 'entry_confirmed', asOf: lastClosedAt, availableAt: lastClosedAt - TIMEFRAME_MILLISECONDS[timeframe], triggerAt: lastClosedAt,
+    level: 101, zoneLow: 100, zoneHigh: 102, entryReference: 101, referenceAtr: 2,
+    next: 'Reassess the selected chart', caution: '',
+  }, price: 102, status: 'ready_for_review', eligible: true, plan: plan(patch), reason: 'Source-frame trigger'}]
+  return result
+}
+
+describe('selected-timeframe Ichimoku presentation', () => {
+  test('all picker timeframes admit a source-only entry with no automatic 15m requirement', () => {
+    for (const timeframe of Object.keys(TIMEFRAME_MILLISECONDS) as Timeframe[]) {
+      const [row] = adaptGoWatchlist(selectedFrameOutput(timeframe), 'spot')
+      expect(row.timeframe).toBe(timeframe)
+      expect(row.status).toBe('confirmed')
+      expect(row.reference?.requiredTimeframes).toEqual([timeframe])
+      expect(row.reference?.frames.map((frame) => frame.timeframe)).toEqual([timeframe])
+      expect(isGoWatchlistRowCurrent(row, NOW)).toBe(true)
+    }
+  })
+
+  test('stale unrelated frames and their methods cannot hide a valid source or leak into its details', () => {
+    const result = selectedFrameOutput('1h')
+    const baseline = adaptGoWatchlist(result, 'spot')
+    result.scan.series.push({...result.scan.series[0], interval: '15m', ready: false, observedAt: NOW - 500_000, trend: 'bearish'})
+    result.scan.errors.push({symbol: 'BTCUSDT', interval: '15m', error: 'Unrelated feed failed'})
+    const source = result.result.strategies.items[0]
+    result.result.strategies.items.push({...source, opportunity: {...source.opportunity, id: 'other-frame', interval: '15m'}})
+    result.result.strategies.items.push({...source, opportunity: {...source.opportunity, id: 'other-method', family: 'fibonacci_pullback'}})
+    expect(adaptGoWatchlist(result, 'spot')).toEqual(baseline)
+    const alternate = {...baseline[0], id: 'same-family-other-frame', timeframe: '4h' as const}
+    const [instrument] = selectGoWatchlist([...baseline, alternate], NOW, {scope: 'ichimoku', timeframe: '1h'})
+    expect(instrument.allSetups).toEqual(baseline)
+    expect(instrument.setups).toEqual(baseline)
+  })
+
+  test('selected-source readiness and its own close boundary still withhold stale entries', () => {
+    const result = selectedFrameOutput('1h', {status: 'waiting_for_retest', expiresAt: null})
+    const [row] = adaptGoWatchlist(result, 'spot')
+    const quarterHour = Date.parse('2026-09-28T12:15:05Z')
+    row.updatedAt = quarterHour
+    expect(isGoWatchlistRowCurrent(row, quarterHour)).toBe(true)
+    const nextHour = Date.parse('2026-09-28T13:00:00Z')
+    row.updatedAt = nextHour
+    expect(isGoWatchlistRowCurrent(row, nextHour + 4_999)).toBe(true)
+    expect(isGoWatchlistRowCurrent(row, nextHour + 5_000)).toBe(false)
+    result.scan.series[0].ready = false
+    expect(adaptGoWatchlist(result, 'spot')).toEqual([])
+  })
+
+  test('mixed mode still requires all four frames and an unsupported selected frame is rejected', () => {
+    const result = selectedFrameOutput('1h')
+    result.scope = 'all'
+    expect(adaptGoWatchlist(result, 'spot')).toEqual([])
+    result.scope = 'ichimoku'
+    result.timeframe = '6h' as Timeframe
+    expect(() => adaptGoWatchlist(result, 'spot')).toThrow('Unsupported Ichimoku timeframe')
+  })
+})
 
 describe('Go watchlist presentation', () => {
   test('uses the exact capped plan and net cost output rather than recomputing target or reward', () => {

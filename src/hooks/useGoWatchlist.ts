@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ScreenerMarket } from '../lib/markets'
+import type { Timeframe } from '../types'
 import { adaptGoWatchlist, isGoWatchlistRowCurrent } from '../lib/goWatchlist'
 import type { GoWatchlistResult, GoWatchlistScope } from '../lib/goWatchlist'
-import { GO_WATCHLIST_TIMEFRAMES, startGoWatchlistFeed } from '../lib/goWatchlistFeed'
+import { startGoWatchlistFeed } from '../lib/goWatchlistFeed'
+import { getGoWatchlistTimeframes } from '../lib/goWatchlistTimeframes'
 import type { GoWatchlistFrameUpdate } from '../lib/goWatchlistFeed'
 import { captureWatchlistEvaluation } from '../lib/watchlistChart'
 import type { WatchlistEvaluationInput } from '../lib/watchlistChart'
@@ -22,8 +24,10 @@ interface PendingScan {
   allSeedsAttempted: boolean
 }
 
-export function useGoWatchlist(symbols: readonly string[], market: ScreenerMarket, scope: GoWatchlistScope = 'all') {
-  const identity = `${scope}:${market}:${symbols.join(',')}`
+export function useGoWatchlist(symbols: readonly string[], market: ScreenerMarket, scope: GoWatchlistScope = 'all', timeframe?: Timeframe) {
+  const selectedTimeframe = scope === 'ichimoku' ? timeframe ?? '1h' : undefined
+  const timeframes = useMemo(() => getGoWatchlistTimeframes(scope, selectedTimeframe), [scope, selectedTimeframe])
+  const identity = `${scope}:${selectedTimeframe ?? 'all'}:${market}:${symbols.join(',')}`
   const [now, setNow] = useState(Date.now)
   const [state, setState] = useState<State | null>(null)
   useEffect(() => {
@@ -53,13 +57,13 @@ export function useGoWatchlist(symbols: readonly string[], market: ScreenerMarke
     const evaluate = () => {
       if (stopped || !ready || scheduler.busy) return
       const sources = [...frames.values()]
-      const scheduled = scheduler.begin(Date.now(), getWatchlistSeedProgress(symbols, sources))
+      const scheduled = scheduler.begin(Date.now(), getWatchlistSeedProgress(symbols, sources, timeframes))
       if (!scheduled) return
       const input = captureWatchlistEvaluation(`${identity}:${scheduled.evaluatedAt}:${scheduled.id}`, scheduled.evaluatedAt, sources)
       pending = {...scheduled, input, sources}
       current = {...current, evaluating: true}
       publish()
-      worker.postMessage({id: scheduled.id, input: {now: input.evaluatedAt, symbols: [...symbols], histories: input.histories, scope}})
+      worker.postMessage({id: scheduled.id, input: {now: input.evaluatedAt, symbols: [...symbols], histories: input.histories, scope, timeframe: selectedTimeframe}})
       watchdog = setTimeout(() => {
         if (stopped || !scheduler.busy) return
         worker.terminate()
@@ -82,6 +86,7 @@ export function useGoWatchlist(symbols: readonly string[], market: ScreenerMarke
           const output = message.data as GoWatchlistResult
           if (output.now !== completed.input.evaluatedAt) throw new Error('The watchlist response does not match its evaluated candle snapshot.')
           if ((output.scope ?? 'all') !== scope) throw new Error('The watchlist response does not match the selected indicator.')
+          if (selectedTimeframe && output.timeframe !== selectedTimeframe) throw new Error('The watchlist response does not match the selected timeframe.')
           const rows = adaptGoWatchlist(output, market, completed.input)
           scheduler.publish(completed.id)
           current = {...current, rows, evaluation: output.scan, evaluatedSources: completed.sources,
@@ -97,7 +102,7 @@ export function useGoWatchlist(symbols: readonly string[], market: ScreenerMarke
       worker.terminate()
       fail('The watchlist engine could not load within 30 seconds. Reload to retry.')
     }, 30_000)
-    const stopFeed = startGoWatchlistFeed({symbols, market, onUpdate: (frame) => {
+    const stopFeed = startGoWatchlistFeed({symbols, market, timeframes, onUpdate: (frame) => {
       if (stopped) return
       const key = `${frame.symbol}:${frame.timeframe}`
       const previous = frames.get(key)
@@ -108,18 +113,18 @@ export function useGoWatchlist(symbols: readonly string[], market: ScreenerMarke
     }})
     const timer = setInterval(() => { publish(); evaluate() }, 2_000)
     return () => { stopped = true; pending = null; stopFeed(); worker.terminate(); clearInterval(timer); clearTimeout(watchdog); clearTimeout(bootWatchdog) }
-  }, [symbols, market, identity, scope])
+  }, [symbols, market, identity, scope, selectedTimeframe, timeframes])
   return useMemo(() => {
     const current = state?.identity === identity ? state : null
     const frames = current?.frames ?? []
     const {coverage, feedError, remainingInitialFrames} = getGoWatchlistCoverage(frames, current?.evaluation ?? null,
-      current?.evaluatedSources ?? [], now, symbols.length * GO_WATCHLIST_TIMEFRAMES.length)
+      current?.evaluatedSources ?? [], now, symbols.length * timeframes.length)
     // Current transport failure or expiry can withhold a published candidate;
     // the chart itself remains the immutable input bound to that Go response.
-    const unavailable = new Set(frames.filter((frame) => frame.status === 'error' || now - frame.receivedAt > MAX_AGE_MS).map((frame) => frame.symbol))
-    const rows = (current?.rows ?? []).filter((row) => !unavailable.has(row.symbol) && isGoWatchlistRowCurrent(row, now))
+    const unavailable = new Set(frames.filter((frame) => frame.status === 'error' || now - frame.receivedAt > MAX_AGE_MS).map((frame) => `${frame.symbol}:${frame.timeframe}`))
+    const rows = (current?.rows ?? []).filter((row) => !(row.reference?.requiredTimeframes ?? timeframes).some((tf) => unavailable.has(`${row.symbol}:${tf}`)) && isGoWatchlistRowCurrent(row, now))
     return {rows, coverage, now, feedError, evaluating: current?.evaluating ?? false,
       initialScanComplete: current?.initialScanComplete ?? symbols.length === 0, remainingInitialFrames,
       error: current?.error ?? null, evaluatedAt: current?.evaluatedAt ?? null, version: current?.version ?? null}
-  }, [state, identity, symbols.length, now])
+  }, [state, identity, symbols.length, now, timeframes])
 }

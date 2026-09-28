@@ -63,15 +63,8 @@ func Describe(in Input) Context {
 func pbPtr[T any](v T) *T     { return &v }
 func pbFinite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 func pbDuration(interval string) int64 {
-	switch interval {
-	case "15m":
-		return 900000
-	case "1h":
-		return 3600000
-	case "4h":
-		return 14400000
-	case "1d":
-		return 86400000
+	if duration, supported := market.IntervalDuration(interval); supported && duration > 0 {
+		return duration.Milliseconds()
 	}
 	return 0
 }
@@ -81,9 +74,11 @@ func pbCandles(in Input, interval string) ([]market.Candle, bool) {
 		return nil, false
 	}
 	bars := h.Candles
-	d := pbDuration(interval)
+	if pbDuration(interval) == 0 {
+		return nil, false
+	}
 	for i, c := range bars {
-		if !c.Valid() || c.CloseTime-c.OpenTime+1 != d || c.OpenTime%d != 0 || i > 0 && c.OpenTime != bars[i-1].CloseTime+1 {
+		if market.ValidateInterval(c, interval) != nil || i > 0 && c.OpenTime != bars[i-1].CloseTime+1 {
 			return nil, false
 		}
 	}

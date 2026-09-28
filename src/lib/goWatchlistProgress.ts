@@ -1,5 +1,5 @@
-import { TIMEFRAME_MILLISECONDS } from './binanceHistory'
-import { GO_WATCHLIST_TIMEFRAMES } from './goWatchlistFeed'
+import type { Timeframe } from '../types'
+import { GO_WATCHLIST_TIMEFRAMES, getGoWatchlistExpectedClose } from './goWatchlistTimeframes'
 import type { GoWatchlistFrameUpdate } from './goWatchlistFeed'
 import type { GoWatchlistResult } from './goWatchlist'
 
@@ -9,13 +9,14 @@ export interface WatchlistSeedProgress {
   readonly totalFrames: number
 }
 
-export function getWatchlistSeedProgress(symbols: readonly string[], frames: readonly GoWatchlistFrameUpdate[]): WatchlistSeedProgress {
+export function getWatchlistSeedProgress(symbols: readonly string[], frames: readonly GoWatchlistFrameUpdate[],
+  timeframes: readonly Timeframe[] = GO_WATCHLIST_TIMEFRAMES): WatchlistSeedProgress {
   const allowed = new Set(symbols)
-  const indexed = new Map(frames.filter((frame) => allowed.has(frame.symbol)).map((frame) => [`${frame.symbol}:${frame.timeframe}`, frame]))
+  const indexed = new Map(frames.filter((frame) => allowed.has(frame.symbol) && timeframes.includes(frame.timeframe)).map((frame) => [`${frame.symbol}:${frame.timeframe}`, frame]))
   return {
-    completeSymbols: symbols.filter((symbol) => GO_WATCHLIST_TIMEFRAMES.every((timeframe) => indexed.get(`${symbol}:${timeframe}`)?.status === 'ready')),
+    completeSymbols: symbols.filter((symbol) => timeframes.every((timeframe) => indexed.get(`${symbol}:${timeframe}`)?.status === 'ready')),
     attemptedFrames: indexed.size,
-    totalFrames: symbols.length * GO_WATCHLIST_TIMEFRAMES.length,
+    totalFrames: symbols.length * timeframes.length,
   }
 }
 
@@ -75,7 +76,7 @@ export function getGoWatchlistCoverage(
     const key = `${frame.symbol}:${frame.timeframe}`
     const source = sources.get(key)
     const evaluated = evaluatedFrames.get(key)
-    const expectedClose = Math.floor((now - 5_000) / TIMEFRAME_MILLISECONDS[frame.timeframe]) * TIMEFRAME_MILLISECONDS[frame.timeframe] - 1
+    const expectedClose = getGoWatchlistExpectedClose(now, frame.timeframe, frame.candles.at(-1)?.closeTime ?? 0)
     if (frame.status === 'error') {
       coverage.error++
       feedError ??= frame.error

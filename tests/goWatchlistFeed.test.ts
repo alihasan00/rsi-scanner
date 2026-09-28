@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { Candle } from '../src/types'
+import type { Candle, Timeframe } from '../src/types'
 import { TIMEFRAME_MILLISECONDS } from '../src/lib/binanceHistory'
 import type { KlineListener, KlineTick } from '../src/lib/binanceSocket'
 import type { ScreenerMarket } from '../src/lib/markets'
@@ -30,7 +30,7 @@ async function flush(): Promise<void> {
   for (let index = 0; index < 15; index++) await Promise.resolve()
 }
 
-function harness(symbols: readonly string[] = ['BTCUSDT'], market: ScreenerMarket = 'spot') {
+function harness(symbols: readonly string[] = ['BTCUSDT'], market: ScreenerMarket = 'spot', timeframes?: readonly Timeframe[]) {
   const events: string[] = []
   const requests: { symbol: string; timeframe: GoWatchlistTimeframe; url: URL; signal: AbortSignal; startedAt: number;
     respond: (raw: unknown, status?: number, headers?: HeadersInit) => void; reject: (error: unknown) => void }[] = []
@@ -41,7 +41,7 @@ function harness(symbols: readonly string[] = ['BTCUSDT'], market: ScreenerMarke
   let inFlight = 0
   let peak = 0
   let disconnected = 0
-  const stop = startGoWatchlistFeed({ symbols, market, onUpdate: (update) => updates.push(update) }, {
+  const stop = startGoWatchlistFeed({ symbols, market, timeframes, onUpdate: (update) => updates.push(update) }, {
     now: () => now,
     fetcher: ((input: Parameters<typeof fetch>[0], init?: RequestInit) => {
       const url = new URL(String(input))
@@ -94,6 +94,17 @@ function harness(symbols: readonly string[] = ['BTCUSDT'], market: ScreenerMarke
 }
 
 describe('raw Go watchlist seed validation', () => {
+  test('accepts Monday weekly candles and exchange-phased three-day candles, rejecting shifted weekly opens', () => {
+    for (const timeframe of ['1w', '3d'] as const) {
+      const duration = TIMEFRAME_MILLISECONDS[timeframe]
+      const start = Date.parse('2026-09-28T00:00:00Z')
+      const raw = Array.from({length: 3}, (_, i) => rawCandle({...candle(i, timeframe), openTime: start + i * duration, closeTime: start + (i + 1) * duration - 1}))
+      expect(parseGoWatchlistSeed(raw, timeframe).candles).toHaveLength(2)
+      const shifted = raw.map((row) => row.map((value, i) => i === 0 || i === 6 ? Number(value) + TIMEFRAME_MILLISECONDS['1d'] : value))
+      if (timeframe === '1w') expect(() => parseGoWatchlistSeed(shifted, timeframe)).toThrow()
+      else expect(parseGoWatchlistSeed(shifted, timeframe).candles).toHaveLength(2)
+    }
+  })
   test('keeps 500 completed candles and the provisional newest candle without an RSI warmup cut', () => {
     const history = parseGoWatchlistSeed(seed(500), '15m')
     expect(history.candles).toHaveLength(500)
@@ -120,6 +131,22 @@ describe('raw Go watchlist seed validation', () => {
 })
 
 describe('fixed four-timeframe Go watchlist feed', () => {
+  test('a dedicated scan requests only its chosen frame and cleans up on a timeframe change', async () => {
+    const feed = harness(['BTCUSDT'], 'spot', ['2h', '2h'])
+    expect(feed.requests.map((request) => request.timeframe)).toEqual(['2h'])
+    expect(feed.events[0]).toBe('connect:spot:2h:BTCUSDT')
+    for (const request of feed.requests) request.respond(seed(160, request.timeframe))
+    await flush()
+    expect(feed.updates.map((update) => update.timeframe)).toEqual(['2h'])
+    feed.stop()
+    expect(feed.disconnected).toBe(1)
+    feed.emit(tick(161, true, 106, '2h'), '2h')
+    expect(feed.updates).toHaveLength(1)
+    const smaller = harness(['BTCUSDT'], 'spot', ['3m'])
+    expect(smaller.requests.map((request) => request.timeframe)).toEqual(['3m'])
+    smaller.stop()
+    expect(smaller.disconnected).toBe(1)
+  })
   test('invokes the browser fetch function without binding the dependency object as its receiver', async () => {
     const receivers: unknown[] = []
     const stop = startGoWatchlistFeed({ symbols: ['BTCUSDT'], market: 'spot', onUpdate: () => undefined }, {

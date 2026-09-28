@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { Candle } from '../src/types'
+import type { Candle, Timeframe } from '../src/types'
+import { TIMEFRAME_MILLISECONDS } from '../src/lib/binanceHistory'
 import type { WatchlistRow } from '../src/lib/watchlist'
 import type { WatchlistChartFrame } from '../src/lib/watchlistChart'
 import { captureIchimoku, ichimokuCloudBands, ichimokuEvidence, isIchimokuMethod, selectIchimokuPlot } from '../src/lib/watchlistIchimoku'
@@ -109,5 +110,27 @@ describe('captured Ichimoku evidence', () => {
     expect(compact).toContain('watch-setup-chart__ichimoku-lines')
     expect(compact).not.toContain('Known forward cloud')
     expect(renderToStaticMarkup(createElement(WatchlistSetupChart, { row: { ...row, name: 'Gartley · 1h' }, compact: true }))).not.toContain('watch-setup-chart__ichimoku-lines')
+  })
+
+  test('chart controls show the selected source and omit unavailable frames', async () => {
+    const makeFrame = (timeframe: Timeframe, empty = false): WatchlistChartFrame => {
+      const duration = TIMEFRAME_MILLISECONDS[timeframe]
+      const captured = candles.map((candle, index) => ({ ...candle, openTime: index * duration, closeTime: (index + 1) * duration - 1 }))
+      return { timeframe, candles: empty ? [] : captured, lastClosedAt: captured.at(-1)!.closeTime, receivedAt: evaluatedAt, preview: null }
+    }
+    for (const timeframe of ['5m', '30m'] as const) {
+      const source = makeFrame(timeframe)
+      const row = { id: `ichimoku:${timeframe}`, symbol: 'BTCUSDT', timeframe, source: 'strategy', name: `TK cross · ${timeframe}`,
+        price: 105, zone: { low: 99, high: 101 }, stop: 95, target: 115,
+        reference: { scope: 'ichimoku', entry: 100, chart: { snapshotId: 'selected-frame', evaluatedAt, defaultTimeframe: timeframe,
+          frames: [source, makeFrame('15m', true), makeFrame('1d', true)], points: [], events: [], evidence: [], notes: [] } } } as WatchlistRow
+      const html = renderToStaticMarkup(createElement(WatchlistSetupChart, { row }))
+      const controls: string[] = []
+      await new HTMLRewriter().on('.watch-setup-chart__intervals > button', {
+        element() { controls.push('') },
+        text(chunk) { controls[controls.length - 1] += chunk.text },
+      }).transform(new Response(html)).text()
+      expect(controls).toEqual([`${timeframe}setup`])
+    }
   })
 })

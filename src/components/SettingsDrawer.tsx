@@ -28,7 +28,8 @@ export function SettingsDrawer() {
     <Divider />
     <Text strong>Lecture settings · 20 / 60 / 120 / 30</Text>
     <Paragraph style={{ marginTop: 12 }}>Tenkan is orange and Kijun is red. The shaded cloud is green or red; the dashed forward cloud is already calculated from completed candles and displayed 30 bars ahead. It does not forecast future prices.</Paragraph>
-    <Paragraph>Setups are checked on 1h and 4h candles with 15m, 1h, 4h and 1d context. Open a setup to change the displayed chart timeframe, toggle Ichimoku overlays, and inspect the recorded crosses, flat edges and retracement cautions.</Paragraph>
+    <Paragraph>The toolbar’s timeframe picker chooses the candles used to detect setups, from 1m to 1w. Only that candle history is loaded. Each setup’s algorithm applies its trigger, invalidation and expiry rules to the selected timeframe.</Paragraph>
+    <Paragraph>Open a setup to inspect its captured chart, toggle Ichimoku overlays, and review the recorded crosses, flat edges and retracement cautions. Changing the toolbar timeframe starts a new scan and closes the previous setup detail.</Paragraph>
     <Paragraph type="secondary">The lecture’s periods stay fixed in this view. Chikou is intentionally omitted. Entry references, invalidation, targets and reward/risk after modeled costs belong to each saved evaluation.</Paragraph>
   </Drawer>
 

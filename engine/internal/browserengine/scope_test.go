@@ -84,7 +84,10 @@ func TestIchimokuScopeSelectsOnlyItsFamiliesBeforeAnyDisplayCap(t *testing.T) {
 		}
 	}
 	scoped := browser.Run(request)
-	requireSuccessful(t, scoped, 14*4)
+	requireSuccessful(t, scoped, 14)
+	if scoped.Timeframe != "1h" {
+		t.Fatal("omitted Ichimoku timeframe did not default to 1h")
+	}
 	if scoped.Scope != "ichimoku" || scoped.Result.Limit != 0 || scoped.Result.Strategies.Limit != 0 ||
 		len(scoped.Result.Items) != 0 || len(scoped.Result.Trends) != 0 || len(scoped.Result.Strategies.Items) <= 12 {
 		t.Fatal("dedicated scope contains other sources or retained an arbitrary display cap")
@@ -102,7 +105,7 @@ func TestIchimokuScopeSelectsOnlyItsFamiliesBeforeAnyDisplayCap(t *testing.T) {
 		}
 	}
 	for _, symbol := range request.Symbols {
-		for _, family := range []string{"tk_cross", "pk_cross", "cloud_edge_to_edge"} {
+		for _, family := range []string{"tk_cross", "pk_cross"} {
 			if !selected[symbol][family] {
 				t.Fatalf("qualifying %s/%s was crowded out of the dedicated scope", symbol, family)
 			}
@@ -119,11 +122,15 @@ func TestIchimokuScopeSelectsOnlyItsFamiliesBeforeAnyDisplayCap(t *testing.T) {
 		t.Fatal("mixed watchlist no longer follows its existing cap")
 	}
 	request.Scope = "ichimoku"
-	request.Histories[0].Status = "error"
+	for i := range request.Histories {
+		if request.Histories[i].Symbol == request.Symbols[0] && request.Histories[i].Timeframe == "1h" {
+			request.Histories[i].Status = "error"
+		}
+	}
 	failed := browser.Run(request)
 	for _, candidate := range failed.Result.Strategies.Items {
 		if candidate.Opportunity.Symbol == request.Symbols[0] {
-			t.Fatal("dedicated scope bypassed the required four-frame history gate")
+			t.Fatal("dedicated scope bypassed the selected source history gate")
 		}
 	}
 }
@@ -132,7 +139,7 @@ func TestIchimokuScopeDoesNotPromoteUnrelatedOrTerminalInventory(t *testing.T) {
 	request := fixture("BTCUSDT")
 	request.Scope = "ichimoku"
 	response := browser.Run(request)
-	requireSuccessful(t, response, 4)
+	requireSuccessful(t, response, 1)
 	if len(response.Result.Strategies.Items) != 0 || len(response.Result.Items) != 0 || len(response.Result.Trends) != 0 {
 		t.Fatal("the unrelated sweep fixture leaked setups into the dedicated scope")
 	}
