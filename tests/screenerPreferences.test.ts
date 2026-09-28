@@ -22,6 +22,16 @@ const SELECTED: ScreenerPreferences = {
 }
 
 describe('stored screener preferences', () => {
+  test('watchlist restores either market and round-trips shared scope', () => {
+    for (const market of ['spot', 'tradfi'] as const) {
+      const prefs = { ...SELECTED, appView: 'watchlist' as const, market }
+      expect(restoreScreenerPreferences(prefs)).toEqual(prefs)
+      const search = writeScreenerPreferencesToSearch('?campaign=watch', prefs)
+      expect(readScreenerPreferencesFromSearch(search)).toEqual(prefs)
+      expect(new URLSearchParams(search).get('campaign')).toBe('watch')
+      expect(new URLSearchParams(search).get('view')).toBe('watchlist')
+    }
+  })
   test('families uses the crypto market and validates the stored view independently', () => {
     expect(restoreScreenerPreferences({ ...SELECTED, appView: 'families' })).toEqual({
       ...SELECTED, appView: 'families', market: 'spot',

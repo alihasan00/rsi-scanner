@@ -102,6 +102,30 @@ afterEach(() => {
 })
 
 describe('screener store persistence', () => {
+  test('watchlist market changes are atomic, restore scoped stars and persist the view', () => {
+    const { storage } = memoryStorage()
+    const store = createScannerStore(storage)
+    store.getState().toggleStarredSymbol('BTCUSDT')
+    store.getState().setMarket('tradfi', 'watchlist')
+    store.getState().toggleStarredSymbol('XAUUSDT')
+    store.getState().selectSymbol('XAUUSDT')
+    setSymbolSnapshot('XAUUSDT', loadedSnapshot())
+    setFeedStatus('XAUUSDT', { state: 'ready', updatedAt: 900_000, error: null })
+    const observed: unknown[] = []
+    cleanups.push(store.subscribe((state) => observed.push({
+      view: state.appView, market: state.market, selected: state.selectedSymbol,
+      stars: state.starredSymbols, bars: getSymbolSnapshot('XAUUSDT').bars.length,
+    })))
+    store.getState().setMarket('spot', 'watchlist')
+    expect(observed).toEqual([{ view: 'watchlist', market: 'spot', selected: null, stars: ['BTCUSDT'], bars: 0 }])
+    const reloaded = createScannerStore(storage)
+    expect(reloaded.getState().appView).toBe('watchlist')
+    reloaded.getState().setMarket('tradfi', 'watchlist')
+    expect(reloaded.getState().appView).toBe('watchlist')
+    expect(reloaded.getState().starredSymbols).toEqual(['XAUUSDT'])
+    reloaded.getState().setMarket('tradfi')
+    expect(reloaded.getState().appView).toBe('scanner')
+  })
   test('fresh visits start with Coin Families while saved and legacy market choices remain selected', () => {
     const { storage } = memoryStorage()
     const fresh = createScannerStore(storage)

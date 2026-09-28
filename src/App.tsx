@@ -15,6 +15,9 @@ const SettingsDrawer = lazy(() => import('./components/SettingsDrawer').then(
 const CoinFamilies = lazy(() => import('./components/CoinFamilies').then(
   (module) => ({ default: module.CoinFamilies }),
 ))
+const Watchlist = lazy(() => import('./components/Watchlist').then(
+  (module) => ({ default: module.Watchlist }),
+))
 const NO_SYMBOLS: readonly string[] = []
 
 function App() {
@@ -26,12 +29,12 @@ function App() {
 
   const universe = useMarketUniverse(market)
   const rsiSymbols = useMemo(() => {
-    if (appView === 'scanner') return universe.symbols
+    if (appView !== 'families') return universe.symbols
     return selectedSymbol ? [selectedSymbol] : NO_SYMBOLS
   }, [appView, selectedSymbol, universe.symbols])
   useRsiFeed(rsiSymbols, market)
-  const contextSymbols = useMemo(() => showLiquidity ? universe.symbols : selectedSymbol ? [selectedSymbol] : [], [showLiquidity, universe.symbols, selectedSymbol])
-  useSrContextFeed(contextSymbols, market, contextSymbols.length > 0, showLiquidity ? 'liquidity' : 'selected')
+  const contextSymbols = useMemo(() => showLiquidity || appView === 'watchlist' ? universe.symbols : selectedSymbol ? [selectedSymbol] : NO_SYMBOLS, [showLiquidity, appView, universe.symbols, selectedSymbol])
+  useSrContextFeed(contextSymbols, market, contextSymbols.length > 0, appView === 'watchlist' ? 'watchlist' : showLiquidity ? 'liquidity' : 'selected')
 
   return (
     <div className="app-shell">
@@ -40,6 +43,10 @@ function App() {
         {appView === 'families' ? (
           <Suspense fallback={<div className="app-view-loading" role="status">Loading coin families…</div>}>
             <CoinFamilies />
+          </Suspense>
+        ) : appView === 'watchlist' ? (
+          <Suspense fallback={<div className="app-view-loading" role="status">Loading watchlist…</div>}>
+            <Watchlist key={market} universe={universe} />
           </Suspense>
         ) : <ScreenerGrid key={market} universe={universe} />}
       </main>

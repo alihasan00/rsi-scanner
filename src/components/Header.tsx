@@ -1,5 +1,5 @@
 import { Button, Tabs } from 'antd'
-import { AppstoreOutlined, BankOutlined, ClusterOutlined, SettingOutlined } from '@ant-design/icons'
+import { AppstoreOutlined, BankOutlined, ClusterOutlined, SettingOutlined, UnorderedListOutlined } from '@ant-design/icons'
 import { useScannerStore } from '../store/scannerStore'
 import { MARKETS } from '../lib/markets'
 import './Header.css'
@@ -18,14 +18,15 @@ export function Header() {
       </div>
       <nav className="app-header__nav" aria-label="Scanner views">
         <Tabs
-          activeKey={appView === 'families' ? 'families' : market}
+          activeKey={appView === 'scanner' ? market : appView}
           onChange={(key) => {
-            if (key === 'families') setAppView('families')
+            if (key === 'families' || key === 'watchlist') setAppView(key)
             else if (key === 'spot' || key === 'tradfi') setMarket(key)
           }}
           size="small"
           items={[
             { key: 'families', label: 'Coin Families', icon: <ClusterOutlined /> },
+            { key: 'watchlist', label: 'Watchlist', icon: <UnorderedListOutlined /> },
             { key: 'spot', label: 'Crypto', icon: <AppstoreOutlined /> },
             { key: 'tradfi', label: 'TradFi', icon: <BankOutlined /> },
           ]}

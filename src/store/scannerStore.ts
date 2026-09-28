@@ -71,7 +71,7 @@ interface ScannerState {
   supportResistanceView: SupportResistanceView
   supportResistanceSort: SupportResistanceSort
   supportResistanceFilters: SupportResistanceFilters
-  setMarket: (market: ScreenerMarket) => void
+  setMarket: (market: ScreenerMarket, appView?: 'scanner' | 'watchlist') => void
   setAppView: (appView: AppView) => void
   toggleStarredSymbol: (symbol: string) => void
   setCardDensity: (density: 'comfortable' | 'compact') => void
@@ -183,15 +183,15 @@ export const createScannerStore = (storage?: StateStorage) => create<ScannerStat
       supportResistanceView: 'cards',
       supportResistanceSort: 'symbol',
       supportResistanceFilters: DEFAULT_SUPPORT_RESISTANCE_FILTERS,
-      setMarket: (market) => {
+      setMarket: (market, appView = 'scanner') => {
         const state = get()
         if (state.market === market) {
-          if (state.appView !== 'scanner') set({ appView: 'scanner' })
+          if (state.appView !== appView) set({ appView })
           return
         }
         resetSymbolData()
         resetFeedStatus()
-        set({ market, appView: 'scanner', selectedSymbol: null, starredSymbols: state.starredSymbolsByMarket[market] })
+        set({ market, appView, selectedSymbol: null, starredSymbols: state.starredSymbolsByMarket[market] })
       },
       setAppView: (appView) => {
         const state = get()

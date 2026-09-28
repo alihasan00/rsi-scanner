@@ -19,6 +19,11 @@ The interface uses Ant Design components with the supplied dark purple theme.
 It groups the scanner's coins into ecosystems, sectors, and memes, showing live
 rolling 24-hour performance, leaders, and gaps between family members.
 
+**Watchlist** brings Fib, harmonic and structure setups into one automatic
+shortlist for either market. It shows completed-candle triggers, developing
+locations, conflicts, current first-target reward/risk and delayed data.
+It uses the existing live feeds without a database or trading service.
+
 This repository contains the frontend only. The standalone Rust data tool lives
 in the separate sibling project `../cli` and fetches and analyzes market
 data from the command line for AI-assisted analysis. Both projects build and run
@@ -82,6 +87,44 @@ scanner; the fresh-visit default does not override them.
 `src/lib/coinFamilies.ts` owns curated membership; `familyMarketData.ts` validates
 quotes and calculates comparisons. `useFamilyMarketData.ts` owns polling, and
 `CoinFamilies.tsx` renders the dashboard and family detail panel.
+
+## Live watchlist
+
+Open **Watchlist**, choose Crypto or TradFi, and select a timeframe. The automatic
+list combines golden-pocket pullbacks, harmonic D zones and structure retests.
+Each setup shows **Why**, **Next**, its zone, stop/invalidation and first target.
+Expand **Review notes** for limitations and **Evidence & timing** for the
+completed-candle observations. **Open chart & Context** opens the existing detail
+view with calendar and higher-timeframe evidence.
+
+- **Trigger confirmed:** a completed zone test was followed by a relevant,
+  aligned trigger in the latest four completed candles. The quote is still
+  within one ATR of the zone (0.5% without ATR), its reference levels are usable,
+  and no nearby opposing location or recent opposing trigger blocks it.
+  This records an observation for review, not trade approval.
+- **Developing:** the setup is testing, approaching or waiting for its zone.
+  **Needs review** groups extended setups, conflicts and unusable references.
+  Data delays have their own state and never count as current confirmations.
+- **Current gross R/R:** reward to the first target divided by distance to the
+  reference stop, measured from the current quote. Costs, staged entries,
+  partial exits and later targets are excluded. Below 1R is flagged for review;
+  no target is moved to make a setup look better.
+- **Filters:** search, stars and timeframe are shared with the scanner. Direction,
+  setup type and status filter this view only. Indicator-tab filters do not
+  silently remove watchlist rows. Counts and market coverage describe the full
+  selected universe before filters. A pair can have more than one setup.
+- **Live operation:** REST seeds history; the existing WebSocket feed updates it.
+  Both recent receipt and current completed candles are required. A timer ages
+  data out even if the stream stops. Daily context uses the existing bounded
+  feed; higher-timeframe requests remain limited to the selected detail chart.
+- **Persistence:** stars and the selected view stay in this browser; URLs such as
+  `?view=watchlist&market=tradfi&timeframe=4h` share the market and timeframe.
+  There is no added database, background collector, AI, order execution or
+  trade ledger. The watchlist rebuilds from available history when opened and
+  updates only while the app is running.
+
+See [watchlist selection and live-data rules](docs/watchlist.md) for the
+adaptation from the crypto project and the exact limitations.
 
 ## Screener
 

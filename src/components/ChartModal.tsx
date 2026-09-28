@@ -43,6 +43,7 @@ export function ChartModal() {
   const showTrendlines = useScannerStore((state) => state.appView === 'scanner' && state.screenerFilters.signal === 'trendline')
   const [view, setView] = useState<'rsi' | 'fib' | 'sr' | 'harmonic' | 'context' | 'research'>(() => {
     const { appView, screenerFilters: { signal } } = useScannerStore.getState()
+    if (appView === 'watchlist') return 'context'
     if (appView === 'families') return 'rsi'
     return signal === 'sr' || signal === 'fib' || signal === 'harmonic' ? signal : 'rsi'
   })

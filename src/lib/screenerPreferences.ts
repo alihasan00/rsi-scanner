@@ -8,7 +8,7 @@ import type { FibSettings } from './fibPreferences'
 import type { FibStage } from './fibScreener'
 
 export type RsiSignalFilter = 'all' | 'divergence' | 'trendline'
-export type AppView = 'scanner' | 'families'
+export type AppView = 'scanner' | 'families' | 'watchlist'
 
 export interface ScreenerPreferences {
   appView: AppView
@@ -97,7 +97,7 @@ export function restoreScreenerPreferences(input: unknown): ScreenerPreferences 
   const saved = input !== null && typeof input === 'object' && !Array.isArray(input)
     ? input as Record<string, unknown> : {}
   const defaults = DEFAULT_SCREENER_PREFERENCES
-  const appView = saved.appView === 'families' ? 'families' : defaults.appView
+  const appView = saved.appView === 'families' || saved.appView === 'watchlist' ? saved.appView : defaults.appView
   return {
     appView,
     market: appView === 'families' ? 'spot' : isChoice(saved.market, MARKETS) ? saved.market : defaults.market,

@@ -11,15 +11,30 @@ import './Liquidity.css'
 const { Text, Paragraph } = Typography
 
 export function SettingsDrawer() {
-  const { settings, closeSettings, updateSettings, isFib, isLiquidity, isHarmonic } = useScannerStore(useShallow((state) => ({
+  const { settings, closeSettings, updateSettings, isFib, isLiquidity, isHarmonic, isWatchlist } = useScannerStore(useShallow((state) => ({
     settings: state.settings,
     closeSettings: state.closeSettings,
     updateSettings: state.updateSettings,
     isFib: state.screenerFilters.signal === 'fib',
     isLiquidity: state.screenerFilters.signal === 'sr',
     isHarmonic: state.screenerFilters.signal === 'harmonic',
+    isWatchlist: state.appView === 'watchlist',
   })))
   const [draftLineWidth, setDraftLineWidth] = useState(settings.lineWidth)
+
+  if (isWatchlist) return <Drawer title="Watchlist settings" open onClose={closeSettings} size={440}>
+    <Paragraph>Setups use the selected timeframe. A zone test must close before a later aligned trigger can confirm it. The trigger stays recent for four completed candles, while the live price must remain within one ATR of the zone (0.5% when ATR is unavailable).</Paragraph>
+    <Paragraph type="secondary">Trigger confirmation is an observation to review. The displayed reward/risk uses the first target before costs; higher-timeframe evidence is available in Context.</Paragraph>
+    <Divider />
+    <Text strong>RSI confirmation rules</Text>
+    <Space orientation="vertical" style={{ marginTop: 12 }}>
+      <Checkbox checked={settings.showHiddenDivergences} onChange={(event) => updateSettings({ showHiddenDivergences: event.target.checked })}>Include hidden divergences</Checkbox>
+      <Checkbox checked={settings.requireBodyAgreement} onChange={(event) => updateSettings({ requireBodyAgreement: event.target.checked })}>Require wick and body agreement</Checkbox>
+      <Checkbox checked={settings.requireSameRsiCycle} onChange={(event) => updateSettings({ requireSameRsiCycle: event.target.checked })}>Require one RSI 50 cycle</Checkbox>
+    </Space>
+    <Divider />
+    <details><summary>Fib template</summary><FibSettingsPanel /></details>
+  </Drawer>
 
   if (isHarmonic) return <Drawer title="Harmonic patterns" open onClose={closeSettings} size={480}><HarmonicGuide /></Drawer>
 
