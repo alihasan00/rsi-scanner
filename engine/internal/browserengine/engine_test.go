@@ -15,6 +15,7 @@ import (
 	"github.com/alihasan00/crypto/internal/market"
 	"github.com/alihasan00/crypto/internal/scanner"
 	"github.com/alihasan00/crypto/internal/selection"
+	"github.com/alihasan00/crypto/internal/strategies"
 )
 
 func fixtureAt(now time.Time, symbols ...string) browser.Request {
@@ -77,7 +78,9 @@ func (f referenceFeed) CandlesWithEvidence(_ context.Context, symbol, timeframe 
 func directSelection(t *testing.T, request browser.Request) selection.Result {
 	t.Helper()
 	engine := scanner.New(referenceFeed{request}, request.Symbols, "Independent test feed", 1, harmonic.DefaultConfig())
-	done, err := engine.Start(context.Background(), scanner.DefaultRequest())
+	scanRequest := scanner.DefaultRequest()
+	scanRequest.Timeframes = []string{"1d", "4h"}
+	done, err := engine.Start(context.Background(), scanRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,14 +90,16 @@ func directSelection(t *testing.T, request browser.Request) selection.Result {
 		t.Fatalf("reference scan failed: %+v", snapshot.Errors)
 	}
 	histories := map[string]scanner.History{}
-	for _, history := range request.Histories {
-		value, ok := engine.History(history.Symbol, history.Timeframe)
-		if !ok {
-			t.Fatalf("reference history absent: %s/%s", history.Symbol, history.Timeframe)
+	for _, symbol := range request.Symbols {
+		for _, timeframe := range scanRequest.Timeframes {
+			value, ok := engine.History(symbol, timeframe)
+			if !ok {
+				t.Fatalf("reference history absent: %s/%s", symbol, timeframe)
+			}
+			histories[symbol+"/"+timeframe] = value
 		}
-		histories[history.Symbol+"/"+history.Timeframe] = value
 	}
-	return selection.Build(snapshot, histories, request.Symbols, time.UnixMilli(request.Now).UTC(), 2*time.Minute, selection.DefaultConfig())
+	return selection.BuildPaperWatchlist(snapshot, histories, request.Symbols, time.UnixMilli(request.Now).UTC(), 2*time.Minute, selection.DefaultConfig())
 }
 
 func requireSuccessful(t *testing.T, response browser.Response, series int) {
@@ -109,7 +114,7 @@ func requireSuccessful(t *testing.T, response browser.Response, series int) {
 	}
 }
 
-func TestRunMatchesFrozenScannerAndSelector(t *testing.T) {
+func TestRunMatchesScannerAndWatchlistSelector(t *testing.T) {
 	request := fixture("BTCUSDT", "ETHUSDT")
 	before, err := json.Marshal(request)
 	if err != nil {
@@ -117,17 +122,26 @@ func TestRunMatchesFrozenScannerAndSelector(t *testing.T) {
 	}
 	want := directSelection(t, request)
 	response := browser.Run(request)
-	requireSuccessful(t, response, 8)
+	requireSuccessful(t, response, 4)
 	if !reflect.DeepEqual(*response.Result, want) {
-		t.Fatal("browser adapter changed the frozen scanner/selector result")
+		t.Fatal("browser adapter changed the scanner/watchlist selector result")
 	}
-	if response.Result.Limit != 12 || response.Result.Strategies.Limit != 12 {
-		t.Fatal("browser adapter changed the original presentation limit")
+	if response.Result.Limit != 0 || response.Result.Strategies.Limit != 0 ||
+		len(response.Result.Items) != 0 || len(response.Result.Trends) != 0 {
+		t.Fatal("mixed Watchlist retained a legacy display cap or old strategy section")
+	}
+	if len(response.Result.Strategies.Summary) != len(strategies.PaperFamilies) {
+		t.Fatal("mixed Watchlist lost an active paper profile")
+	}
+	for i, summary := range response.Result.Strategies.Summary {
+		if summary.Family != strategies.PaperFamilies[i] {
+			t.Fatalf("unexpected paper profile at %d: %s", i, summary.Family)
+		}
 	}
 	if response.Version != browser.Version || response.SourceHash != browser.SourceHash || response.MaxAgeMS != 120000 || response.Now != request.Now {
 		t.Fatal("response lost frozen-source provenance or freshness policy")
 	}
-	if response.Scan.Progress.Done != 8 || response.Scan.Progress.Total != 8 {
+	if response.Scan.Progress.Done != 4 || response.Scan.Progress.Total != 4 {
 		t.Fatalf("incomplete scan publication: %+v", response.Scan.Progress)
 	}
 	for _, frame := range response.Scan.Series {
@@ -163,24 +177,43 @@ func TestReceiptFreshnessIsNotRenewedByReading(t *testing.T) {
 			}
 			response := browser.Run(request)
 			if test.valid {
-				requireSuccessful(t, response, 4)
+				requireSuccessful(t, response, 2)
 				for _, frame := range response.Scan.Series {
 					if frame.ObservedAt != request.Now+test.delta.Milliseconds() {
 						t.Fatal("receipt timestamp was renewed or clamped")
 					}
 				}
-			} else if response.Error != "" || len(response.Scan.Errors) != 4 || len(response.Scan.Series) != 0 {
+			} else if response.Error != "" || len(response.Scan.Errors) != 2 || len(response.Scan.Series) != 0 {
 				t.Fatalf("expired/future receipts escaped feed rejection: %+v", response.Scan)
 			}
 		})
 	}
 	request := fixture("BTCUSDT")
-	requireSuccessful(t, browser.Run(request), 4)
+	requireSuccessful(t, browser.Run(request), 2)
 	request.Now += (2 * time.Minute).Milliseconds()
 	response := browser.Run(request)
-	if len(response.Scan.Errors) != 4 || len(response.Scan.Series) != 0 {
+	if len(response.Scan.Errors) != 2 || len(response.Scan.Series) != 0 {
 		t.Fatal("re-reading the same candles renewed their original receipts")
 	}
+}
+
+func TestPaperSourceMustCloseBeforeEvaluationTime(t *testing.T) {
+	request := fixtureAt(time.Date(2026, 9, 29, 0, 0, 2, 0, time.UTC), "BTCUSDT")
+	request.Now = request.Histories[0].Candles[len(request.Histories[0].Candles)-1].CloseTime
+	for i := range request.Histories {
+		request.Histories[i].ReceivedAt = request.Now
+	}
+	response := browser.Run(request)
+	if response.Error != "" || len(response.Scan.Errors) != 2 || len(response.Scan.Series) != 0 || response.Result == nil {
+		t.Fatalf("a candle at the exact close millisecond entered the paper Watchlist: %+v", response.Scan)
+	}
+	for _, failure := range response.Scan.Errors {
+		if !strings.Contains(failure.Error, "before the paper evaluation time") {
+			t.Fatalf("wrong paper close-boundary rejection: %+v", failure)
+		}
+	}
+	request.Scope, request.Timeframe = "ichimoku", "1d"
+	requireSuccessful(t, browser.Run(request), 1)
 }
 
 func TestInvalidHistoryCannotSupplyASetup(t *testing.T) {
@@ -220,15 +253,20 @@ func TestInvalidHistoryCannotSupplyASetup(t *testing.T) {
 			request := fixture("BTCUSDT")
 			test.change(&request.Histories[0])
 			response := browser.Run(request)
-			if response.Error != "" || response.Result == nil || len(response.Scan.Errors) != 1 || len(response.Scan.Series) != 3 {
+			if response.Error != "" || response.Result == nil || len(response.Scan.Errors) != 1 || len(response.Scan.Series) != 1 {
 				t.Fatalf("invalid history was not isolated: %+v", response.Scan)
 			}
 			failure := response.Scan.Errors[0]
 			if failure.Symbol != "BTCUSDT" || failure.Interval != "1d" || !strings.Contains(failure.Error, test.message) {
 				t.Fatalf("wrong failure: %+v; wanted %q", failure, test.message)
 			}
-			if len(response.Result.Items) != 0 || len(response.Result.Trends) != 0 || len(response.Result.Strategies.Items) != 0 {
-				t.Fatal("incomplete context produced a shortlisted setup")
+			for _, item := range response.Result.Strategies.Items {
+				if item.Opportunity.Interval == "1d" {
+					t.Fatal("invalid daily history produced a daily paper setup")
+				}
+			}
+			if len(response.Result.Items) != 0 || len(response.Result.Trends) != 0 {
+				t.Fatal("legacy setup entered the mixed Watchlist")
 			}
 		})
 	}
@@ -238,12 +276,15 @@ func TestMissingTimeframeAndCandleBoundaryRemainUnavailable(t *testing.T) {
 	request := fixture("BTCUSDT", "ETHUSDT")
 	request.Histories = request.Histories[1:]
 	response := browser.Run(request)
-	if response.Error != "" || response.Result == nil || len(response.Scan.Errors) != 1 || len(response.Scan.Series) != 7 {
+	if response.Error != "" || response.Result == nil || len(response.Scan.Errors) != 1 || len(response.Scan.Series) != 3 {
 		t.Fatalf("missing timeframe coverage was hidden: %+v", response.Scan)
 	}
-	for _, breadth := range response.Result.Breadth {
-		if breadth.Interval == "1d" && (breadth.Requested != 2 || breadth.Ready != 1 || breadth.Unavailable != 1) {
-			t.Fatalf("missing timeframe changed the breadth denominator: %+v", breadth)
+	if len(response.Result.Breadth) != 0 {
+		t.Fatal("legacy breadth entered the paper Watchlist")
+	}
+	for _, coverage := range response.Result.Strategies.Coverage {
+		if coverage.Symbol == "BTCUSDT" && coverage.Interval == "1d" && coverage.Status != "data_unavailable" {
+			t.Fatalf("missing daily history changed the paper coverage denominator: %+v", coverage)
 		}
 	}
 	for _, item := range response.Result.Items {
@@ -257,31 +298,31 @@ func TestMissingTimeframeAndCandleBoundaryRemainUnavailable(t *testing.T) {
 		}
 	}
 	for _, item := range response.Result.Strategies.Items {
-		if item.Opportunity.Symbol == "BTCUSDT" {
-			t.Fatal("missing context produced a strategy item")
+		if item.Opportunity.Symbol == "BTCUSDT" && item.Opportunity.Interval == "1d" {
+			t.Fatal("missing daily history produced a daily paper setup")
 		}
 	}
 	// During delivery grace, an older close may be ready. Once grace passes,
 	// the same recently received data cannot stand in for the missing close.
 	request = fixtureAt(time.Date(2026, 9, 28, 12, 0, 2, 0, time.UTC), "BTCUSDT")
-	requireSuccessful(t, browser.Run(request), 4)
+	requireSuccessful(t, browser.Run(request), 2)
 	request.Now += (4 * time.Second).Milliseconds()
 	response = browser.Run(request)
-	if len(response.Scan.Errors) != 3 {
-		t.Fatalf("new 4h, 1h and 15m closes were not required after grace: %+v", response.Scan.Errors)
+	if len(response.Scan.Errors) != 1 || response.Scan.Errors[0].Interval != "4h" {
+		t.Fatalf("new 4h close was not required after grace: %+v", response.Scan.Errors)
 	}
 }
 
 func TestPreviewChangesQuoteWithoutBecomingCompletedEvidence(t *testing.T) {
 	request := fixture("BTCUSDT")
 	before := browser.Run(request)
-	requireSuccessful(t, before, 4)
+	requireSuccessful(t, before, 2)
 	for i := range request.Histories {
 		request.Histories[i].Preview.High = 100000
 		request.Histories[i].Preview.Close = 100000
 	}
 	after := browser.Run(request)
-	requireSuccessful(t, after, 4)
+	requireSuccessful(t, after, 2)
 	for i, frame := range after.Scan.Series {
 		previous := before.Scan.Series[i]
 		if frame.Price != 100000 || frame.PriceSource != "provisional_candle" {
@@ -295,7 +336,7 @@ func TestPreviewChangesQuoteWithoutBecomingCompletedEvidence(t *testing.T) {
 		request.Histories[i].Preview = nil
 	}
 	without := browser.Run(request)
-	requireSuccessful(t, without, 4)
+	requireSuccessful(t, without, 2)
 	for _, frame := range without.Scan.Series {
 		if frame.PriceSource != "closed_candle" || frame.ClosedCandles != 500 || frame.Price == 100000 {
 			t.Fatal("absent preview did not retain the final completed-candle quote")
@@ -338,7 +379,7 @@ func TestRunJSONPreservesResultAndReportsMalformedInput(t *testing.T) {
 	if err := json.Unmarshal([]byte(browser.RunJSON(string(raw))), &response); err != nil {
 		t.Fatal(err)
 	}
-	requireSuccessful(t, response, 4)
+	requireSuccessful(t, response, 2)
 	want, _ := json.Marshal(browser.Run(request))
 	got, _ := json.Marshal(response)
 	if string(got) != string(want) {

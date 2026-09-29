@@ -5,22 +5,40 @@ import type { GoWatchlistResult } from './goWatchlist'
 
 export interface WatchlistSeedProgress {
   readonly completeSymbols: readonly string[]
+  /** Independent source frames can make the same asset eligible at different times. */
+  readonly readySourceKeys?: readonly string[]
   readonly attemptedFrames: number
   readonly totalFrames: number
 }
 
 export function getWatchlistSeedProgress(symbols: readonly string[], frames: readonly GoWatchlistFrameUpdate[],
-  timeframes: readonly Timeframe[] = GO_WATCHLIST_TIMEFRAMES): WatchlistSeedProgress {
+  timeframes: readonly Timeframe[] = GO_WATCHLIST_TIMEFRAMES, mode: 'complete' | 'independent' = 'complete'): WatchlistSeedProgress {
   const allowed = new Set(symbols)
   const indexed = new Map(frames.filter((frame) => allowed.has(frame.symbol) && timeframes.includes(frame.timeframe)).map((frame) => [`${frame.symbol}:${frame.timeframe}`, frame]))
+  const readySourceKeys = symbols.flatMap((symbol) => timeframes.filter((timeframe) => indexed.get(`${symbol}:${timeframe}`)?.status === 'ready')
+    .map((timeframe) => `${symbol}:${timeframe}`))
   return {
-    completeSymbols: symbols.filter((symbol) => timeframes.every((timeframe) => indexed.get(`${symbol}:${timeframe}`)?.status === 'ready')),
+    completeSymbols: symbols.filter((symbol) => mode === 'independent'
+      ? timeframes.some((timeframe) => indexed.get(`${symbol}:${timeframe}`)?.status === 'ready')
+      : timeframes.every((timeframe) => indexed.get(`${symbol}:${timeframe}`)?.status === 'ready')),
+    ...(mode === 'independent' ? {readySourceKeys} : {}),
     attemptedFrames: indexed.size,
     totalFrames: symbols.length * timeframes.length,
   }
 }
 
 export interface ScheduledWatchlistScan { readonly id: number; readonly evaluatedAt: number; readonly allSeedsAttempted: boolean }
+
+/** A revised closed candle invalidates the saved evaluation even when its close time is unchanged. */
+export function isEvaluatedWatchlistSourceCurrent(
+  current: GoWatchlistFrameUpdate | undefined,
+  evaluated: GoWatchlistFrameUpdate | undefined,
+  now: number,
+): boolean {
+  return !!current && !!evaluated && current.status === 'ready' && evaluated.status === 'ready'
+    && current.candles === evaluated.candles
+    && current.receivedAt <= now + 5_000 && now - current.receivedAt <= 120_000
+}
 
 /** Deterministic admission gate: one scan at a time and no tick-driven startup scans. */
 export class GoWatchlistScheduler {
@@ -36,7 +54,7 @@ export class GoWatchlistScheduler {
   begin(now: number, progress: WatchlistSeedProgress): ScheduledWatchlistScan | null {
     if (this.pending) return null
     const allSeedsAttempted = progress.totalFrames > 0 && progress.attemptedFrames === progress.totalFrames
-    const seedKey = `${progress.completeSymbols.join(',')}:${allSeedsAttempted}`
+    const seedKey = `${(progress.readySourceKeys ?? progress.completeSymbols).join(',')}:${allSeedsAttempted}`
     if (!this.completedInitialScan && ((!progress.completeSymbols.length && !allSeedsAttempted) || seedKey === this.lastSeedKey)) return null
     const interval = this.completedInitialScan ? 30_000 : 6_000
     if (this.lastStartedAt !== null && now - this.lastStartedAt < interval) return null

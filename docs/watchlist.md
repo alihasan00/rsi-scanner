@@ -1,10 +1,10 @@
 # Live setup watchlist
 
-**Crypto → Ichimoku Cloud** (also available under TradFi) reuses the charts,
-details and filters below with a dedicated engine scope. It selects only
+**Crypto → Ichimoku Cloud** (also available under TradFi) uses the shared chart
+and review components with a dedicated engine scope. It selects only
 `kijun_reclaim`, `cloud_reclaim`, `tk_cross`, `pk_cross` and `cloud_edge_to_edge`
 before ranking, returns all active setups on the selected timeframe without
-the mixed Watchlist caps, and excludes terminal inventory. Unrelated methods
+a display cap, and excludes terminal inventory. Unrelated methods
 cannot appear in cards, detail tabs or exported reviews. The browser disables
 the ordinary market-wide RSI feed while this indicator is open.
 
@@ -14,87 +14,84 @@ detection and is saved in the shared scanner preferences and `timeframe` URL
 parameter. The browser loads only the selected frame on every interval.
 Detection, trigger confirmation, subsequent stop/target touches and expiry all
 use that source’s completed candles. Other timeframes do not gate the dedicated
-scan. Source freshness and the shared cost and plan checks still apply. Changing market or timeframe cancels the previous scan, clears its
-results and closes any saved setup detail.
+scan. Source freshness and the shared cost and plan checks still apply.
+Changing market or timeframe cancels the previous scan, clears its results and
+closes any saved setup detail.
 
 The Ichimoku chart and context summary show the selected frame’s captured
 evidence. Unavailable histories are not offered as empty charts. Copied reviews
-and saved HTML retain this exact evidence scope. The four-frame requirements below describe the
-ordinary mixed Watchlist.
+and saved HTML retain this exact evidence scope. The two-frame paper rules below
+describe the separate mixed Watchlist.
 
-The Watchlist runs the Go scanner and selector based on crypto dashboard
-release **0.13.1-26e07587190d** (upstream scan schema 12), extended locally as
-**+ichimoku.3** for the Ichimoku lecture. It checks Crypto or
-TradFi across **15m, 1h, 4h and 1d together**, then presents at most **12 unique
-assets**. A symbol appears once; open its card to compare the selected setups.
-Stars are a personal filter and never make an asset analytically eligible.
+The mixed **Watchlist** presents the sibling crypto project's 12 active paper
+research profiles from its 29 September 2026 catalog. Eleven use completed
+daily candles; the fresh weekly-level rebound uses completed four-hour candles.
+Crypto uses Binance Spot and TradFi uses Binance USDT perpetual histories. Each
+source frame qualifies independently: a missing four-hour feed does not block a
+valid daily profile, or vice versa. All qualifying assets can appear, grouped
+one card per symbol without a 12-card cap. Stars are a personal filter and do
+not make an asset analytically eligible.
 
 ## Selection and presentation
 
-The original Go engine selects three sources:
+The mixed selector recognizes exactly these profile IDs:
 
-- **Harmonics:** Gartley, Bat, Butterfly, Crab, Shark and Cypher, with the
-  original minimum geometry score of 90 and both directions enabled.
-- **Trend pullbacks:** the original multi-timeframe trend and pullback watches.
-- **Independent methods:** sweep reversal, regular-divergence reversal,
-  hidden-divergence continuation, range rejection, compression breakout,
-  fair-value-gap pullback, Fibonacci pullback, Kijun reclaim, cloud reclaim,
-  TK cross, PK cross and cloud edge-to-edge.
-  Experimental methods remain labeled in setup detail.
+| Profile | Frame | Direction | Completed-candle condition |
+|---|---|---|---|
+| `donchian55_atr_trail` | 1d | Long | Close above the previous 55 highs. |
+| `donchian55_atr_trail_stoch` | 1d | Long | Same breakout; smoothed Stochastic K14/3 above 50. |
+| `donchian55_atr_trail_macd` | 1d | Long | Same breakout; MACD12/26 above its EMA9 signal. |
+| `donchian55_atr_trail_adx_range` | 1d | Long | Same breakout; defined ADX14 at or below 20. |
+| `cloud_reclaim_volume_2r` | 1d | Long or short | First eligible cloud reclaim with volume confirmation. |
+| `cloud_reclaim_volume_2r_ema` | 1d | Long or short | Cloud rule with EMA10/20 direction. |
+| `cloud_reclaim_volume_2r_sma` | 1d | Long or short | Cloud rule with SMA10/20 direction. |
+| `cloud_reclaim_volume_2r_supertrend` | 1d | Long or short | Cloud rule with Supertrend direction. |
+| `cloud_reclaim_volume_2r_ao` | 1d | Long or short | Cloud rule with Awesome Oscillator sign. |
+| `cloud_reclaim_volume_2r_sma_ema_macd` | 1d | Long or short | Cloud rule with SMA, EMA and MACD agreement. |
+| `fresh_weekly_range_long` | 4h | Long | Untouched prior-week low, sweep/reclaim and confirmation. |
+| `tk_cross_rsi` | 1d | Long or short | TK-cross retest with RSI14 above 50 for long or below 50 for short. |
 
-Every asset requires fresh, usable context on all four timeframes. The engine
-retains its own trend alignment, countertrend confirmation, structure,
-momentum, lifecycle and historical reference checks. In particular, harmonic
-eligibility requires intact stop and target history, price within one setup
-ATR of the **entry reference**, gross reward/risk of at least 1 and modeled net
-reward/risk of at least 1. The original opposing-target cap and consumed
-reference checks prevent a recovered quote from resurrecting an old target
-opportunity.
+The Donchian filters are read on the breakout close. Cloud and TK filter states
+are frozen at the first raw eligible emission; a later favorable indicator
+cannot revive a rejected signal identity. Cloud volume must at least equal the
+mean of the preceding 20 completed bars, excluding the signal bar. The crypto
+source resets indicator state after real gaps; this browser withholds a gapped
+feed rather than smoothing it. The weekly level is the previous complete UTC
+week's low and must have no earlier touch during the rejection week.
 
-Trend and independent-method sections retain their own developing, confirmed
-and blocked lifecycles. The Go selector includes some blocked observations in
-these sections. A selected watch is not necessarily an entry: a developing
-watch may still lack a complete reference plan.
+The mixed `selection.BuildPaperWatchlist` result places paper profiles only in
+`result.strategies.items`; `result.items` and `result.trends` are empty. It does
+not select the original harmonic, trend-pullback or independent-method roster.
+That historical code remains in the shared engine for its other paths and
+regression tests. Each profile needs a fresh, usable history on its own frame,
+the expected latest completed close and the frozen protective/reference checks.
+The selector can report a candidate as blocked when its plan fails a current
+cost, stop, expiry or evidence check. A signal with a reviewable plan still
+does not imply that the next opening passed admission checks.
 
-The `selection.Build` result keeps at most 12 items in each original
-source section. The browser interleaves those sections in round-robin order,
-preserving the Go order within each section. It then groups the selected
-methods and timeframes by asset and caps the display at 12 unique assets.
-It never fills spare cards with rejected detector inventory, and raw detector
-counts are not presented as qualifying watches.
+Each card shows its leading profile, captured chart, evaluated completed-close
+price, direction and next checkpoint. The whole card opens detail; its star is
+a separate control. Detail tabs compare the other engine-selected profiles for
+that asset, including independent plans. Stops, targets and entry references
+are never averaged. Opposing directions are marked. **All signals** and
+**Triggered** filter the mixed view; the status filter offers confirmed and
+blocked. Search, stars and direction filters cannot bypass engine eligibility.
+Coverage counts describe individual frame feeds; result counts describe unique
+matching assets.
 
-Each card has one leading setup, a preview of its captured candles and geometry,
-its evaluated quote, direction, reward/risk when available, and next checkpoint.
-The whole card opens the setup detail; its star remains a separate control.
-Setup tabs inside the detail compare the other **engine-selected** setups
-retained for that asset, including separate timeframe context and reference
-plans. Stops, targets and entry references belong to individual setups; they
-are never averaged into a composite trade. Opposing directions and setups
-outside the current filters are marked for comparison.
+The detail chart uses the candles captured for that Go evaluation. It shows
+the profile's frozen source window, evaluated price, entry reference, stop,
+structural target when one exists, and completed-candle events. Donchian has no
+fixed target. An unavailable anchor or event price is not guessed.
 
-**Shortlist**, **Triggered** and **Developing** filter setups before choosing
-an asset's leading setup and applying the asset cap. A secondary confirmed
-setup can therefore represent its asset in Triggered even when the unfiltered
-lead is developing. Search and stars use the scanner's existing preferences;
-direction, source and status filters belong to this view. Filters do not
-bypass the Go selection rules. Coverage counts describe timeframe feeds,
-while result counts describe unique matching assets.
-
-The detail chart uses the exact candles captured for the selected Go evaluation.
-It plots the returned harmonic XABC/D anchors, entry zone, evaluated quote,
-plan entry, stop, first target and completed-candle events where available.
-A projected D is never presented as an observed pivot. Trend break events keep
-their hourly timestamps, while retests and triggers retain their 15m context.
-Independent methods retain their frozen source window, location and events.
-Unavailable anchors or event prices are not replaced with guessed coordinates.
-
-The **Ichimoku** chart toggle draws the exact Go Tenkan/Kijun and cloud paths.
-Known forward cloud spans are marked as projections from completed prices.
-The selected-timeframe detail exposes cloud position/color/width, flat edges,
-cross validity, twists, edge-to-edge references, cloud Fibonacci levels and
-the combined thinning-cloud/widening-line-gap warning. These readings and the
-visible overlays survive review export. See [the lecture coverage audit](ichimoku-lecture.md)
-for the source rules, deliberate Chikou exclusion and numerical conventions.
+In the dedicated Ichimoku screen, the **Ichimoku** chart toggle draws the exact
+Go Tenkan/Kijun and cloud paths. Known forward cloud spans are marked as
+projections from completed prices. Its detail exposes cloud position, color and
+width, flat edges, cross validity, twists, edge-to-edge references, cloud
+Fibonacci levels and the combined thinning-cloud/widening-line-gap warning.
+These readings and overlays survive review export. See the
+[lecture coverage audit](ichimoku-lecture.md) for the source rules, deliberate Chikou exclusion
+and numerical conventions.
 
 The timeframe controls inspect available captured histories, with **Setup** and
 **Recent** views and pointer or keyboard candle inspection. The outlined open
@@ -124,14 +121,42 @@ shortlist changes. Neither action uploads the report or contacts an agent.
 
 ## Reference plans and costs
 
-Reference plans preserve the original entry, stop, targets, confirmation
-state, next action and cautions. Prices shown in the shortlist are the quotes
-used by the latest evaluation, rather than a separately repriced trade plan.
-A completed trigger and a usable plan remain distinct from an executed trade.
+Reference plans preserve the signal's entry reference, frozen stop and any
+structural target, confirmation time, next action and cautions. The displayed
+price is the latest completed close used by the evaluation. It is not a later
+opening, an execution price or a repriced plan. The mixed Watchlist neither
+places nor tracks paper or live orders.
 
-The frozen release's cost assumptions are **20 basis points of fees plus 10
-basis points of slippage/spread round trip**. For an eligible, correctly
-ordered stop and target, the model uses:
+- **Donchian:** a daily close above the preceding 55 highs sets an initial
+  stop two arithmetic ATR14 below the signal close. There is **no fixed profit
+  target** and no fabricated target reward/risk. An entry is considered only at
+  the next whole one-minute opening after observation while the one-daily-bar
+  entry window is valid.
+  After entry, a 3.5 ATR stop ratchets after completed daily closes and never
+  widens. A close below the preceding 20 lows schedules an exit at the next
+  whole one-minute opening. Maximum holding is 96 daily bars.
+- **Cloud reclaim:** the original entry band, protective stop, structural
+  target and admission checks remain. The chart shows that original target.
+  Only a farther target is shortened to net 2R **after an actual opening and
+  adverse slippage** determine the entry and all-in risk. Volume and any trend
+  filter stay frozen at first raw eligibility. Maximum holding is 24 daily
+  bars.
+- **TK cross with RSI:** the original fixed entry band, stop and target remain,
+  with a 24-daily-bar holding limit.
+- **Fresh weekly rebound:** the original frozen range entry band, stop and
+  target remain. At the actual whole one-minute opening, the raw opening-to-stop
+  distance must be at least 3%, in addition to the entry-band and cost checks.
+  Maximum holding is 24 four-hour bars.
+
+All 12 forward paper profiles consider the next whole one-minute opening after
+observation. The source checks minute candles from the latest completed source
+candle through observation for prior protective touches. This browser fetches
+daily and four-hour source candles, not that minute execution path, and cannot
+verify whether a setup remains eligible or would fill at that opening.
+
+The reference cost assumptions are **20 basis points of fees plus 10 basis
+points of slippage/spread round trip**. For a correctly ordered fixed stop and
+target, the current-close screen uses:
 
 ```text
 risk   = abs(quote - stop)
@@ -140,12 +165,25 @@ cost   = quote * (20 + 10) / 10000
 netRR  = (reward - cost) / (risk + cost)
 ```
 
-The default minimum net reward/risk is 1, the minimum turnover floor is 0,
-and no account profile is supplied. Targets are not moved farther away to
-make a setup pass. These are model assumptions, not measured trading fees.
-Funding, borrow, leverage, spread, depth and actual fills remain unverified.
-Bearish Spot observations do not establish that an instrument can be shorted.
-The shortlist does not establish a win rate or profitability.
+The minimum net reward/risk is 1. Targets are never moved farther away to
+make a setup pass. The real opening may fail the entry band, stop-width guard,
+cost check or expiry even when the displayed signal has a reviewable plan.
+Actual fees, spread, funding, borrow, depth, leverage and fills remain
+unverified. Bearish Spot observations do not establish that an instrument can
+be shorted. The crypto historical tests do not validate these profiles on
+TradFi perpetual contracts.
+
+The source catalog calls all 12 **forward paper experiments**. Historical
+backtests used next daily or four-hour source-bar openings and did not replay
+the trial's minute execution cadence. Its corrected
+evidence review finds that recent Donchian profitability is unproven, the small
+Stochastic difference is not a demonstrated improvement, the weekly rebound
+has a sparse sample, and TK cross with RSI is concentrated in a few trades.
+Cloud trend filters are research leads, without evidence that EMA is superior
+or that the combined long/short result transfers to Spot long trading. The
+historical tests used the available history for selection, including today's
+surviving symbols; they are not an untouched out-of-sample test. This
+Watchlist makes no win-rate or profitability claim.
 
 ## Candles, freshness and evaluation
 
@@ -154,14 +192,23 @@ candles for contracts tracking stocks, ETFs and commodities. Real session gaps
 remain in the input and can block selection; no synthetic candles are added
 to make an asset pass.
 
-For each asset and timeframe, REST requests 501 klines to obtain the latest
-**500 completed candles plus the provisional candle**. A genuinely shorter
-history is assessed by the original Go warmup rules. The provisional candle
-supplies a quote but never enters closed-candle indicators. WebSocket updates
-maintain the same bounded histories and request recovery when needed.
+For each asset and requested timeframe, REST requests 501 klines to obtain up
+to **500 completed candles plus the provisional candle**. The mixed Watchlist
+loads only `1d` and `4h`; the dedicated Ichimoku screen loads only its selected
+picker timeframe. A genuinely shorter history is assessed by the applicable
+warmup rules. The provisional candle can supply a live quote, but never enters
+closed-candle indicators or the mixed paper plan's completed-close assessment.
+WebSocket updates maintain the same bounded histories and request recovery
+when needed.
 
-The four timeframes share one bounded request queue: at most eight concurrent
-requests and eight starts per second, with a 15-second request timeout,
+The sibling crypto dashboard can calculate indicators over its full stored
+contiguous history. This browser retains only the latest 500 completed bars
+per frame. Recursive filters such as Supertrend can retain older state, so
+even the latest indicator decision and profile signal may differ from the
+source. Full source-history parity is unavailable with this bounded feed.
+
+The requested timeframes share one bounded request queue: at most eight
+concurrent requests and eight starts per second, with a 15-second request timeout,
 retry backoff and exchange cooldown handling. Leaving the view or changing
 market, Ichimoku timeframe or symbol universe cancels the feed and worker.
 Results are identified by scope, selected timeframe, market and the exact
@@ -171,20 +218,20 @@ The original successful provider receipt timestamp is preserved. Receipt age
 must be at most two minutes, and the latest completed candle must independently
 match the expected close, allowing the original five-second boundary grace.
 Reading cached candles does not renew their freshness. Coverage incorporates
-Go analyzer readiness and scanner errors, not just successful HTTP responses.
+Go source-frame readiness and scanner errors, not just successful HTTP responses.
 
-Evaluations run one at a time. During initial loading, the first asset with all
-four feeds ready can start a mixed Watchlist evaluation; the dedicated Ichimoku
-view can start when its selected source frame is ready. Further ready assets are batched
-at most once every six seconds. Qualifying cards appear progressively, followed
-by a loading card until the evaluation covering all initial feed attempts has
-returned. Missing required evidence cannot confirm an entry. Once that initial scan completes,
-evaluations run at most once every 30 seconds. The first usable asset can start
-an evaluation immediately when its feeds arrive, without waiting for the
-two-second coverage display timer. A five-second UI timer withholds
-expired confirmations, stale receipts and results that lack a newly required
-completed candle between evaluations. Only a fresh Go result can readmit them.
-New feed failures also withhold the affected asset.
+Evaluations run one at a time. During initial loading, an asset can enter the
+mixed scan when either its daily or four-hour source is usable; the other
+frame may still be loading or unavailable. The dedicated Ichimoku view can
+start when its selected frame is usable. Further ready frames are batched at
+most once every six seconds. Cards appear progressively, followed by a
+loading card until the evaluation covering all initial feed attempts has
+returned. Missing or stale source evidence blocks only profiles that need
+that source. Once the initial scan completes, evaluations run at most once
+every 30 seconds. The first usable source can start an evaluation immediately,
+without waiting for the coverage display timer. Between evaluations, the UI
+withholds expired confirmations and stale or failed source feeds. Only a fresh
+Go result can readmit them.
 
 The chart snapshot is captured before dispatch and matched to the returned
 provider receipts and latest closes. Later socket updates cannot change the
@@ -198,18 +245,11 @@ reuses an eligibility decision: every evaluation still runs the Go
 scanner and selector with the captured quote, receipts and evaluation time.
 Chart rendering is memoized so coverage timers do not redraw unchanged charts.
 
-The larger request overlap retains the existing eight-starts-per-second
-limit. In a deterministic test with 440 requests taking 750 ms each, loading
-finishes in 54.75 seconds, compared with a minimum of 82.5 seconds with four
-slots. This is a queue simulation, not a guarantee for a live connection.
-At the current request rate, 440 cold requests still require at least 54
-seconds to start; subsequent quotes arrive through WebSockets. Returning
-after leaving the Watchlist currently performs a new cold seed.
-
-Run `bun run scripts/benchmark-watchlist-snapshots.ts` to compare the previous
-full-copy preparation with immutable reuse for 440 histories / 220,000 closed
-candles. This measures snapshot preparation only, independently of network,
-Go calculation and rendering costs.
+The mixed Watchlist now requests two histories per asset rather than four.
+The existing 440-history snapshot benchmark is a larger stress case; run
+`bun run scripts/benchmark-watchlist-snapshots.ts` to measure immutable
+snapshot preparation separately from network, Go calculation and rendering.
+Returning after leaving the Watchlist currently performs a new cold seed.
 
 A 30-second worker startup watchdog and a 90-second evaluation watchdog expose
 engine failures instead of leaving an endless loading state. An engine error
@@ -220,8 +260,9 @@ clears the current results rather than substituting an older publication.
 The Go engine runs as WebAssembly in a browser Web Worker. Normal Vite
 or Vercel deployment serves the committed browser artifacts and needs no Go
 installation on the host, crypto service, database, AI worker or trading
-worker. The base source is the deployed schema-12 release. The explicit local Ichimoku
-amendments are recorded separately; pending sibling-project changes are not imported.
+worker. The original Go dashboard release remains the base for the scanner and
+dedicated Ichimoku screen. The mixed selector ports the sibling project's
+active paper roster and its frozen profile rules into this browser engine.
 
 The upstream archive's source hash is:
 
@@ -231,9 +272,9 @@ The upstream archive's source hash is:
 
 `engine/provenance.json` records upstream and adapted file hashes. The original
 boundary-grace import adaptation retains the identical five-second constant.
-The local Ichimoku extension adds measurements, strategies and cloud-zone
-retests; shared freshness, structural protection and cost gates are retained.
-The generated artifacts, extension revision and source hashes can be checked with:
+The local extension records both the dedicated Ichimoku changes and the paper
+strategy port. The generated artifacts, extension revision and source hashes
+can be checked with:
 
 ```sh
 node engine/scripts/verify.mjs
@@ -242,8 +283,9 @@ node engine/scripts/verify.mjs
 See [the engine interface, provenance and rebuild instructions](../engine/README.md)
 for the Go 1.26.8 build, original package tests and native/WebAssembly parity
 checks. Identical valid histories and settings produce identical native and
-browser engine decisions; venue, candle window, retention and session
-differences can change the result.
+browser engine decisions. The sibling Rust dashboard has a different stored
+history window and execution environment; venue, candle retention, session
+gaps and actual opening prices can change its result.
 
 `goWatchlistFeed.ts` owns the scope-specific candle feeds, `useGoWatchlist.ts` owns the
 worker lifecycle, and `goWatchlist.ts` adapts the Go result for presentation.

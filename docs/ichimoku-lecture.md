@@ -83,19 +83,21 @@ trigger, invalidation and expiry rules to the same completed candles. Another
 timeframe’s history or direction does not gate this tab. Its detail chart and
 exported context preserve the selected frame’s captured evidence.
 
-The ordinary mixed **Watchlist** keeps its existing 1h/4h Ichimoku discovery
-scope and requires fresh 15m/1h/4h/1d context. The lecture prescribes no particular
-timeframe. Standard watchlist conventions remain: at most 24 bars to observe a retest, 0.1 ATR protective stop buffer,
-0.25 ATR entry bounds, four-bar confirmation expiry and the existing structural
-target history where the lecture does not supply a target. Edge-to-edge uses
-its actual opposite cloud edge. These are product choices, not quotations from
-the lecture. Stops/targets are frozen at the trigger, with later consumed
-references and ambiguous stop/target candles handled conservatively.
+The lecture prescribes no particular timeframe. The dedicated setup algorithms
+use these product conventions where the lecture is qualitative: at most 24 bars
+to observe a retest, a 0.1 ATR protective stop buffer, 0.25 ATR entry bounds,
+four-bar confirmation expiry and structural target history where the lecture
+does not supply a target. Edge-to-edge uses its actual opposite cloud edge.
+These are product choices, not quotations from the lecture. Stops and targets
+are frozen at the trigger, with later consumed references and ambiguous
+stop/target candles handled conservatively. The separate mixed **Watchlist**
+now selects the crypto project's paper research profiles; its rules are in
+[the Watchlist guide](watchlist.md).
 
 The shared fees, slippage, net reward/risk and data freshness checks still
 apply. The dedicated tab checks subsequent stop/target history on its selected
-source; the mixed Watchlist retains its original lower-timeframe protective
-checks. Qualitative signal readings cannot bypass these rules. Orders, borrowing, leverage and real fills are outside this app.
+source. Qualitative signal readings cannot bypass these rules. Orders,
+borrowing, leverage and real fills are outside this app.
 
 ## Saved evidence and verification
 

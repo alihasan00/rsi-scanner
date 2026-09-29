@@ -34,17 +34,12 @@ export function SettingsDrawer() {
   </Drawer>
 
   if (isWatchlist) return <Drawer title="Watchlist settings" open onClose={closeSettings} size={440}>
-    <Paragraph>Setups use the selected timeframe. A zone test must close before a later aligned trigger can confirm it. The trigger stays recent for four completed candles, while the live price must remain within one ATR of the zone (0.5% when ATR is unavailable).</Paragraph>
-    <Paragraph type="secondary">Trigger confirmation is an observation to review. The displayed reward/risk uses the first target before costs; higher-timeframe evidence is available in Context.</Paragraph>
+    <Paragraph>The Watchlist uses twelve paper research profiles from the crypto project: eleven read completed daily candles and the fresh weekly-level rebound reads completed four-hour candles. Each profile uses its own source frame for its signal and entry window.</Paragraph>
+    <Paragraph>Cards group every selected profile by asset. Open a card to inspect the frozen signal, source chart and plan. The latest completed close is a reference; the source paper account enters at the next whole observed 1-minute opening, after checking intervening minutes. This scanner has not verified that path or a fill.</Paragraph>
     <Divider />
-    <Text strong>RSI confirmation rules</Text>
-    <Space orientation="vertical" style={{ marginTop: 12 }}>
-      <Checkbox checked={settings.showHiddenDivergences} onChange={(event) => updateSettings({ showHiddenDivergences: event.target.checked })}>Include hidden divergences</Checkbox>
-      <Checkbox checked={settings.requireBodyAgreement} onChange={(event) => updateSettings({ requireBodyAgreement: event.target.checked })}>Require wick and body agreement</Checkbox>
-      <Checkbox checked={settings.requireSameRsiCycle} onChange={(event) => updateSettings({ requireSameRsiCycle: event.target.checked })}>Require one RSI 50 cycle</Checkbox>
-    </Space>
-    <Divider />
-    <details><summary>Fib template</summary><FibSettingsPanel /></details>
+    <Text strong>Paper plan references</Text>
+    <Paragraph style={{ marginTop: 12 }}>Donchian breakouts have an initial stop and a managed trailing exit with no fixed profit target. The cloud profiles display their original structural target; a farther exit target may be capped at net 2R after the actual slipped entry and costs are known.</Paragraph>
+    <Paragraph type="secondary">The screen models 0.20% fees + 0.10% slippage round trip (0.30% total). It does not place or track orders, and a saved signal does not establish a fill or future return.</Paragraph>
   </Drawer>
 
   if (isHarmonic) return <Drawer title="Harmonic patterns" open onClose={closeSettings} size={480}><HarmonicGuide /></Drawer>

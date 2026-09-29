@@ -1,25 +1,29 @@
 # Shared Go watchlist engine
 
-This subtree embeds the scanner and selector from the Go crypto dashboard
-release `0.13.1-26e07587190d` (upstream scan schema 12), with the local
-`+ichimoku.3` extension. The browser provides
-completed candle histories; a Web Worker executes the Go code as WebAssembly.
-There is no local server, database, AI worker, account ledger or trading action.
+This subtree embeds the scanner from Go crypto dashboard release
+`0.13.1-26e07587190d` (upstream scan schema 12). Its local extension serves
+the separate Ichimoku Cloud screen and ports the sibling crypto project's
+12 active paper research profiles, cataloged on 29 September 2026, into the
+mixed Watchlist. The browser supplies completed candle histories; a Web Worker
+executes the Go code as WebAssembly. There is no local server, database, AI
+worker, account ledger or trading action.
 
 The frozen upstream files and their SHA256 hashes are recorded in
 `provenance.json`, extracted from that release's verified `source.tar.gz`.
-The harmonic detector, regime, structure and shared selection/risk calculations
-are retained. The original production source adaptation replaces the database
-adapter's `cachefeed.BoundaryGrace` import with existing
+The harmonic detector, regime, structure and historical selection calculations
+are retained in the source tree, but the mixed Watchlist selects only the
+12 paper profiles. The original production source adaptation replaces the
+database adapter's `cachefeed.BoundaryGrace` import with existing
 `market.BoundaryGrace`; both constants are exactly five seconds. Two tests use
 the same alias adaptation. This keeps the dependency closure in Go's standard
 library. Copyright and license notices remain in the imported files; see
 `THIRD_PARTY_NOTICES.md`.
 
-The local extension adds the lecture measurement/plot contract, TK/PK Kijun
-retests and cloud edge-to-edge strategies, and improves cloud-zone retests.
-`provenance.json` preserves upstream hashes and records local amendments.
-See [source coverage and conventions](../docs/ichimoku-lecture.md).
+The dedicated Ichimoku extension adds the lecture measurement/plot contract,
+TK/PK Kijun retests and cloud edge-to-edge strategies, and improves cloud-zone
+retests. The mixed extension adds the paper roster and its source-frame plans.
+`provenance.json` preserves upstream hashes and records local amendments. See
+[the paper profile rules](../docs/watchlist.md) and [Ichimoku source coverage](../docs/ichimoku-lecture.md).
 
 ## Browser interface
 
@@ -30,12 +34,12 @@ initializes, the worker has a synchronous function:
 ```ts
 globalThis.goWatchlistScan(JSON.stringify({
   now: Date.now(),
-  scope: 'all', // optional; 'ichimoku' returns the uncapped active Ichimoku screener
+  scope: 'all', // mixed paper roster; 'ichimoku' is the separate indicator screen
   // timeframe: '4h', // Ichimoku only: one chosen chart period, default '1h'
   symbols: ['BTCUSDT'],
   histories: [{
     symbol: 'BTCUSDT',
-    timeframe: '15m', // supply 1d, 4h, 1h and 15m for each symbol
+    timeframe: '1d', // also supply 4h to evaluate the weekly rebound
     candles: [{ openTime, closeTime, open, high, low, close, volume }],
     preview: { openTime, closeTime, open, high, low, close, volume },
     receivedAt: successfulProviderReceiptInMilliseconds,
@@ -46,42 +50,52 @@ globalThis.goWatchlistScan(JSON.stringify({
 ```
 
 Timestamps are milliseconds, with inclusive Binance candle closing times.
-Supply the latest **500 completed candles plus the current provisional
-candle**. Request 501 exchange klines to obtain that window; requesting 500
-usually returns only 499 completed candles. A genuinely shorter history is
-allowed, with the original analyzer warmup rules deciding availability.
+Supply up to the latest **500 completed candles plus the current provisional
+candle** for each requested frame. Request 501 exchange klines to obtain that
+window; requesting 500 usually returns only 499 completed candles. A genuinely
+shorter history is allowed, subject to each paper family's warmup requirement.
 Unsorted, overlapping, duplicated, missing or invalid candles are not repaired.
-The provisional candle supplies only the quote and never enters indicators.
+The provisional candle can supply a live quote, but never enters indicators or
+the mixed paper plan's completed-close assessment.
 
 The adapter preserves each successful receipt timestamp. Stale input, missing
-required frames and provider errors become scanner errors. A recent receipt
+or invalid frames, and provider errors become per-frame scanner errors. A recent receipt
 does not make a missing latest candle fresh. The deployed `--max-cache-age`
 default is two minutes, retained here and returned as `maxAgeMs: 120000`.
 The selector independently requires expected latest closes and complete
-evidence on the requested frames: all four for the mixed Watchlist, or only the
-selected timeframe for the Ichimoku tab. Do not overwrite receipts on cached reads or when the
-watchlist is opened.
+evidence on a profile's own frame: `1d` for eleven mixed profiles and `4h` for
+the fresh weekly rebound. Each frame can qualify without the other. The
+dedicated Ichimoku tab requires only its selected timeframe. Do not overwrite
+receipts on cached reads or when the watchlist is opened.
 
 The returned JSON contains:
 
 ```ts
 {
-  version: '0.13.1-26e07587190d+ichimoku.3',
+  version: string, // exact local revision recorded in provenance.json
   scope: 'all', // echoed normalized scope; 'all' when omitted
   sourceHash: '26e07587190d24c66d62602e968ef24dafafb281b9b1a0140afa7f6c6d0a0d00',
   now: number,
   maxAgeMs: 120000,
   result: {
-    config, items, trends, strategies, breadth, benchmarks,
-    examined, eligible, directionFiltered, costFiltered, limit: 12,
+    config, items: [], trends: [],
+    strategies: { items: StrategyCandidate[], limit: 0, /* summaries and coverage */ },
+    breadth, benchmarks, examined, eligible, directionFiltered, costFiltered,
+    limit: 0,
   },
   scan: { series, errors, progress: { done, total } },
   error?: string,
 }
 ```
 
-`result` retains the `selection.Build` contract, including the original
-12-item limit in each section. It is absent on invalid top-level input.
+The mixed `result` retains the surrounding `selection.Result` schema but uses
+only `result.strategies.items`. Its `items` and `trends` are empty; neither the
+engine nor UI applies the old 12-item/asset cap. Candidates can have a
+`ready_for_review` plan or a blocked plan status. Every mixed candidate's
+`family` must be one of the 12 IDs in `internal/strategies/paper_catalog.go`,
+and its interval must be that family's declared `1d` or `4h` frame. `result`
+is absent on invalid top-level input.
+
 With `scope: 'ichimoku'`, `timeframe` selects one of `1m`, `3m`, `5m`, `15m`,
 `30m`, `1h`, `2h`, `4h`, `8h`, `1d`, `3d` or `1w` (default `1h` when omitted).
 `selection.BuildIchimokuTimeframe` discovers only the five Ichimoku families on
@@ -100,24 +114,51 @@ internalBias, warnings and `ichimoku` lecture readings on valid frames.
 Selected assets also carry `ichimokuSeries` chart coordinates on each frame.
 The readings distinguish current displayed spans from known forward display
 positions. Every value comes from completed scanner history; previews never
-enter Ichimoku. The UI can group the selected sources into a
-12-instrument list without promoting any excluded observation.
+enter Ichimoku. The dedicated view groups all active setups by asset, without
+a display cap.
 
-The mixed Watchlist scanner requests 500 candles, minimum harmonic geometry score 90,
-all six pattern types, both directions and all four timeframes. The original
-adaptive SuperTrend and internal/swing structure rules remain unchanged.
-Costs use the original disclosed model: 20bps fees + 10bps slippage/spread
-round trip, minimum net R/R 1, no turnover floor and no account profile.
-These are screening assumptions, not measured fees or executable quantities.
+The mixed scanner requests daily and four-hour histories and calls
+`selection.BuildPaperWatchlist`. Four daily Donchian variants, six daily cloud
+reclaim variants, daily TK cross with RSI and four-hour fresh weekly rebound
+are the only selected families. Each profile's indicators and trigger use
+completed source candles. Donchian filters are checked on the breakout close;
+cloud and TK filters are frozen at first raw eligibility, so a later favorable
+indicator cannot revive a rejected identity. The separate Ichimoku scope
+retains every timeframe in its picker, including 15m.
 
-Identical valid histories and settings produce the same engine decisions.
-Different candle windows, exchange prices or market session gaps can change
-results. The engine accepts normalized uninterrupted Spot or perpetual
-histories, but does not invent data during an equity market closure or model
-futures funding, borrow, leverage or order execution. Original bearish Spot
-instrument cautions remain part of the preserved reference model. Raw
-geometry, watch eligibility, entry confirmation and account sizing remain
-separate concepts. These rules do not establish trading profitability.
+The paper plan checks the latest completed close and frozen stop, entry band,
+target and expiry where applicable. Donchian has no fixed profit target or
+fabricated target reward/risk: it carries an initial 2-ATR stop, a non-widening
+3.5-ATR trail after completed daily closes, an exit after a close below the
+preceding 20 lows, and a 96-daily-bar maximum hold. Cloud plans expose their
+original structural target. A farther target is capped at net 2R only after
+an actual opening, adverse slippage and all-in risk are known. TK and weekly
+plans retain their frozen target and 24-source-bar maximum hold; the weekly
+entry additionally requires at least 3% raw opening-to-stop distance. The
+forward paper trial considers the next whole one-minute opening after
+observation and checks intervening minute candles for protective touches.
+This browser has only daily and four-hour source candles for mixed profiles;
+it cannot verify that minute path, an opening fill, amended trailing stop or
+realized exit from the signal card.
+
+Fixed-target plans use the reference cost model of 20bps fees plus 10bps
+slippage/spread round trip and minimum net reward/risk 1. These are screening
+assumptions, not measured fees or executable quantities. The sibling crypto
+project computes indicators over full stored contiguous history. This browser
+retains only 500 completed candles per frame, so recursive indicators and
+even the latest profile signal can differ from the source dashboard.
+Identical valid inputs produce identical native and WebAssembly decisions here;
+full source-project history parity is unavailable with this bounded feed.
+
+The source catalog calls these tested **forward paper experiments**. Its
+corrected evidence review does not establish recent profitability or readiness
+for live trading: some variants have sparse or concentrated results, short
+backtests omit borrowing and funding, and research selection reused available
+history. Those historical backtests used next daily or four-hour source-bar
+openings, so they did not test the forward trial's minute execution. The
+historical crypto results do not validate TradFi perpetuals.
+The engine does not fill equity market closures with synthetic data or model
+funding, borrow, leverage, liquidity, position sizing or order execution.
 
 ## Rebuild and verify
 

@@ -8,10 +8,9 @@ import { getGoWatchlistTimeframes } from '../lib/goWatchlistTimeframes'
 import type { GoWatchlistFrameUpdate } from '../lib/goWatchlistFeed'
 import { captureWatchlistEvaluation } from '../lib/watchlistChart'
 import type { WatchlistEvaluationInput } from '../lib/watchlistChart'
-import { getGoWatchlistCoverage, getWatchlistSeedProgress, GoWatchlistScheduler } from '../lib/goWatchlistProgress'
+import { getGoWatchlistCoverage, getWatchlistSeedProgress, GoWatchlistScheduler, isEvaluatedWatchlistSourceCurrent } from '../lib/goWatchlistProgress'
 import type { WatchlistRow } from '../lib/watchlist'
 
-const MAX_AGE_MS = 120_000
 interface State {
   identity: string; market: ScreenerMarket; rows: WatchlistRow[]; frames: GoWatchlistFrameUpdate[]
   evaluation: GoWatchlistResult['scan'] | null; evaluatedSources: readonly GoWatchlistFrameUpdate[]
@@ -57,7 +56,8 @@ export function useGoWatchlist(symbols: readonly string[], market: ScreenerMarke
     const evaluate = () => {
       if (stopped || !ready || scheduler.busy) return
       const sources = [...frames.values()]
-      const scheduled = scheduler.begin(Date.now(), getWatchlistSeedProgress(symbols, sources, timeframes))
+      const scheduled = scheduler.begin(Date.now(), getWatchlistSeedProgress(symbols, sources, timeframes,
+        scope === 'all' ? 'independent' : 'complete'))
       if (!scheduled) return
       const input = captureWatchlistEvaluation(`${identity}:${scheduled.evaluatedAt}:${scheduled.id}`, scheduled.evaluatedAt, sources)
       pending = {...scheduled, input, sources}
@@ -121,8 +121,12 @@ export function useGoWatchlist(symbols: readonly string[], market: ScreenerMarke
       current?.evaluatedSources ?? [], now, symbols.length * timeframes.length)
     // Current transport failure or expiry can withhold a published candidate;
     // the chart itself remains the immutable input bound to that Go response.
-    const unavailable = new Set(frames.filter((frame) => frame.status === 'error' || now - frame.receivedAt > MAX_AGE_MS).map((frame) => `${frame.symbol}:${frame.timeframe}`))
-    const rows = (current?.rows ?? []).filter((row) => !(row.reference?.requiredTimeframes ?? timeframes).some((tf) => unavailable.has(`${row.symbol}:${tf}`)) && isGoWatchlistRowCurrent(row, now))
+    const latest = new Map(frames.map((frame) => [`${frame.symbol}:${frame.timeframe}`, frame]))
+    const evaluated = new Map(current?.evaluatedSources.map((frame) => [`${frame.symbol}:${frame.timeframe}`, frame]) ?? [])
+    const rows = (current?.rows ?? []).filter((row) => (row.reference?.requiredTimeframes ?? timeframes).every((tf) => {
+      const key = `${row.symbol}:${tf}`
+      return isEvaluatedWatchlistSourceCurrent(latest.get(key), evaluated.get(key), now)
+    }) && isGoWatchlistRowCurrent(row, now))
     return {rows, coverage, now, feedError, evaluating: current?.evaluating ?? false,
       initialScanComplete: current?.initialScanComplete ?? symbols.length === 0, remainingInitialFrames,
       error: current?.error ?? null, evaluatedAt: current?.evaluatedAt ?? null, version: current?.version ?? null}

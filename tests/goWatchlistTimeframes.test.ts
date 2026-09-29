@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test'
 import { getGoWatchlistTimeframes, getGoWatchlistExpectedClose } from '../src/lib/goWatchlistTimeframes'
 
-test('Ichimoku fetches only the selected source, including larger timeframes', () => {
-  expect(getGoWatchlistTimeframes('all', '1w')).toEqual(['15m', '1h', '4h', '1d'])
+test('paper Watchlist fetches daily and four-hour sources while Ichimoku keeps its selected source', () => {
+  expect(getGoWatchlistTimeframes('all', '1w')).toEqual(['1d', '4h'])
   expect(getGoWatchlistTimeframes('ichimoku', '1w')).toEqual(['1w'])
   expect(getGoWatchlistTimeframes('ichimoku', '30m')).toEqual(['30m'])
   expect(getGoWatchlistTimeframes('ichimoku', '15m')).toEqual(['15m'])

@@ -5,16 +5,32 @@ import type { WatchlistRow, WatchlistStatus } from './watchlist'
 import { getWatchlistDisplayStatus } from './watchlistInstruments'
 import type { WatchlistInstrument, WatchlistInstrumentFilters } from './watchlistInstruments'
 import { getEvaluatedChartFrames } from './watchlistChart'
-import type { WatchlistChartEvent, WatchlistChartEvidence, WatchlistChartPoint, WatchlistChartSnapshot, WatchlistEvaluationInput } from './watchlistChart'
+import type { WatchlistChartEvent, WatchlistChartSnapshot, WatchlistEvaluationInput } from './watchlistChart'
 import type { IchimokuLectureSnapshot, IchimokuPoint } from './watchlistIchimoku'
-import { GO_WATCHLIST_TIMEFRAMES, getGoWatchlistExpectedClose, getGoWatchlistTimeframes } from './goWatchlistTimeframes'
+import { getGoWatchlistExpectedClose, getGoWatchlistTimeframes } from './goWatchlistTimeframes'
 import type { GoWatchlistScope } from './goWatchlistTimeframes'
 
-export const GO_SHORTLIST_LIMIT = 12
 export type { GoWatchlistScope } from './goWatchlistTimeframes'
 const ICHIMOKU_FAMILIES = new Set(['kijun_reclaim', 'cloud_reclaim', 'tk_cross', 'pk_cross', 'cloud_edge_to_edge'])
+const PAPER_PROFILES = new Map<string, {name: string; timeframe: Timeframe}>([
+  ['donchian55_atr_trail', {name: '55-bar trend breakout', timeframe: '1d'}],
+  ['donchian55_atr_trail_stoch', {name: '55-bar breakout · Stochastic', timeframe: '1d'}],
+  ['donchian55_atr_trail_macd', {name: '55-bar breakout · MACD', timeframe: '1d'}],
+  ['donchian55_atr_trail_adx_range', {name: '55-bar breakout · low ADX', timeframe: '1d'}],
+  ['cloud_reclaim_volume_2r', {name: 'Cloud reclaim · volume + 2R cap', timeframe: '1d'}],
+  ['cloud_reclaim_volume_2r_ema', {name: 'Cloud reclaim · volume + EMA + 2R cap', timeframe: '1d'}],
+  ['cloud_reclaim_volume_2r_sma', {name: 'Cloud reclaim · volume + SMA + 2R cap', timeframe: '1d'}],
+  ['cloud_reclaim_volume_2r_supertrend', {name: 'Cloud reclaim · volume + Supertrend + 2R cap', timeframe: '1d'}],
+  ['cloud_reclaim_volume_2r_ao', {name: 'Cloud reclaim · volume + AO + 2R cap', timeframe: '1d'}],
+  ['cloud_reclaim_volume_2r_sma_ema_macd', {name: 'Cloud reclaim · volume + SMA/EMA/MACD + 2R cap', timeframe: '1d'}],
+  ['fresh_weekly_range_long', {name: 'Fresh weekly-level rebound', timeframe: '4h'}],
+  ['tk_cross_rsi', {name: 'Tenkan / Kijun cross · RSI', timeframe: '1d'}],
+])
 export function isIchimokuSetup(row: WatchlistRow): boolean {
   return row.source === 'strategy' && ICHIMOKU_FAMILIES.has(row.reference?.strategyFamily ?? '')
+}
+function isPaperProfile(row: WatchlistRow): boolean {
+  return row.source === 'strategy' && PAPER_PROFILES.get(row.reference?.strategyFamily ?? '')?.timeframe === row.timeframe
 }
 export interface GoPlan {
   status: string; entry: number | null; stop: number | null; target: number | null
@@ -82,7 +98,7 @@ function chartEvent(kind: WatchlistChartEvent['kind'], label: string, timeframe:
     ...(typeof range?.high === 'number' && Number.isFinite(range.high) ? {high: range.high} : {})}]
 }
 
-/** Presentation only: the frozen Go engine owns detection and every eligibility decision. */
+/** Presentation only: the Go engine owns detection and every eligibility decision. */
 export function adaptGoWatchlist(output: GoWatchlistResult, market: ScreenerMarket, input?: WatchlistEvaluationInput): WatchlistRow[] {
   if (output.error) throw new Error(output.error)
   if (!output.version || output.maxAgeMs !== 120_000 || !Array.isArray(output.scan?.series)
@@ -98,10 +114,10 @@ export function adaptGoWatchlist(output: GoWatchlistResult, market: ScreenerMark
     direction: WatchlistRow['direction']; status: WatchlistStatus; nativeStatus: string; statusLabel: string
     price: number; zone: {low: number; high: number}; distanceAtr: number | null; entry: number | null
     confirmedAt: number | null; reason: string; next: string; caution: string; plan: GoPlan; mode: string
-    chart: ChartGeometry; strategyFamily?: string
+    chart: ChartGeometry; strategyFamily?: string; entryMin?: number | null; entryMax?: number | null
   }) => {
     if (scoped && (data.source !== 'strategy' || !ICHIMOKU_FAMILIES.has(data.strategyFamily ?? '') || data.timeframe !== output.timeframe)) return
-    const relevant = getGoWatchlistTimeframes(scoped ? 'ichimoku' : 'all', output.timeframe)
+    const relevant = scoped ? getGoWatchlistTimeframes('ichimoku', output.timeframe) : [data.timeframe]
     const frames = output.scan.series.filter((frame) => frame.symbol === data.symbol && relevant.includes(frame.interval))
     const frame = frames.find((item) => item.interval === data.timeframe)
     const requiredTimeframes = relevant
@@ -110,6 +126,13 @@ export function adaptGoWatchlist(output: GoWatchlistResult, market: ScreenerMark
     const referenceDistance = finite(data.entry) && data.entry > 0 ? Math.abs(data.price - data.entry) / data.price * 100 : null
     const confirmationExpired = data.plan.status === 'confirmation_expired'
     const status = confirmationExpired ? 'waiting' : activePlan.has(data.plan.status) ? data.status : 'blocked'
+    const next = confirmationExpired
+      ? 'The confirmation window has expired. Wait for a fresh completed-candle trigger, then reassess the reference plan.'
+      : !scoped && status === 'blocked'
+        ? data.plan.status === 'expired'
+          ? 'The paper entry window has ended. Wait for a new completed source signal before considering another plan.'
+          : 'This paper plan is blocked at the saved evaluation. Reassess it after a new completed source candle; no opening entry is indicated.'
+        : data.next
     const cautions = [data.caution, ...data.plan.reasons, data.plan.invalidation, data.plan.management,
       ...(market === 'tradfi' ? ['These are USDT perpetual contracts. The stated cost allowance is a screening assumption; funding, spread, depth and actual fees are not verified.'] : [])].filter(Boolean)
     const chartFrames = getEvaluatedChartFrames(matchingInput, data.symbol, frames)
@@ -133,9 +156,9 @@ export function adaptGoWatchlist(output: GoWatchlistResult, market: ScreenerMark
       source: data.source, name: data.name, direction: data.direction, status, price: data.price, zone: data.zone,
       stop: data.plan.stop, target: data.plan.target, riskReward: data.plan.grossRR,
       distancePercent: referenceDistance, distanceAtr: data.distanceAtr, confirmedAt: data.confirmedAt,
-      asOf: frame.lastClosedAt, updatedAt: Math.min(...readyFrames.filter((item) => requiredTimeframes.includes(item.interval)).map((item) => item.observedAt)),
+      asOf: frame.lastClosedAt, updatedAt: frame.observedAt,
       reason: data.reason,
-      next: confirmationExpired ? 'The confirmation window has expired. Wait for a fresh completed-candle trigger, then reassess the reference plan.' : data.next,
+      next,
       cautions: [...new Set(cautions)], evidence: [], families: [], conflict: false,
       reference: {
         engineVersion: output.version, maxAgeMs: output.maxAgeMs, nativeStatus: data.nativeStatus,
@@ -144,101 +167,58 @@ export function adaptGoWatchlist(output: GoWatchlistResult, market: ScreenerMark
         statusLabel: confirmationExpired ? 'Confirmation expired' : status === 'blocked' ? humanize(data.plan.status) : data.statusLabel,
         mode: data.mode, planStatus: data.plan.status, netRiskReward: data.plan.netRR,
         feeBps: data.plan.feeBps, slippageBps: data.plan.slippageBps, minNetRR: data.plan.minNetRR,
-        entry: data.entry, planEntry: data.plan.entry, chart, expiresAt: data.plan.expiresAt,
-        distanceLabel: finite(data.distanceAtr) ? `${data.distanceAtr.toFixed(2)} ATR from ${data.source === 'trend' ? 'pullback' : 'entry'}` : 'Entry distance unavailable',
+        entry: data.entry, planEntry: data.plan.entry, entryMin: data.entryMin ?? null, entryMax: data.entryMax ?? null,
+        chart, expiresAt: data.plan.expiresAt,
+        distanceLabel: finite(data.distanceAtr) ? `${data.distanceAtr.toFixed(2)} ATR from ${scoped ? 'entry' : 'signal reference'}`
+          : scoped ? 'Entry distance unavailable' : 'Signal distance unavailable',
         frames: readyFrames.map((item) => ({timeframe: item.interval, trend: item.trend, structure: item.internalBias, asOf: item.lastClosedAt})),
       },
     })
   }
-  for (const candidate of output.result.items) {
-    const { setup, plan } = candidate
-    const pattern = setup.pattern
-    const confirmation = setup.decision.confirmation
-    const points: WatchlistChartPoint[] = (['x', 'a', 'b', 'c', 'd'] as const).flatMap((label) => {
-      const point = pattern[label]
-      return point && timestamp(point.time) && Number.isFinite(point.price)
-        ? [{label: label.toUpperCase(), timeframe: setup.interval, time: point.time, price: point.price}] : []
-    })
-    const evidence: WatchlistChartEvidence[] = (setup.decision.reasons ?? []).map((item) => ({label: humanize(item.code), detail: item.detail, ...(item.interval ? {timeframe: item.interval} : {})}))
-    if (typeof pattern.score === 'number') evidence.unshift({label: 'Geometry score', detail: `${pattern.score.toFixed(1)} / 100 · pattern fit, not a win probability.`})
-    if (pattern.levelsBasedOn) evidence.push({label: 'Pattern references', detail: humanize(pattern.levelsBasedOn), ...(timestamp(pattern.levelsEstablishedAt) ? {time: pattern.levelsEstablishedAt} : {})})
-    if (pattern.target1 !== undefined && plan.target !== null && pattern.target1 !== plan.target) evidence.push({label: 'Effective first target', detail: `The selected plan uses ${plan.target}; the original pattern target is ${pattern.target1}. The chart shows the selected plan's target.`})
-    const confirmed = plan.status === 'ready_for_review'
-    create({
-      id: setup.pattern.id, symbol: setup.symbol, timeframe: setup.interval, source: 'harmonic',
-      name: `${humanize(setup.pattern.kind)} · ${setup.interval}`, direction: setup.pattern.direction,
-      status: confirmed ? 'confirmed' : 'approaching', nativeStatus: plan.status,
-      statusLabel: confirmed ? 'D + 15m confirmed' : setup.pattern.stage === 'confirmed' ? 'Awaiting 15m trigger' : 'Awaiting D confirmation',
-      price: plan.entry ?? setup.price, zone: setup.pattern.zone, entry: setup.pattern.entry,
-      distanceAtr: candidate.entryDistanceATR, confirmedAt: confirmed ? setup.decision.confirmation.event?.confirmedAt ?? null : null,
-      reason: candidate.reason, next: candidate.next, caution: candidate.caution, plan, mode: humanize(candidate.mode),
-      chart: {points, events: [
-        ...chartEvent('detected', 'Setup detected', setup.interval, pattern.detectedAt, null),
-        ...chartEvent('entry-touch', 'Entry reference touched', setup.interval, pattern.entryTouchedAt, pattern.entry),
-        ...(pattern.d ? chartEvent('confirmation', 'D pivot confirmed', setup.interval, pattern.confirmedAt, pattern.d.price) : []),
-        ...chartEvent('trigger', `${confirmation.event?.type ?? 'Structure'} confirmation`, confirmation.interval ?? '15m', confirmation.event?.confirmedAt, confirmation.event?.level),
-      ], evidence, notes: pattern.d === null ? ['D is still projected. The chart shows confirmed pivots and the reversal zone.'] : []},
-    })
-  }
-  for (const trend of output.result.trends) {
-    create({
-      id: String(trend.breakConfirmedAt), symbol: trend.symbol, timeframe: trend.interval, source: 'trend',
-      name: `Trend pullback · ${trend.interval}`, direction: trend.direction,
-      status: trend.plan.status === 'ready_for_review' ? 'confirmed' : trend.status === 'retest_seen' ? 'testing' : trend.status === 'near_retest' ? 'approaching' : 'waiting',
-      nativeStatus: trend.status, statusLabel: humanize(trend.status), price: trend.price,
-      zone: {low: trend.pullbackLevel, high: trend.pullbackLevel}, entry: trend.pullbackLevel,
-      distanceAtr: trend.distanceATR, confirmedAt: trend.triggerClosedAt, reason: trend.reason,
-      next: trend.next, caution: trend.caution, plan: trend.plan, mode: '1d context · 4h / 1h trend thesis',
-      chart: {points: [], events: [
-        ...chartEvent('break', `${trend.breakType ?? 'Structure'} break`, '1h', trend.breakConfirmedAt, trend.pullbackLevel),
-        ...chartEvent('retest', 'Closed retest', '15m', trend.retestClosedAt, trend.pullbackLevel, {low: trend.retestLow, high: trend.retestHigh}),
-        ...chartEvent('trigger', 'Entry follow-through', '15m', trend.triggerClosedAt, trend.triggerPrice),
-      ], evidence: [{label: 'Trend thesis', detail: trend.reason, timeframe: trend.interval}], notes: []},
-    })
-  }
   for (const candidate of output.result.strategies.items) {
     const opportunity = candidate.opportunity
+    const profile = scoped ? undefined : PAPER_PROFILES.get(opportunity.family)
+    if (!scoped && (!profile || profile.timeframe !== opportunity.interval || opportunity.state !== 'entry_confirmed')) continue
     const entry = opportunity.entryReference ?? opportunity.level
+    const confirmed = candidate.eligible && candidate.plan.status === 'ready_for_review'
     create({
       id: opportunity.id, symbol: opportunity.symbol, timeframe: opportunity.interval, source: 'strategy',
       strategyFamily: opportunity.family,
-      name: `${humanize(opportunity.family)} · ${opportunity.interval}`, direction: opportunity.direction,
-      status: candidate.eligible && candidate.plan.status === 'ready_for_review' ? 'confirmed' : opportunity.state === 'awaiting_confirmation' ? 'testing' : 'waiting',
-      nativeStatus: candidate.status, statusLabel: candidate.eligible ? 'Entry confirmed' : humanize(candidate.status),
+      entryMin: opportunity.entryMin, entryMax: opportunity.entryMax,
+      name: `${profile?.name ?? humanize(opportunity.family)} · ${opportunity.interval}`, direction: opportunity.direction,
+      status: confirmed ? 'confirmed' : scoped && opportunity.state === 'awaiting_confirmation' ? 'testing' : scoped ? 'waiting' : 'blocked',
+      nativeStatus: candidate.status, statusLabel: scoped
+        ? candidate.eligible ? 'Entry confirmed' : humanize(candidate.status)
+        : confirmed ? 'Signal confirmed' : humanize(candidate.status),
       price: candidate.price, zone: {low: opportunity.zoneLow ?? opportunity.level, high: opportunity.zoneHigh ?? opportunity.level}, entry,
       distanceAtr: finite(opportunity.referenceAtr) && opportunity.referenceAtr > 0 ? Math.abs(candidate.price - entry) / opportunity.referenceAtr : null,
       confirmedAt: opportunity.triggerAt, reason: candidate.reason, next: opportunity.next,
-      caution: opportunity.caution, plan: candidate.plan, mode: 'Independent method · experimental',
+      caution: opportunity.caution, plan: candidate.plan, mode: scoped ? 'Independent method · experimental' : 'Paper research profile',
       chart: {points: [], events: [
         ...chartEvent('source', 'Location available', opportunity.interval, opportunity.locationAvailableAt, opportunity.level),
         ...chartEvent('detected', 'Setup detected', opportunity.interval, opportunity.availableAt, opportunity.level),
         ...chartEvent('retest', 'Closed retest', opportunity.interval, opportunity.retestAt, null),
-        ...chartEvent('trigger', 'Entry confirmed', opportunity.interval, opportunity.triggerAt, opportunity.entryReference),
+        ...chartEvent('trigger', scoped ? 'Entry confirmed' : 'Paper signal confirmed', opportunity.interval, opportunity.triggerAt, opportunity.entryReference),
       ], ...(timestamp(opportunity.sourceStartAt) && timestamp(opportunity.sourceEndAt) ? {sourceWindow: {
         timeframe: opportunity.interval, startTime: opportunity.sourceStartAt, endTime: opportunity.sourceEndAt,
-      }} : {}), evidence: [{label: 'Method evidence', detail: opportunity.reason ?? candidate.reason, timeframe: opportunity.interval}],
-      notes: ['The chart shows the method’s frozen source window, location and events.',
+      }} : {}), evidence: [{label: scoped ? 'Method evidence' : 'Profile evidence', detail: opportunity.reason ?? candidate.reason, timeframe: opportunity.interval}],
+      notes: [scoped ? 'The chart shows the method’s frozen source window, location and events.'
+        : 'The chart shows the source signal and original references. The source paper account uses the next whole observed one-minute opening; this scan has no intervening minute path, fill or managed exit.',
         ...(timestamp(opportunity.retestAt) ? ['The retest candle is recorded; its exact retest price was not supplied.'] : [])]},
     })
   }
   return rows
 }
 
-/** One asset across methods AND timeframes. The cap never admits a rejected detector row. */
+/** Keep Go's selected profile order, grouping every selected variant by asset. */
 export function selectGoWatchlist(rows: readonly WatchlistRow[], now: number, filters: WatchlistInstrumentFilters & {stage?: 'all' | 'confirmed' | 'developing'; scope?: GoWatchlistScope; timeframe?: Timeframe} = {}): WatchlistInstrument[] {
   const query = (filters.search ?? '').toUpperCase().replace(/[\s/_-]/g, '')
   const groups = new Map<string, WatchlistRow[]>()
-  // Each source arrives ranked by Go. Interleave the three source lists without
-  // re-ranking their candidates by a different browser-side scoring system.
-  const sources = ['harmonic', 'trend', 'strategy'] as const
-  // Scope before grouping so other methods cannot leak into detail tabs,
-  // opposing-direction counts or portable reviews for this indicator.
-  const scopedRows = filters.scope === 'ichimoku' ? rows.filter((row) => isIchimokuSetup(row) && (!filters.timeframe || row.timeframe === filters.timeframe)) : rows
-  const lanes = sources.map((source) => scopedRows.filter((row) => row.source === source))
-  const ordered: WatchlistRow[] = []
-  for (let index = 0; lanes.some((lane) => index < lane.length); index++) {
-    for (const lane of lanes) if (lane[index]) ordered.push(lane[index])
-  }
+  // Apply scope before grouping so unrelated detector inventory cannot leak
+  // into detail tabs, opposing-direction counts or portable reviews.
+  const ordered = filters.scope === 'ichimoku'
+    ? rows.filter((row) => isIchimokuSetup(row) && (!filters.timeframe || row.timeframe === filters.timeframe))
+    : rows.filter(isPaperProfile)
   for (const row of ordered) {
     if (query && !row.symbol.toUpperCase().includes(query) || filters.starredOnly && !filters.starredSymbols?.has(row.symbol)) continue
     const id = `${row.market}:${row.symbol}`
@@ -262,7 +242,7 @@ export function selectGoWatchlist(rows: readonly WatchlistRow[], now: number, fi
   }
   const ranks = new Map(ordered.map((row, index) => [row.id, index]))
   instruments.sort((a, b) => ranks.get(a.lead.id)! - ranks.get(b.lead.id)!)
-  return filters.scope === 'ichimoku' ? instruments : instruments.slice(0, GO_SHORTLIST_LIMIT)
+  return instruments
 }
 
 /** Withhold an old evaluation at a close/expiry boundary; only Go can readmit it. */
@@ -270,7 +250,7 @@ export function isGoWatchlistRowCurrent(row: WatchlistRow, now: number): boolean
   const reference = row.reference
   if (!reference || getWatchlistDisplayStatus(row, now) === 'delayed') return false
   if (reference.planStatus === 'ready_for_review' && reference.expiresAt !== null && now >= reference.expiresAt) return false
-  const required = reference.requiredTimeframes ?? GO_WATCHLIST_TIMEFRAMES
+  const required = reference.requiredTimeframes ?? [row.timeframe]
   if (!required.length || required.some((tf) => reference.frames.filter((frame) => frame.timeframe === tf).length !== 1)) return false
   return required.every((timeframe) => {
     const frame = reference.frames.find((item) => item.timeframe === timeframe)

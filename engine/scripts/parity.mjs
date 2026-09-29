@@ -6,8 +6,8 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { engineDirectory, verifyArtifacts } from './verify.mjs'
 
-// Compare the deployed artifact with native Go, including lecture observations,
-// selected opportunities, provisional-candle exclusion and invalid input.
+// Compare the deployed artifact with native Go, including paper profiles,
+// dedicated lecture observations, provisional-candle exclusion and invalid input.
 const manifest = verifyArtifacts()
 const workspace = mkdtempSync(resolve(tmpdir(), 'watchlist-parity-'))
 const native = resolve(workspace, 'watchlist-native')
@@ -35,6 +35,14 @@ try {
         return { openTime, closeTime: openTime + duration - 1, open: price,
           high: price + 2, low: price - 2, close: price + (symbolIndex ? -.3 : .3), volume: 1000 + i % 20 * 50 }
       })
+      if (symbol === 'BULLUSDT' && timeframe === '1d') {
+        const priorHigh = Math.max(...candles.slice(-56, -1).map((bar) => bar.high))
+        const signal = candles.at(-1)
+        signal.open = priorHigh - .5
+        signal.low = priorHigh - 1
+        signal.close = priorHigh + 1
+        signal.high = priorHigh + 1.5
+      }
       const last = candles.at(-1)
       request.histories.push({ symbol, timeframe, candles,
         preview: { ...last, openTime: last.openTime + duration, closeTime: last.closeTime + duration },
@@ -46,6 +54,24 @@ try {
   const invalid = structuredClone(request)
   invalid.histories[0].candles[10].closeTime--
   const lecture = JSON.parse(readFileSync(resolve(engineDirectory, 'internal/browserengine/testdata/ichimoku-selection.json'), 'utf8'))
+  const cloudBars = Array.from({ length: 500 }, (_, i) => {
+    const openTime = Math.floor(now / 86_400_000) * 86_400_000 - (500 - i) * 86_400_000
+    return { openTime, closeTime: openTime + 86_400_000 - 1,
+      open: 100, high: 102, low: 98, close: 100, volume: 10 }
+  })
+  const cloudSet = (at, open, high, low, close) => Object.assign(cloudBars[500 - 162 + at], { open, high, low, close })
+  cloudSet(15, 100, 125, 98, 100)
+  for (let at = 110; at < 133; at++) cloudSet(at, 109, 110, 108, 109)
+  cloudSet(159, 109, 110, 108, 109)
+  cloudSet(160, 109, 115, 108, 114)
+  cloudSet(161, 114, 115, 111, 114)
+  const paperCloud = { now, symbols: ['CLOUDUSDT'], histories: [{ symbol: 'CLOUDUSDT', timeframe: '1d', candles: cloudBars,
+    preview: { ...cloudBars.at(-1), openTime: cloudBars.at(-1).openTime + 86_400_000,
+      closeTime: cloudBars.at(-1).closeTime + 86_400_000 },
+    receivedAt: now - 30000, status: 'ready', error: null }] }
+  const exactClose = structuredClone(paperCloud)
+  exactClose.now = exactClose.histories[0].candles.at(-1).closeTime
+  exactClose.histories[0].receivedAt = exactClose.now
   const scoped = { ...lecture, scope: 'ichimoku' }
   const scopedEdge = { ...lecture, scope: 'ichimoku', timeframe: '4h' }
   const scopedMany = { now: lecture.now, scope: 'ichimoku', symbols: [], histories: [] }
@@ -84,7 +110,13 @@ try {
   opposite.preview = { ...opposite.preview, open: 10, high: 11, low: 1, close: 2 }
   opposingFifteenMinute.histories.push(opposite)
   let baseline
-  for (const [name, fixture] of [['both directions', request], ['changed preview', previewChanged], ['lecture entries', lecture],
+  const paperFamilies = ['donchian55_atr_trail', 'donchian55_atr_trail_stoch', 'donchian55_atr_trail_macd',
+    'donchian55_atr_trail_adx_range', 'cloud_reclaim_volume_2r', 'cloud_reclaim_volume_2r_ema',
+    'cloud_reclaim_volume_2r_sma', 'cloud_reclaim_volume_2r_supertrend', 'cloud_reclaim_volume_2r_ao',
+    'cloud_reclaim_volume_2r_sma_ema_macd', 'fresh_weekly_range_long', 'tk_cross_rsi']
+  for (const [name, fixture] of [['daily breakout', request], ['changed preview', previewChanged],
+    ['daily cloud without four-hour source', paperCloud], ['paper candle at exact close', exactClose],
+    ['legacy lecture data in mixed scope', lecture],
     ['Ichimoku scope', scoped], ['Ichimoku edge scope', scopedEdge], ['Ichimoku scope beyond 12 assets', scopedMany], ...chosenFrames,
     ['unrelated failed history', unrelatedFailure], ['failed optional fifteen-minute history', failedFifteenMinute],
     ['opposing optional fifteen-minute quote', opposingFifteenMinute], ['unknown scope', unknownScope],
@@ -96,15 +128,37 @@ try {
     assert.equal(wasmOutput.version, manifest.release)
     assert.equal(wasmOutput.scope, fixture?.scope === 'ichimoku' ? 'ichimoku' : 'all')
     assert.equal(wasmOutput.timeframe, fixture?.scope === 'ichimoku' ? fixture.timeframe || '1h' : undefined)
-    if (name === 'both directions') {
-      assert.equal(wasmOutput.scan.series.length, 8)
+    if (wasmOutput.result && wasmOutput.scope === 'all') {
+      assert.equal(wasmOutput.result.items.length, 0)
+      assert.equal(wasmOutput.result.trends.length, 0)
+      assert.equal(wasmOutput.result.strategies.limit, 0)
+      assert.deepEqual(wasmOutput.result.strategies.summary.map((summary) => summary.family), paperFamilies)
+      assert(wasmOutput.result.strategies.items.every((item) => paperFamilies.includes(item.opportunity.family)
+        && ['1d', '4h'].includes(item.opportunity.interval)), `Legacy or misplaced setup in mixed watchlist: ${name}`)
+    }
+    if (name === 'daily breakout') {
+      assert.equal(wasmOutput.scan.series.length, 4)
       assert(wasmOutput.scan.series.every((series) => series.ichimoku?.status === 'ready'))
+      const donchian = wasmOutput.result.strategies.items.find((item) => item.opportunity.family === 'donchian55_atr_trail')
+      assert(donchian?.eligible && donchian.plan.target === null, 'Missing target-free daily breakout')
       baseline = wasmOutput
     } else if (name === 'changed preview') {
       assert.deepEqual(wasmOutput.scan.series.map((series) => series.ichimoku), baseline.scan.series.map((series) => series.ichimoku), 'Preview altered lecture observations')
-    } else if (name === 'lecture entries' || fixture?.scope === 'ichimoku') {
-      const expectedFamilies = name === 'lecture entries' ? ['tk_cross', 'pk_cross', 'cloud_edge_to_edge']
-        : name === 'Ichimoku edge scope' ? ['cloud_edge_to_edge'] : ['tk_cross', 'pk_cross']
+    } else if (name === 'daily cloud without four-hour source') {
+      assert.equal(wasmOutput.scan.errors.length, 1)
+      assert.equal(wasmOutput.scan.errors[0].interval, '4h')
+      const cloud = wasmOutput.result.strategies.items.find((item) => item.opportunity.family === 'cloud_reclaim_volume_2r')
+      assert(cloud?.eligible && cloud.opportunity.target === 125 && cloud.plan.target === 125,
+        'Missing daily cloud or its original structural target')
+    } else if (name === 'paper candle at exact close') {
+      assert.equal(wasmOutput.scan.errors.length, 2)
+      assert(wasmOutput.scan.errors.some((error) => error.interval === '1d'
+        && error.error.includes('before the paper evaluation time')))
+      assert.equal(wasmOutput.result.strategies.items.length, 0)
+    } else if (name === 'legacy lecture data in mixed scope') {
+      assert.equal(wasmOutput.scan.series.length, 2)
+    } else if (fixture?.scope === 'ichimoku') {
+      const expectedFamilies = name === 'Ichimoku edge scope' ? ['cloud_edge_to_edge'] : ['tk_cross', 'pk_cross']
       for (const family of expectedFamilies) {
         for (const symbol of fixture.symbols) {
           assert(wasmOutput.result.strategies.items.some((item) => item.opportunity.symbol === symbol && item.opportunity.family === family && item.plan.status === 'ready_for_review'), `Missing selected lecture family: ${symbol}/${family}`)

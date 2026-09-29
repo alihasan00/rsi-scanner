@@ -1,6 +1,6 @@
 {
   "upstreamRepository": "https://github.com/alihasan00/crypto",
-  "release": "0.13.1-26e07587190d+ichimoku.3",
+  "release": "0.13.1-26e07587190d+ichimoku.3.watchlist.2",
   "sourceHash": "26e07587190d24c66d62602e968ef24dafafb281b9b1a0140afa7f6c6d0a0d00",
   "schemaVersion": "12",
   "archiveSha256": "4881028a24f4045a4cfc16b03c632c98b9fa032d3cedf59bc55ea4664a7d06f8",
@@ -463,17 +463,17 @@
     },
     {
       "path": "internal/browserengine/engine.go",
-      "sha256": "b745629a6fc20f1b1600b89f224749fdf64e559a7330b3200a8d1831c2932eff",
+      "sha256": "fef67a1c4b610fdd519e939b39eaeccee1cefee0b5cbec208c6c141c4c46607a",
       "provenance": "Local watchlist adapter or Ichimoku lecture extension and its regression fixtures; not part of the upstream archive."
     },
     {
       "path": "internal/browserengine/engine_test.go",
-      "sha256": "d782c144d7e01817a9186a6b062f7568af1b7bfcdfecf40848c368fc4ae32a7c",
+      "sha256": "143abdd1c4bca319144e5b3dc8a0be5a59f35725fa101cadb20e1d18d16db60c",
       "provenance": "Local watchlist adapter or Ichimoku lecture extension and its regression fixtures; not part of the upstream archive."
     },
     {
       "path": "internal/browserengine/ichimoku_test.go",
-      "sha256": "d494ff91fabecbcd43abf60122e509bb2e4b7679c5fa36a420a0693c5c24aef4",
+      "sha256": "1fada6a7050f4383cbd1380915eb2642d46faa104be3045e88ecf6633c371c0d",
       "provenance": "Local watchlist adapter or Ichimoku lecture extension and its regression fixtures; not part of the upstream archive."
     },
     {
@@ -513,7 +513,7 @@
     },
     {
       "path": "internal/browserengine/scope_test.go",
-      "sha256": "c1c433de5204851a1a4717eaa4b5350e7251408be5c3a270ba47a9e41c37818e",
+      "sha256": "46059289ea3f74f1c99b78e8a667208b0dc2fbae4979a7bc29337366116211db",
       "provenance": "Local dedicated Ichimoku scope regression coverage; not part of the upstream archive."
     },
     {
@@ -535,10 +535,165 @@
       "path": "internal/strategies/ichimoku_timeframe_test.go",
       "sha256": "43ba6b6c87cfc8f1625f1eb70f1de598edb93dc5f9708d0924086427b2ebd6fa",
       "provenance": "Local selected-timeframe Ichimoku implementation and regression coverage; not part of the upstream archive."
+    },
+    {
+      "path": "internal/selection/watchlist_timeframes.go",
+      "sha256": "55f45fe54f7125be8f23fe72950fc91ef3ff82dc469a4e77c399700a08035e73",
+      "provenance": "Local mixed Watchlist timeframe selection and regression coverage; not part of the upstream archive."
+    },
+    {
+      "path": "internal/selection/watchlist_timeframes_test.go",
+      "sha256": "6600d68852f7ed302e31ea09db50209bdedc83d90d31d2268c62004d917152f5",
+      "provenance": "Local mixed Watchlist timeframe selection and regression coverage; not part of the upstream archive."
+    },
+    {
+      "path": "internal/browserengine/watchlist_timeframes_test.go",
+      "sha256": "d833774617b9b7693bc3c1137e52dc9527840008a2698e52f9af8a454d2ce148",
+      "provenance": "Local mixed Watchlist timeframe selection and regression coverage; not part of the upstream archive."
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "sha256": "39b023b144de77956601155c86090de7e34693e7bd2b4ea95a3dd581e4874acc",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
+    },
+    {
+      "path": "scripts/parity.mjs",
+      "sha256": "7532aa7cfb8139af70f04e91bcffa2fdcc92156167aba40e3081f716cd6ef262",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
+    },
+    {
+      "path": "internal/selection/paper_watchlist.go",
+      "sha256": "e9e1641af3fc368eb1fa9d2a0e7ccae4bb1f675fcaafde02acafe859d1862441",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
+    },
+    {
+      "path": "internal/selection/paper_watchlist_test.go",
+      "sha256": "16e62d0278b5554cbbc64e9bfe33e1f6d1fb3ebd4435dded153747d0f49adc8e",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
+    },
+    {
+      "path": "internal/strategies/paper_catalog.go",
+      "sha256": "8aecdc9b24bb269e50e8de7e011b08b5d0d86ca2f97c330e943417ad9fb09492",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
+    },
+    {
+      "path": "internal/strategies/paper_donchian.go",
+      "sha256": "f442aacebadc473d4588cb6f2bd0aa38232e0de912bd036815c9a098595ac646",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
+    },
+    {
+      "path": "internal/strategies/paper_donchian_test.go",
+      "sha256": "4e604c8709c39e4c8023cb13f3ece4d3fc71bab768a2b8ebb49bf8d3d664dfb2",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
+    },
+    {
+      "path": "internal/strategies/paper_features.go",
+      "sha256": "3f7c10ad9b4aa7c1c921790c4c5c48fa1d5f38cda0a105b125a54751781ac8c4",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
+    },
+    {
+      "path": "internal/strategies/paper_features_test.go",
+      "sha256": "8122bc7a7c523779671bdbc9afcf35ef94525d648348b561b0b32e1eade2cdac",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
+    },
+    {
+      "path": "internal/strategies/paper_ichimoku.go",
+      "sha256": "174d00612cdb5e70f38319109d8d3e746f40dff598fde7e71d05c7800bfa1684",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
+    },
+    {
+      "path": "internal/strategies/paper_ichimoku_test.go",
+      "sha256": "4f20ef21bfed4f24c208ff9b7f1c5858c4777876eb4860104c36e823704c066c",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
+    },
+    {
+      "path": "internal/strategies/paper_plan.go",
+      "sha256": "5a70f51a02677d2e76fed21fa1242a7d855757171a6c4d0fbd4c0df27f234a9d",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
+    },
+    {
+      "path": "internal/strategies/paper_plan_test.go",
+      "sha256": "3e115195a56acb7086a15b04e5bf20428604f4f017a7793aa0fbbdf77b74d53d",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
+    },
+    {
+      "path": "internal/strategies/paper_weekly.go",
+      "sha256": "f99fcc372a2fea109054e6ab7275c908d5b6fe7be7e60921f5faa515e2ae29a7",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
+    },
+    {
+      "path": "internal/strategies/paper_weekly_test.go",
+      "sha256": "998161da5188c280ff9e91abfabd19d094da0a82f6b64584f470cc97a81ecc32",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
+    },
+    {
+      "path": "internal/strategies/testdata/native_weekly_frozen_range.json",
+      "sha256": "35c0ddd08622d41b1b161df01ed92e14810ebcaef2e62cb380d3623be35c2bc7",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
+    },
+    {
+      "path": "internal/strategies/testdata/signal_forge_states.json",
+      "sha256": "319d9699b8df0ca3f509efbeb87f77be7527d3ff9bc4a83a4dc8ca1175e2415a",
+      "provenance": "Local paper Watchlist port, source-derived fixture, parity check or notice; not part of the frozen Go archive."
     }
   ],
   "upstreamRelease": "0.13.1-26e07587190d",
-  "localRevision": "ichimoku-timeframes-v3",
-  "browserSchemaVersion": 4,
-  "localChanges": "Lecture 103 measurement and plot contract, TK/PK crosses, cloud edge-to-edge, current Kijun/cloud retests. Shared data freshness and risk/cost checks retained. See docs/ichimoku-lecture.md. Dedicated Ichimoku scope filters active families before ranking and removes mixed-watchlist caps; default all scope retains original selection. Dedicated Ichimoku accepts all twelve picker timeframes and uses only the selected source for discovery, readiness, entry and stop/target lifecycle. Weekly candles retain Monday UTC alignment and three-day candles retain the exchange phase; mixed Watchlist behavior is preserved."
+  "localRevision": "ichimoku-timeframes-v3-paper-watchlist-v2",
+  "browserSchemaVersion": 5,
+  "localChanges": "The separate Ichimoku lecture scope and selected-timeframe rules remain intact. The mixed Watchlist now selects the sibling crypto project’s twelve 29 September 2026 paper profiles on independent completed 1d and 4h sources, with source-derived directional feature gates and fixed or managed paper reference plans. It excludes the historical harmonic, trend and independent-method roster from mixed results, removes the mixed display cap, and screens frozen plans without assuming the next whole one-minute opening, intervening minute checks or a fill. Cloud targets remain original structural references until an execution-time net-2R cap can be checked. Browser history is bounded to 500 completed candles per frame, unlike the sibling project’s full stored contiguous source. The old frozen Go source hash is retained; local ports and fixtures are identified below.",
+  "paperSource": {
+    "project": "github.com/alihasan00/crypto",
+    "catalogDate": "2026-09-29",
+    "description": "Sibling project working-tree source used for the local paper-profile port; independent of the frozen Go archive.",
+    "files": [
+      {
+        "path": "server/src/setup_catalog.rs",
+        "sha256": "97a312800443de28fa551ab51277dd04357564631ef66a21fc5d0c01cf153493"
+      },
+      {
+        "path": "server/src/native_strategies.rs",
+        "sha256": "d3210aafb67ff748d9b3e824c6a8bccce013a2ebc00e7015a2aa277103360b9b"
+      },
+      {
+        "path": "server/src/curated_strategies.rs",
+        "sha256": "6c458eb9a3202063a9d03718aa9634e8a1588ea1bf774b5a75a9f6ec92050a6c"
+      },
+      {
+        "path": "server/src/signal_forge_features.rs",
+        "sha256": "e41eacbf4eec545440b19944ad0dfa3a935bdb8cad107b88d2974b40a551d0ee"
+      },
+      {
+        "path": "server/src/screener.rs",
+        "sha256": "f2fe1ced7dad73a8e01e2071c4c6b60f23f3f7fbd26b894634e8cfd27496fe19"
+      },
+      {
+        "path": "server/src/method_setups.rs",
+        "sha256": "5b99f98ab3933783d1ba3e5e07871e7eda4804c6b04d1fbcd6bb1879e48919fe"
+      },
+      {
+        "path": "server/src/pattern_setups.rs",
+        "sha256": "f23d472303d681f47d5052ffef16cf33a725a237393197f138ef1d5e8f578ad6"
+      },
+      {
+        "path": "server/src/setup_support.rs",
+        "sha256": "803ec944b64b95db6847dce61ce23fdb098b071f8872ad67ae6afed50befd8fa"
+      },
+      {
+        "path": "server/src/trade_plan.rs",
+        "sha256": "ad857aebe725bb08fc7c0b056b3632c47d445fb79cf86fa482d2a43281523f40"
+      },
+      {
+        "path": "server/src/paper.rs",
+        "sha256": "4889e45e7ff9c7a82d70dc9549b671d8e88e624cdee929c6ad3937960589c334"
+      },
+      {
+        "path": "docs/paper-trading.md",
+        "sha256": "d69e48ac1f1db369025c7c650f785be53f727f9e105f9cd4bd64e49177225c34"
+      }
+    ],
+    "evidenceReview": {
+      "path": "reports/strategy-evidence-review-2026-09-29/feedback-review.md",
+      "sha256": "6c85222a267e0b34e33a366a98040a8878968ea4fbf83beb8a597f51959f33fd"
+    }
+  }
 }

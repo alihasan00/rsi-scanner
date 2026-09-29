@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { adaptGoWatchlist, isGoWatchlistRowCurrent, selectGoWatchlist } from '../src/lib/goWatchlist'
-import type { GoCandidate, GoPlan, GoSeries, GoWatchlistResult } from '../src/lib/goWatchlist'
+import type { GoPlan, GoSeries, GoStrategy, GoWatchlistResult } from '../src/lib/goWatchlist'
 import { TIMEFRAME_MILLISECONDS } from '../src/lib/binanceHistory'
 import { captureWatchlistEvaluation } from '../src/lib/watchlistChart'
 import type { GoWatchlistFrameUpdate } from '../src/lib/goWatchlistFeed'
@@ -8,453 +8,254 @@ import type { Candle, Timeframe } from '../src/types'
 import { ichimokuFixture } from './fixtures/watchlistIchimoku'
 import { getGoWatchlistExpectedClose } from '../src/lib/goWatchlistTimeframes'
 
-describe('Go Ichimoku adapter transparency', () => {
-  test('keeps exact engine readings with the matching captured candle publication, without changing the selected plan', () => {
-    const { result, histories, hour } = chartFixture()
-    const source = result.scan.series.find((frame) => frame.interval === '1h')!
-    const { reading, series } = ichimokuFixture(hour.candles)
-    Object.assign(source, { ichimoku: reading, ichimokuSeries: series })
-    const before = structuredClone(reading)
-    const [row] = adaptGoWatchlist(result, 'spot', captureWatchlistEvaluation('ichimoku-exact', NOW, histories))
-    const captured = row.reference!.chart!.frames.find((frame) => frame.timeframe === '1h')!
-    Object.assign(reading.kijun, { value: 1 })
-    expect(captured.ichimoku).toEqual(before)
-    expect(captured.ichimokuSeries).toEqual(series)
-    expect(row.status).toBe('confirmed')
-    expect(row.target).toBe(result.result.items[0].plan.target)
-    expect(row.reference!.netRiskReward).toBe(result.result.items[0].plan.netRR)
-    expect(adaptGoWatchlist(result, 'spot')[0].reference!.chart!.frames).toHaveLength(0)
-  })
-
-  test('never attaches readings when the provider receipt or completed-candle evidence belongs to a different input', () => {
-    for (const mismatch of ['receipt', 'candle'] as const) {
-      const { result, histories, hour } = chartFixture()
-      const source = result.scan.series.find((frame) => frame.interval === '1h')!
-      const { reading, series } = ichimokuFixture(hour.candles)
-      Object.assign(source, { ichimoku: reading, ichimokuSeries: series })
-      if (mismatch === 'receipt') source.observedAt++
-      else source.lastClosedAt--
-      const [row] = adaptGoWatchlist(result, 'spot', captureWatchlistEvaluation('ichimoku-mismatch', NOW, histories))
-      expect(row.reference!.chart!.frames.some((frame) => frame.timeframe === '1h')).toBe(false)
-    }
-  })
-
-  test('displays a selected Ichimoku strategy with the engine status and immutable source events', () => {
-    const { result, histories, hour } = chartFixture()
-    const triggerAt = hour.candles.at(-1)!.closeTime
-    const setupAt = hour.candles.at(-2)!.closeTime
-    result.result.items = []
-    result.result.strategies.items = [{ opportunity: { id: 'tk-recorded', family: 'tk_cross', symbol: 'BTCUSDT', interval: '1h',
-      direction: 'bullish', state: 'entry_confirmed', asOf: triggerAt, availableAt: setupAt, triggerAt,
-      level: 97.12345, zoneLow: 96.5, zoneHigh: 98, entryReference: 97.12345, referenceAtr: 2,
-      next: 'Engine next step', caution: 'Engine caution', reason: 'Original engine crossing evidence' },
-      plan: plan(), price: 102, status: 'entry_confirmed', eligible: true, reason: 'Original engine reason' }]
-    const [row] = adaptGoWatchlist(result, 'spot', captureWatchlistEvaluation('tk-strategy', NOW, histories))
-    expect(row.name).toBe('TK cross · 1h')
-    expect(row.reference!.strategyFamily).toBe('tk_cross')
-    expect(row.reference!.nativeStatus).toBe('entry_confirmed')
-    expect(row.reference!.entry).toBe(97.12345)
-    expect(row.reference!.chart!.events.find((event) => event.kind === 'trigger')?.time).toBe(triggerAt)
-    expect(row.reference!.chart!.evidence.find((item) => item.label === 'Method evidence')?.detail).toBe('Original engine crossing evidence')
-    expect(row.reason).toBe('Original engine reason')
-  })
-})
-
 const NOW = Date.parse('2026-09-28T12:05:00Z')
+const LAST_SUNDAY = Date.parse('2026-09-27T23:59:59.999Z')
+const PROFILES = [
+  ['donchian55_atr_trail', '1d', '55-bar trend breakout'],
+  ['donchian55_atr_trail_stoch', '1d', '55-bar breakout · Stochastic'],
+  ['donchian55_atr_trail_macd', '1d', '55-bar breakout · MACD'],
+  ['donchian55_atr_trail_adx_range', '1d', '55-bar breakout · low ADX'],
+  ['cloud_reclaim_volume_2r', '1d', 'Cloud reclaim · volume + 2R cap'],
+  ['cloud_reclaim_volume_2r_ema', '1d', 'Cloud reclaim · volume + EMA + 2R cap'],
+  ['cloud_reclaim_volume_2r_sma', '1d', 'Cloud reclaim · volume + SMA + 2R cap'],
+  ['cloud_reclaim_volume_2r_supertrend', '1d', 'Cloud reclaim · volume + Supertrend + 2R cap'],
+  ['cloud_reclaim_volume_2r_ao', '1d', 'Cloud reclaim · volume + AO + 2R cap'],
+  ['cloud_reclaim_volume_2r_sma_ema_macd', '1d', 'Cloud reclaim · volume + SMA/EMA/MACD + 2R cap'],
+  ['fresh_weekly_range_long', '4h', 'Fresh weekly-level rebound'],
+  ['tk_cross_rsi', '1d', 'Tenkan / Kijun cross · RSI'],
+] as const
+
+const closeAt = (timeframe: Timeframe) => getGoWatchlistExpectedClose(NOW, timeframe, LAST_SUNDAY)
 const plan = (patch: Partial<GoPlan> = {}): GoPlan => ({
-  status: 'ready_for_review', entry: 102, stop: 99, target: 110, grossRR: 8 / 3, netRR: 2.32,
-  feeBps: 20, slippageBps: 10, minNetRR: 1, trigger: 'Confirmed D and closed 15m break',
-  invalidation: 'Cancel after a target or stop touch', management: 'Fixed first target', expiresAt: NOW + 60_000, reasons: [], ...patch,
+  status: 'ready_for_review', entry: 103.625, stop: 97.375, target: 114.875, grossRR: null, netRR: null,
+  feeBps: 20, slippageBps: 10, minNetRR: 1, trigger: 'Wait for the next observed opening',
+  invalidation: 'Retire if the frozen stop is crossed', management: 'Use the profile paper exit rule',
+  expiresAt: NOW + TIMEFRAME_MILLISECONDS['1d'], reasons: [], ...patch,
 })
-function candidate(symbol: string, timeframe: Timeframe = '1h', patch: Partial<GoPlan> = {}): GoCandidate {
-  return {setup: {symbol, interval: timeframe, price: 102, lastClosedAt: Math.floor(NOW / TIMEFRAME_MILLISECONDS[timeframe]) * TIMEFRAME_MILLISECONDS[timeframe] - 1,
-    pattern: {id: `${symbol}:${timeframe}`, kind: 'gartley', direction: 'bullish', entry: 101, zone: {low: 100, high: 102}, stage: 'confirmed'},
-    decision: {confirmation: {event: {confirmedAt: NOW - 300_000}}}},
-    plan: plan(patch), mode: 'trend_aligned', confirmation: true, entryDistanceATR: 0.5, reason: 'Four-frame evidence agrees', next: 'Reassess the entry reference', caution: ''}
+function strategy(symbol: string, family: string, timeframe: Timeframe = '1d', options: {
+  opportunity?: Partial<GoStrategy['opportunity']>; plan?: Partial<GoPlan>; eligible?: boolean; status?: string
+} = {}): GoStrategy {
+  const asOf = closeAt(timeframe)
+  return {
+    opportunity: {
+      id: symbol + ':' + family + ':' + asOf, family, symbol, interval: timeframe, direction: 'bullish',
+      state: 'entry_confirmed', asOf, availableAt: asOf - TIMEFRAME_MILLISECONDS[timeframe], triggerAt: asOf,
+      level: 101.125, zoneLow: 100.25, zoneHigh: 101.75, entryReference: 101.125, referenceAtr: 2,
+      next: 'Wait for the next observed opening', caution: 'No fill is assumed.', reason: 'Frozen source signal',
+      sourceStartAt: asOf - 10 * TIMEFRAME_MILLISECONDS[timeframe] + 1, sourceEndAt: asOf,
+      ...options.opportunity,
+    },
+    plan: plan(options.plan), price: 103.625, status: options.status ?? 'ready_for_review',
+    eligible: options.eligible ?? true, reason: 'The paper profile passed source checks.',
+  }
 }
-function output(items: GoCandidate[]): GoWatchlistResult {
-  const symbols = [...new Set(items.map((item) => item.setup.symbol))]
-  const series: GoSeries[] = symbols.flatMap((symbol) => (['15m', '1h', '4h', '1d'] as const).map((interval) => ({
-    symbol, interval, price: 102, observedAt: NOW - 1_000, lastClosedAt: Math.floor(NOW / TIMEFRAME_MILLISECONDS[interval]) * TIMEFRAME_MILLISECONDS[interval] - 1,
-    closedCandles: 500, ready: true, trend: 'bullish', momentum: 'bullish', internalBias: 'bullish', warnings: [],
-  })))
-  return {version: '0.13.1-26e07587190d', maxAgeMs: 120_000, result: {
-    config: {feeBps: 20, slippageBps: 10, minNetRR: 1}, items, trends: [], strategies: {items: []},
-    examined: items.length, eligible: items.length, directionFiltered: 0, costFiltered: 0,
-  }, scan: {series, errors: [], progress: {done: series.length, total: series.length}}}
+function output(items: GoStrategy[], scope: 'all' | 'ichimoku' = 'all', timeframe?: Timeframe): GoWatchlistResult {
+  const unique = new Map(items.map(({opportunity}) => [opportunity.symbol + ':' + opportunity.interval, opportunity]))
+  const series: GoSeries[] = [...unique.values()].map((item) => ({
+    symbol: item.symbol, interval: item.interval, price: 103.625, observedAt: NOW - 1_000,
+    lastClosedAt: closeAt(item.interval), closedCandles: 500, ready: true,
+    trend: 'bullish', momentum: 'bullish', internalBias: 'bullish', warnings: [],
+  }))
+  return {
+    version: 'paper-v1-test', now: NOW, maxAgeMs: 120_000, scope, ...(timeframe ? {timeframe} : {}),
+    result: {config: {feeBps: 20, slippageBps: 10, minNetRR: 1}, items: [], trends: [], strategies: {items},
+      examined: items.length, eligible: items.filter((item) => item.eligible).length, directionFiltered: 0, costFiltered: 0},
+    scan: {series, errors: [], progress: {done: series.length, total: series.length}},
+  }
+}
+function history(frame: GoSeries): GoWatchlistFrameUpdate {
+  const duration = TIMEFRAME_MILLISECONDS[frame.interval]
+  const candles: Candle[] = Array.from({length: 12}, (_, index) => {
+    const openTime = frame.lastClosedAt + 1 - (12 - index) * duration
+    return {openTime, closeTime: openTime + duration - 1, open: 101 + index / 100,
+      high: 104 + index / 100, low: 99 + index / 100, close: 103 + index / 100, volume: 100 + index}
+  })
+  return {symbol: frame.symbol, timeframe: frame.interval, candles,
+    preview: {...candles.at(-1)!, openTime: frame.lastClosedAt + 1, closeTime: frame.lastClosedAt + duration},
+    receivedAt: frame.observedAt, status: 'ready', error: null}
 }
 
-function selectedFrameOutput(timeframe: Timeframe, patch: Partial<GoPlan> = {}): GoWatchlistResult {
-  const result = output([candidate('BTCUSDT')])
-  result.scope = 'ichimoku'
-  result.timeframe = timeframe
-  const lastClosedAt = getGoWatchlistExpectedClose(NOW, timeframe, Date.parse('2026-09-27T23:59:59.999Z'))
-  result.scan.series = [{...result.scan.series[0], interval: timeframe, lastClosedAt}]
-  result.scan.progress = {done: 1, total: 1}
-  result.result.items = []
-  result.result.strategies.items = [{opportunity: {
-    id: `tk:${timeframe}`, family: 'tk_cross', symbol: 'BTCUSDT', interval: timeframe, direction: 'bullish',
-    state: 'entry_confirmed', asOf: lastClosedAt, availableAt: lastClosedAt - TIMEFRAME_MILLISECONDS[timeframe], triggerAt: lastClosedAt,
-    level: 101, zoneLow: 100, zoneHigh: 102, entryReference: 101, referenceAtr: 2,
-    next: 'Reassess the selected chart', caution: '',
-  }, price: 102, status: 'ready_for_review', eligible: true, plan: plan(patch), reason: 'Source-frame trigger'}]
-  return result
-}
+describe('paper profile Watchlist adapter', () => {
+  test('admits all twelve active method IDs on their catalog frames and keeps source order', () => {
+    const rows = adaptGoWatchlist(output(PROFILES.map(([family, timeframe]) => strategy('BTCUSDT', family, timeframe))), 'spot')
+    expect(rows).toHaveLength(12)
+    expect(rows.map((row) => [row.reference?.strategyFamily, row.timeframe, row.name])).toEqual(
+      PROFILES.map(([family, timeframe, name]) => [family, timeframe, name + ' · ' + timeframe]))
+    expect(rows.every((row) => row.source === 'strategy' && row.reference?.mode === 'Paper research profile')).toBe(true)
+    expect(rows.map((row) => row.reference?.requiredTimeframes)).toEqual(PROFILES.map(([, timeframe]) => [timeframe]))
+    expect(rows.map((row) => row.reference?.frames.map((frame) => frame.timeframe))).toEqual(PROFILES.map(([, timeframe]) => [timeframe]))
+    expect(selectGoWatchlist(rows, NOW)[0].allSetups).toEqual(rows)
+  })
 
-describe('selected-timeframe Ichimoku presentation', () => {
-  test('all picker timeframes admit a source-only entry with no automatic 15m requirement', () => {
+  test('ignores old detectors, inactive families, wrong catalog frames and unconfirmed states', () => {
+    const result = output([
+      strategy('BTCUSDT', 'donchian55_atr_trail'),
+      strategy('BTCUSDT', 'tk_cross'),
+      strategy('BTCUSDT', 'fibonacci_pullback'),
+      strategy('BTCUSDT', 'cloud_reclaim_volume_2r', '4h'),
+      strategy('BTCUSDT', 'fresh_weekly_range_long', '1d'),
+      strategy('BTCUSDT', 'donchian55_atr_trail', '1d', {opportunity: {id: 'unconfirmed', state: 'awaiting_confirmation'}}),
+    ])
+    result.result.items = [{setup: {symbol: 'BTCUSDT', interval: '1d', price: 103, lastClosedAt: closeAt('1d'),
+      pattern: {id: 'old-harmonic', kind: 'gartley', direction: 'bullish', entry: 101, zone: {low: 100, high: 102}, stage: 'confirmed'},
+      decision: {confirmation: {event: null}}}, plan: plan(), mode: 'old', confirmation: true, entryDistanceATR: 1,
+      reason: 'Old detector', next: 'Old next', caution: ''}]
+    result.result.trends = [{symbol: 'BTCUSDT', interval: '1d', direction: 'bullish', status: 'entry_confirmed', price: 103,
+      pullbackLevel: 101, distanceATR: 1, breakConfirmedAt: closeAt('1d'), triggerClosedAt: closeAt('1d'),
+      plan: plan(), reason: 'Old trend', next: 'Old next', caution: ''}]
+    expect(adaptGoWatchlist(result, 'spot').map((row) => row.reference?.strategyFamily)).toEqual(['donchian55_atr_trail'])
+  })
+
+  test('a candidate needs only its own ready source frame', () => {
+    const result = output([strategy('BTCUSDT', 'donchian55_atr_trail'),
+      strategy('BTCUSDT', 'fresh_weekly_range_long', '4h')])
+    result.scan.series[0].ready = false
+    result.scan.errors.push({symbol: 'BTCUSDT', interval: '1d', error: 'Daily feed failed'})
+    expect(adaptGoWatchlist(result, 'spot').map((row) => row.reference?.strategyFamily)).toEqual(['fresh_weekly_range_long'])
+    result.scan.series[0].ready = true
+    result.scan.series[1].ready = false
+    expect(adaptGoWatchlist(result, 'spot').map((row) => row.reference?.strategyFamily)).toEqual(['donchian55_atr_trail'])
+    result.scan.series.splice(0, 1)
+    expect(adaptGoWatchlist(result, 'spot')).toEqual([])
+  })
+
+  test('duplicate and missing source frames cannot display a plan', () => {
+    const result = output([strategy('BTCUSDT', 'tk_cross_rsi')])
+    result.scan.series.push({...result.scan.series[0]})
+    expect(adaptGoWatchlist(result, 'spot')).toEqual([])
+    result.scan.series.length = 0
+    expect(adaptGoWatchlist(result, 'spot')).toEqual([])
+  })
+
+  test('preserves managed null R/R and target references without inventing a fill or cap', () => {
+    const rows = adaptGoWatchlist(output([
+      strategy('BTCUSDT', 'donchian55_atr_trail', '1d', {plan: {target: null}}),
+      strategy('ETHUSDT', 'cloud_reclaim_volume_2r', '1d', {opportunity: {entryMin: 100.5, entryMax: 104.5}}),
+      strategy('SOLUSDT', 'fresh_weekly_range_long', '4h', {opportunity: {entryMin: 101, entryMax: 105},
+        plan: {target: 112.125}}),
+    ]), 'spot')
+    expect(rows.map((row) => [row.target, row.riskReward, row.reference?.netRiskReward])).toEqual([
+      [null, null, null], [114.875, null, null], [112.125, null, null],
+    ])
+    expect(rows.every((row) => row.reference?.entry === 101.125 && row.reference?.planEntry === 103.625
+      && row.price === 103.625)).toBe(true)
+    expect(rows.map((row) => [row.reference?.entryMin, row.reference?.entryMax])).toEqual([
+      [null, null], [100.5, 104.5], [101, 105],
+    ])
+  })
+
+  test('keeps confirmed source signals with blocked reference plans visible as blocked', () => {
+    const item = strategy('BTCUSDT', 'fresh_weekly_range_long', '4h',
+      {plan: {status: 'cost_blocked'}, eligible: false, status: 'cost_blocked'})
+    const [row] = adaptGoWatchlist(output([item]), 'spot')
+    expect(row.status).toBe('blocked')
+    expect(row.reference).toMatchObject({nativeStatus: 'cost_blocked', planStatus: 'cost_blocked', statusLabel: 'Cost blocked'})
+    expect(row.next).toContain('no opening entry is indicated')
+    expect(row.next).not.toContain('Wait for the next observed opening')
+    expect(selectGoWatchlist([row], NOW, {stage: 'confirmed'})).toEqual([])
+    expect(selectGoWatchlist([row], NOW)[0].lead).toBe(row)
+  })
+
+  test('groups every selected asset without a cap and excludes other sources from details', () => {
+    const items = Array.from({length: 18}, (_, index) => strategy('COIN' + (18 - index) + 'USDT', 'donchian55_atr_trail'))
+    const rows = adaptGoWatchlist(output(items), 'spot')
+    const noise = {...rows[0], id: 'old-trend', source: 'trend' as const, direction: 'bearish' as const}
+    const inactive = {...rows[0], id: 'inactive-strategy', reference: {...rows[0].reference!, strategyFamily: 'tk_cross'}}
+    const instruments = selectGoWatchlist([noise, inactive, ...rows], NOW)
+    expect(instruments).toHaveLength(18)
+    expect(instruments.map((instrument) => instrument.symbol)).toEqual(rows.map((row) => row.symbol))
+    expect(instruments[0].allSetups).toEqual([rows[0]])
+    expect(instruments[0].hasMixedDirections).toBe(false)
+    expect(selectGoWatchlist([noise, inactive, ...rows], NOW, {source: 'trend'})).toEqual([])
+    expect(selectGoWatchlist(rows, NOW, {starredOnly: true, starredSymbols: new Set(['COIN1USDT'])})[0].symbol).toBe('COIN1USDT')
+  })
+
+  test('a confirmed secondary profile can lead a filter while all variants stay in review', () => {
+    const first = strategy('BTCUSDT', 'donchian55_atr_trail', '1d',
+      {plan: {status: 'cost_blocked'}, eligible: false, status: 'cost_blocked'})
+    const second = strategy('BTCUSDT', 'cloud_reclaim_volume_2r', '1d', {opportunity: {direction: 'bearish'}})
+    const rows = adaptGoWatchlist(output([first, second]), 'spot')
+    const [instrument] = selectGoWatchlist(rows, NOW, {stage: 'confirmed', direction: 'bearish'})
+    expect(instrument.lead).toBe(rows[1])
+    expect(instrument.setups).toEqual([rows[1]])
+    expect(instrument.allSetups).toEqual(rows)
+    expect(instrument.hasMixedDirections).toBe(true)
+  })
+
+  test('source close currency uses the five-second grace and two-minute receipt window', () => {
+    const [daily, fourHour] = adaptGoWatchlist(output([
+      strategy('BTCUSDT', 'donchian55_atr_trail', '1d', {plan: {expiresAt: null}}),
+      strategy('BTCUSDT', 'fresh_weekly_range_long', '4h', {plan: {expiresAt: null}}),
+    ]), 'spot')
+    const boundary = Date.parse('2026-09-28T16:00:00Z')
+    daily.updatedAt = boundary
+    fourHour.updatedAt = boundary
+    expect(isGoWatchlistRowCurrent(daily, boundary + 5_000)).toBe(true)
+    expect(isGoWatchlistRowCurrent(fourHour, boundary + 4_999)).toBe(true)
+    expect(isGoWatchlistRowCurrent(fourHour, boundary + 5_000)).toBe(false)
+    expect(isGoWatchlistRowCurrent({...daily, updatedAt: NOW - 120_000}, NOW)).toBe(true)
+    expect(isGoWatchlistRowCurrent({...daily, updatedAt: NOW - 120_001}, NOW)).toBe(false)
+    expect(isGoWatchlistRowCurrent({...daily, updatedAt: NOW + 5_001}, NOW)).toBe(false)
+  })
+
+  test('captures the matching source publication and immutable paper signal events', () => {
+    const result = output([strategy('BTCUSDT', 'cloud_reclaim_volume_2r_ema')])
+    const source = history(result.scan.series[0])
+    const unrelated = history({...result.scan.series[0], interval: '4h', lastClosedAt: closeAt('4h')})
+    const captured = captureWatchlistEvaluation('paper-source-exact', NOW, [source, unrelated])
+    source.candles[0].close = 999
+    source.preview!.close = 999
+    const [row] = adaptGoWatchlist(result, 'spot', captured)
+    expect(row.reference?.chart).toMatchObject({snapshotId: 'paper-source-exact', defaultTimeframe: '1d'})
+    expect(row.reference?.chart?.frames.map((frame) => frame.timeframe)).toEqual(['1d'])
+    expect(row.reference?.chart?.frames[0].candles[0].close).not.toBe(999)
+    expect(row.reference?.chart?.events.find((event) => event.kind === 'trigger')).toMatchObject({
+      label: 'Paper signal confirmed', timeframe: '1d', time: closeAt('1d'), price: 101.125,
+    })
+    expect(row.reference?.chart?.evidence.find((item) => item.label === 'Profile evidence')?.detail).toBe('Frozen source signal')
+  })
+
+  test('retains TradFi contract cautions', () => {
+    const [row] = adaptGoWatchlist(output([strategy('TSLAUSDT', 'tk_cross_rsi')]), 'tradfi')
+    expect(row.market).toBe('tradfi')
+    expect(row.cautions.some((note) => note.includes('USDT perpetual contracts'))).toBe(true)
+  })
+})
+
+describe('independent Ichimoku scope', () => {
+  test('every picker timeframe keeps its source-only method outside the paper roster', () => {
     for (const timeframe of Object.keys(TIMEFRAME_MILLISECONDS) as Timeframe[]) {
-      const [row] = adaptGoWatchlist(selectedFrameOutput(timeframe), 'spot')
+      const [row] = adaptGoWatchlist(output([strategy('BTCUSDT', 'tk_cross', timeframe)], 'ichimoku', timeframe), 'spot')
       expect(row.timeframe).toBe(timeframe)
       expect(row.status).toBe('confirmed')
       expect(row.reference?.requiredTimeframes).toEqual([timeframe])
-      expect(row.reference?.frames.map((frame) => frame.timeframe)).toEqual([timeframe])
       expect(isGoWatchlistRowCurrent(row, NOW)).toBe(true)
+      expect(selectGoWatchlist([row], NOW)).toEqual([])
+      expect(selectGoWatchlist([row], NOW, {scope: 'ichimoku', timeframe})[0].lead).toBe(row)
     }
   })
 
-  test('stale unrelated frames and their methods cannot hide a valid source or leak into its details', () => {
-    const result = selectedFrameOutput('1h')
-    const baseline = adaptGoWatchlist(result, 'spot')
-    result.scan.series.push({...result.scan.series[0], interval: '15m', ready: false, observedAt: NOW - 500_000, trend: 'bearish'})
-    result.scan.errors.push({symbol: 'BTCUSDT', interval: '15m', error: 'Unrelated feed failed'})
-    const source = result.result.strategies.items[0]
-    result.result.strategies.items.push({...source, opportunity: {...source.opportunity, id: 'other-frame', interval: '15m'}})
-    result.result.strategies.items.push({...source, opportunity: {...source.opportunity, id: 'other-method', family: 'fibonacci_pullback'}})
-    expect(adaptGoWatchlist(result, 'spot')).toEqual(baseline)
-    const alternate = {...baseline[0], id: 'same-family-other-frame', timeframe: '4h' as const}
-    const [instrument] = selectGoWatchlist([...baseline, alternate], NOW, {scope: 'ichimoku', timeframe: '1h'})
-    expect(instrument.allSetups).toEqual(baseline)
-    expect(instrument.setups).toEqual(baseline)
+  test('preserves exact Ichimoku readings and plan with matching captured candles', () => {
+    const result = output([strategy('BTCUSDT', 'tk_cross', '1h', {plan: {grossRR: 2.7, netRR: 2.32}})], 'ichimoku', '1h')
+    const source = history(result.scan.series[0])
+    const {reading, series} = ichimokuFixture(source.candles)
+    Object.assign(result.scan.series[0], {ichimoku: reading, ichimokuSeries: series})
+    const before = structuredClone(reading)
+    const [row] = adaptGoWatchlist(result, 'spot', captureWatchlistEvaluation('ichimoku-exact', NOW, [source]))
+    Object.assign(reading.kijun, {value: 1})
+    expect(row.name).toBe('TK cross · 1h')
+    expect(row.reference?.netRiskReward).toBe(2.32)
+    expect(row.reference?.chart?.frames[0].ichimoku).toEqual(before)
+    expect(row.reference?.chart?.frames[0].ichimokuSeries).toEqual(series)
   })
 
-  test('selected-source readiness and its own close boundary still withhold stale entries', () => {
-    const result = selectedFrameOutput('1h', {status: 'waiting_for_retest', expiresAt: null})
-    const [row] = adaptGoWatchlist(result, 'spot')
-    const quarterHour = Date.parse('2026-09-28T12:15:05Z')
-    row.updatedAt = quarterHour
-    expect(isGoWatchlistRowCurrent(row, quarterHour)).toBe(true)
-    const nextHour = Date.parse('2026-09-28T13:00:00Z')
-    row.updatedAt = nextHour
-    expect(isGoWatchlistRowCurrent(row, nextHour + 4_999)).toBe(true)
-    expect(isGoWatchlistRowCurrent(row, nextHour + 5_000)).toBe(false)
-    result.scan.series[0].ready = false
-    expect(adaptGoWatchlist(result, 'spot')).toEqual([])
-  })
-
-  test('mixed mode still requires all four frames and an unsupported selected frame is rejected', () => {
-    const result = selectedFrameOutput('1h')
-    result.scope = 'all'
-    expect(adaptGoWatchlist(result, 'spot')).toEqual([])
-    result.scope = 'ichimoku'
+  test('rejects unsupported selected frames and mismatched chart receipts', () => {
+    const result = output([strategy('BTCUSDT', 'tk_cross', '1h')], 'ichimoku', '1h')
+    const source = history(result.scan.series[0])
+    result.scan.series[0].observedAt++
+    const [row] = adaptGoWatchlist(result, 'spot', captureWatchlistEvaluation('mismatched-source', NOW, [source]))
+    expect(row.reference?.chart?.frames).toEqual([])
     result.timeframe = '6h' as Timeframe
     expect(() => adaptGoWatchlist(result, 'spot')).toThrow('Unsupported Ichimoku timeframe')
-  })
-})
-
-describe('Go watchlist presentation', () => {
-  test('uses the exact capped plan and net cost output rather than recomputing target or reward', () => {
-    const result = output([candidate('BTCUSDT', '1h', {target: 106, grossRR: 1.333, netRR: 1.08})])
-    result.scan.series[0].observedAt = NOW - 9_000
-    const [row] = adaptGoWatchlist(result, 'spot')
-    expect(row.target).toBe(106)
-    expect(row.riskReward).toBe(1.333)
-    expect(row.updatedAt).toBe(NOW - 9_000)
-    expect(row.reference).toMatchObject({netRiskReward: 1.08, feeBps: 20, slippageBps: 10, minNetRR: 1, entry: 101, distanceLabel: '0.50 ATR from entry'})
-    expect(row.reference?.frames).toHaveLength(4)
-  })
-
-  test('never promotes a blocked plan just because a historical trigger exists', () => {
-    const [row] = adaptGoWatchlist(output([candidate('BTCUSDT', '1h', {status: 'cost_blocked', netRR: 0.5})]), 'spot')
-    expect(row.status).toBe('blocked')
-    expect(row.reference?.statusLabel).toBe('Cost blocked')
-  })
-
-  test('unready or missing context cannot reach a displayed candidate', () => {
-    const result = output([candidate('BTCUSDT')])
-    result.scan.series[2].ready = false
-    expect(adaptGoWatchlist(result, 'spot')).toEqual([])
-    result.scan.series.splice(2, 1)
-    expect(adaptGoWatchlist(result, 'spot')).toEqual([])
-  })
-
-  test('groups multiple timeframes of the same asset into one row with their own plans', () => {
-    const rows = adaptGoWatchlist(output([candidate('BTCUSDT', '1h'), candidate('BTCUSDT', '4h', {target: 115})]), 'spot')
-    const [instrument] = selectGoWatchlist(rows, NOW)
-    expect(selectGoWatchlist(rows, NOW)).toHaveLength(1)
-    expect(instrument.allSetups.map((item) => item.timeframe)).toEqual(['1h', '4h'])
-    expect(instrument.allSetups.map((item) => item.target)).toEqual([110, 115])
-    expect(instrument.lead).toBe(rows[0])
-  })
-
-  test('retains Go source ranking, caps twelve unique assets, and never fills unused slots', () => {
-    const rows = adaptGoWatchlist(output(Array.from({length: 18}, (_, index) => candidate(`COIN${18 - index}USDT`))), 'spot')
-    const instruments = selectGoWatchlist(rows, NOW)
-    expect(instruments).toHaveLength(12)
-    expect(instruments.map((item) => item.symbol)).toEqual(rows.slice(0, 12).map((item) => item.symbol))
-    expect(selectGoWatchlist(rows.slice(0, 2), NOW)).toHaveLength(2)
-    expect(selectGoWatchlist([], NOW)).toEqual([])
-  })
-
-  test('source filters select the matching plan and preserve opposing evidence', () => {
-    const rows = adaptGoWatchlist(output([candidate('BTCUSDT'), candidate('ETHUSDT')]), 'spot')
-    const trend = {...rows[0], id: 'trend', source: 'trend' as const, direction: 'bearish' as const, target: 95}
-    const [instrument] = selectGoWatchlist([...rows, trend], NOW, {source: 'trend', direction: 'bearish'})
-    expect(instrument.lead).toBe(trend)
-    expect(instrument.allSetups).toHaveLength(2)
-    expect(instrument.hasMixedDirections).toBe(true)
-    expect(selectGoWatchlist([...rows, trend], NOW, {source: 'trend', direction: 'bullish'})).toEqual([])
-  })
-
-  test('Ichimoku scope filters exact family IDs before grouping, including details and opposing evidence', () => {
-    const [base] = adaptGoWatchlist(output([candidate('BTCUSDT')]), 'spot')
-    const families = ['kijun_reclaim', 'cloud_reclaim', 'tk_cross', 'pk_cross', 'cloud_edge_to_edge']
-    const ichimoku = families.map((family, index) => ({...base, id: `ichimoku-${index}`, source: 'strategy' as const,
-      name: 'Localized method name', reference: {...base.reference!, strategyFamily: family}}))
-    const other = {...base, id: 'unrelated', source: 'strategy' as const, name: 'Cloud lookalike', direction: 'bearish' as const,
-      reference: {...base.reference!, strategyFamily: 'unrelated_cloud'}}
-    const unlabeled = {...base, id: 'no-family', source: 'strategy' as const, name: 'TK cross · 1h'}
-    const wrongSource = {...base, id: 'wrong-source', reference: {...base.reference!, strategyFamily: 'tk_cross'}}
-    const [instrument] = selectGoWatchlist([base, other, unlabeled, wrongSource, ...ichimoku], NOW, {scope: 'ichimoku'})
-    expect(instrument.setups).toEqual(ichimoku)
-    expect(instrument.allSetups).toEqual(ichimoku)
-    expect(instrument.hasMixedDirections).toBe(false)
-    expect(instrument.sources).toEqual(['strategy'])
-    expect(selectGoWatchlist([base, other, unlabeled, wrongSource], NOW, {scope: 'ichimoku'})).toEqual([])
-  })
-
-  test('Ichimoku scope retains every selected asset beyond twelve with normal direction and stage filters', () => {
-    const bases = adaptGoWatchlist(output(Array.from({length: 18}, (_, index) => candidate(`COIN${index}USDT`))), 'spot')
-    const rows = bases.map((row, index) => ({...row, source: 'strategy' as const,
-      direction: index % 2 ? 'bearish' as const : 'bullish' as const,
-      status: index % 2 ? 'waiting' as const : 'confirmed' as const,
-      reference: {...row.reference!, strategyFamily: 'tk_cross'}}))
-    expect(selectGoWatchlist(rows, NOW)).toHaveLength(12)
-    expect(selectGoWatchlist(rows, NOW, {scope: 'ichimoku'}).map((item) => item.symbol)).toEqual(rows.map((row) => row.symbol))
-    const triggered = selectGoWatchlist(rows, NOW, {scope: 'ichimoku', stage: 'confirmed', direction: 'bullish'})
-    expect(triggered).toHaveLength(9)
-    expect(triggered.every((item) => item.lead.status === 'confirmed' && item.direction === 'bullish')).toBe(true)
-    expect(selectGoWatchlist(rows, NOW, {scope: 'ichimoku', starredOnly: true, starredSymbols: new Set(['COIN17USDT'])})[0].symbol).toBe('COIN17USDT')
-  })
-
-  test('Triggered finds a confirmed secondary setup before grouping and retains the unconfirmed lead for comparison', () => {
-    const rows = adaptGoWatchlist(output([candidate('BTCUSDT', '1h', {status: 'awaiting_trigger'}), candidate('BTCUSDT', '4h')]), 'spot')
-    expect(selectGoWatchlist(rows, NOW)[0].lead.status).toBe('approaching')
-    const [triggered] = selectGoWatchlist(rows, NOW, {stage: 'confirmed'})
-    expect(triggered.lead.timeframe).toBe('4h')
-    expect(triggered.lead.status).toBe('confirmed')
-    expect(triggered.setups).toHaveLength(1)
-    expect(triggered.allSetups).toHaveLength(2)
-  })
-
-  test('a source filter retains Go ordering even when an earlier different-source setup shares its symbol', () => {
-    const rows = adaptGoWatchlist(output([candidate('BTCUSDT'), candidate('ETHUSDT'), candidate('SOLUSDT')]), 'spot')
-    const trend = {...rows[2], id: 'sol-trend', source: 'trend' as const}
-    expect(selectGoWatchlist([...rows, trend], NOW, {source: 'harmonic'}).map((item) => item.symbol)).toEqual(['BTCUSDT', 'ETHUSDT', 'SOLUSDT'])
-  })
-
-  test('same rules retain TradFi identity and disclosed contract cost limits', () => {
-    const [row] = adaptGoWatchlist(output([candidate('TSLAUSDT')]), 'tradfi')
-    expect(row.market).toBe('tradfi')
-    expect(row.cautions.some((note) => note.includes('perpetual contracts'))).toBe(true)
-    expect(row.reference?.netRiskReward).toBe(2.32)
-  })
-})
-
-describe('Go evaluation expiry between scans', () => {
-  test('fresh Go expiry overrides a retained entry-confirmed trend without discarding its history', () => {
-    const at = Date.parse('2026-09-28T12:15:00Z')
-    const expiresAt = at - 1
-    const triggerAt = expiresAt - 4 * TIMEFRAME_MILLISECONDS['15m']
-    const reason = 'A later closed 15m candle followed through beyond the retest extreme.'
-    const result = output([candidate('BTCUSDT')])
-    result.result.items = []
-    for (const frame of result.scan.series) frame.observedAt = at - 1_000
-    // During the five-second delivery grace, Go can retain a three-bar-old
-    // confirmed method while the wall-clock plan window has already ended.
-    result.result.trends = [{
-      symbol: 'BTCUSDT', interval: '1h', direction: 'bullish', status: 'entry_confirmed', price: 102,
-      pullbackLevel: 101, distanceATR: 0.5, breakConfirmedAt: triggerAt - TIMEFRAME_MILLISECONDS['15m'],
-      triggerClosedAt: triggerAt, plan: plan({status: 'confirmation_expired', expiresAt}), reason,
-      next: 'Reassess the current quote and trade plan before entry.', caution: '',
-    }]
-    const rows = adaptGoWatchlist(result, 'spot')
-    const [row] = rows
-    expect(isGoWatchlistRowCurrent(row, at)).toBe(true)
-    expect(row.status).toBe('waiting')
-    expect(row.reference).toMatchObject({statusLabel: 'Confirmation expired', planStatus: 'confirmation_expired', nativeStatus: 'entry_confirmed', expiresAt})
-    expect(row.next).toContain('fresh completed-candle trigger')
-    expect(row.confirmedAt).toBe(triggerAt)
-    expect(row.reason).toBe(reason)
-    expect(selectGoWatchlist(rows, at, {stage: 'confirmed'})).toEqual([])
-    expect(selectGoWatchlist(rows, at, {stage: 'developing'})[0].lead).toBe(row)
-  })
-
-  test('withholds expired entries without inventing a replacement eligibility decision', () => {
-    const [row] = adaptGoWatchlist(output([candidate('BTCUSDT')]), 'spot')
-    expect(isGoWatchlistRowCurrent(row, NOW)).toBe(true)
-    expect(isGoWatchlistRowCurrent(row, NOW + 60_000)).toBe(false)
-  })
-
-  test('uses the deployed two-minute receipt window and never accepts future receipts', () => {
-    const [row] = adaptGoWatchlist(output([candidate('BTCUSDT', '1h', {status: 'awaiting_trigger', expiresAt: null})]), 'spot')
-    expect(isGoWatchlistRowCurrent({...row, updatedAt: NOW - 120_000}, NOW)).toBe(true)
-    expect(isGoWatchlistRowCurrent({...row, updatedAt: NOW - 120_001}, NOW)).toBe(false)
-    expect(isGoWatchlistRowCurrent({...row, updatedAt: NOW + 5_001}, NOW)).toBe(false)
-  })
-
-  test('a new 15m close requires reevaluation after the original five-second boundary grace', () => {
-    const [row] = adaptGoWatchlist(output([candidate('BTCUSDT', '1h', {status: 'awaiting_trigger', expiresAt: null})]), 'spot')
-    const boundary = Date.parse('2026-09-28T12:15:00Z')
-    row.updatedAt = boundary
-    expect(isGoWatchlistRowCurrent(row, boundary + 4_999)).toBe(true)
-    expect(isGoWatchlistRowCurrent(row, boundary + 5_000)).toBe(false)
-  })
-})
-
-function chartFixture() {
-  const item = candidate('BTCUSDT')
-  const result = output([item])
-  const histories: GoWatchlistFrameUpdate[] = result.scan.series.map((frame, frameIndex) => {
-    const duration = TIMEFRAME_MILLISECONDS[frame.interval]
-    const candles: Candle[] = Array.from({length: 12}, (_, index) => {
-      const openTime = frame.lastClosedAt + 1 - (12 - index) * duration
-      return {openTime, closeTime: openTime + duration - 1, open: 101 + index / 100,
-        high: 103 + index / 100, low: 100 + index / 100, close: 102 + index / 100, volume: 100 + index}
-    })
-    const preview: Candle = {...candles.at(-1)!, openTime: frame.lastClosedAt + 1,
-      closeTime: frame.lastClosedAt + duration, high: 120, close: 108 + frameIndex}
-    frame.observedAt = NOW - 1_000 - frameIndex * 100
-    frame.closedCandles = candles.length
-    frame.price = preview.close
-    return {symbol: frame.symbol, timeframe: frame.interval as GoWatchlistFrameUpdate['timeframe'],
-      candles, preview, receivedAt: frame.observedAt, status: 'ready', error: null}
-  })
-  const hour = histories.find((history) => history.timeframe === '1h')!
-  const pivots = {
-    x: {index: 1, time: hour.candles[1].openTime, price: hour.candles[1].low},
-    a: {index: 3, time: hour.candles[3].openTime, price: hour.candles[3].high},
-    b: {index: 5, time: hour.candles[5].openTime, price: hour.candles[5].low},
-    c: {index: 7, time: hour.candles[7].openTime, price: hour.candles[7].high},
-    d: {index: 9, time: hour.candles[9].openTime, price: hour.candles[9].low},
-  }
-  Object.assign(item.setup.pattern, pivots, {
-    referenceD: 100.75, detectedAt: hour.candles[8].closeTime, confirmedAt: hour.candles[10].closeTime,
-    levelsEstablishedAt: hour.candles[10].closeTime,
-  })
-  item.setup.price = hour.preview!.close
-  item.plan.entry = hour.preview!.close
-  return {item, result, histories, hour, pivots}
-}
-
-describe('selected Go chart evidence', () => {
-  test('retains the actual Go XABCD points and separates plan quote from geometric entry', () => {
-    const {item, result, histories, pivots} = chartFixture()
-    const evaluation = captureWatchlistEvaluation('scan-exact-harmonic', NOW, histories)
-    const [row] = adaptGoWatchlist(result, 'spot', evaluation)
-    expect(row.reference).toMatchObject({entry: item.setup.pattern.entry, planEntry: item.plan.entry})
-    expect(row.reference?.planEntry).not.toBe(row.reference?.entry)
-    expect(row.reference?.chart).toMatchObject({snapshotId: 'scan-exact-harmonic', evaluatedAt: NOW, defaultTimeframe: '1h'})
-    expect(row.reference?.chart?.points).toEqual(Object.entries(pivots).map(([name, point]) => ({
-      label: name.toUpperCase(), timeframe: '1h', time: point.time, price: point.price,
-    })))
-    // Pivot timestamps are the source bars' opens, not later detection or
-    // confirmation closes and not the current evaluated price.
-    expect(row.reference?.chart?.points.at(-1)?.time).toBe(pivots.d.time)
-    expect(row.reference?.chart?.points.at(-1)?.price).toBe(pivots.d.price)
-  })
-
-  test('a potential harmonic retains XABC without inventing an observed D from referenceD', () => {
-    const {item, result, histories} = chartFixture()
-    Object.assign(item.setup.pattern, {stage: 'potential', d: null, confirmedAt: 0, referenceD: 100.75})
-    item.plan.status = 'awaiting_trigger'
-    const [row] = adaptGoWatchlist(result, 'spot', captureWatchlistEvaluation('scan-potential', NOW, histories))
-    expect(row.reference?.chart?.points.map((point) => point.label)).toEqual(['X', 'A', 'B', 'C'])
-    expect(row.reference?.chart?.points.some((point) => point.price === 100.75)).toBe(false)
-  })
-
-  test('keeps the selected evaluated candle publication isolated from subsequent feed mutations', () => {
-    const {result, histories, hour} = chartFixture()
-    const originalFirst = {...hour.candles[0]}
-    const originalPreview = {...hour.preview!}
-    const evaluation = captureWatchlistEvaluation('scan-before-socket-update', NOW, histories)
-    hour.candles[0].low = 1
-    hour.candles.push({...hour.preview!})
-    hour.preview!.close = 999
-    hour.receivedAt = NOW + 1_000
-    histories.pop()
-    const [row] = adaptGoWatchlist(result, 'spot', evaluation)
-    const chart = row.reference?.chart
-    const frame = chart?.frames.find((value) => value.timeframe === '1h')
-    expect(chart?.snapshotId).toBe('scan-before-socket-update')
-    expect(chart?.evaluatedAt).toBe(NOW)
-    expect(chart?.frames).toHaveLength(4)
-    expect(frame?.candles).toHaveLength(12)
-    expect(frame?.candles[0]).toEqual(originalFirst)
-    expect(frame?.preview).toEqual(originalPreview)
-    expect(frame?.receivedAt).toBe(result.scan.series.find((value) => value.interval === '1h')!.observedAt)
-    expect(frame?.candles).not.toBe(hour.candles)
-    expect(frame?.candles[0]).not.toBe(hour.candles[0])
-    expect(frame?.preview).not.toBe(hour.preview)
-    expect(Object.isFrozen(frame?.candles)).toBe(true)
-    expect(Object.isFrozen(frame?.candles[0])).toBe(true)
-    expect(Object.isFrozen(frame?.preview)).toBe(true)
-  })
-
-  for (const mismatch of ['receipt', 'last closed candle', 'closed candle after evaluation'] as const) {
-    test(`does not attach chart candles with a mismatched ${mismatch}`, () => {
-      const {result, histories, hour} = chartFixture()
-      const evidence = result.scan.series.find((frame) => frame.interval === '1h')!
-      if (mismatch === 'receipt') hour.receivedAt++
-      else if (mismatch === 'last closed candle') hour.candles.pop()
-      else {
-        // Receipt and latest-close evidence deliberately match here, so the
-        // rejection must come from a completed candle beyond this scan cutoff.
-        hour.candles.push({...hour.preview!})
-        evidence.lastClosedAt = hour.candles.at(-1)!.closeTime
-        evidence.closedCandles = hour.candles.length
-      }
-      const [row] = adaptGoWatchlist(result, 'spot', captureWatchlistEvaluation(`scan-bad-${mismatch}`, NOW, histories))
-      expect(row.reference?.chart?.frames.some((frame) => frame.timeframe === '1h') ?? false).toBe(false)
-    })
-  }
-
-  test('a future provisional candle is not attached ahead of the evaluated clock', () => {
-    const {result, histories, hour} = chartFixture()
-    const duration = TIMEFRAME_MILLISECONDS['1h']
-    hour.preview!.openTime += duration
-    hour.preview!.closeTime += duration
-    const [row] = adaptGoWatchlist(result, 'spot', captureWatchlistEvaluation('scan-future-preview', NOW, histories))
-    const frame = row.reference?.chart?.frames.find((value) => value.timeframe === '1h')
-    expect(frame?.candles).toHaveLength(12)
-    expect(frame?.preview).toBeNull()
-  })
-
-  test('keeps hourly break and 15m retest/trigger events at their exact Go coordinates', () => {
-    const {result, histories, hour} = chartFixture()
-    const lower = histories.find((history) => history.timeframe === '15m')!
-    const breakAt = hour.candles[8].closeTime
-    const retestAt = lower.candles[8].closeTime
-    const triggerAt = lower.candles[10].closeTime
-    const pullbackLevel = 101.25
-    const retestLow = 100.125
-    const retestHigh = 105.25
-    const triggerPrice = 104.375
-    Object.assign(lower.candles[8], {low: retestLow, high: retestHigh})
-    Object.assign(lower.candles[10], {close: triggerPrice, high: 106})
-    result.result.items = []
-    result.result.trends = [{symbol: 'BTCUSDT', interval: '1h', direction: 'bullish', status: 'entry_confirmed',
-      price: hour.preview!.close, pullbackLevel, distanceATR: 0.75, breakType: 'BOS', breakConfirmedAt: breakAt,
-      retestClosedAt: retestAt, retestLow, retestHigh, triggerClosedAt: triggerAt, triggerPrice,
-      plan: plan({entry: hour.preview!.close}), reason: 'Hourly break, then held 15m retest and a later follow-through.',
-      next: 'Review the evaluated reference plan.', caution: ''}]
-    const [row] = adaptGoWatchlist(result, 'spot', captureWatchlistEvaluation('scan-trend-events', NOW, histories))
-    const chart = row.reference?.chart
-    expect(chart?.defaultTimeframe).toBe('1h')
-    expect(chart?.events.find((event) => event.kind === 'break')).toMatchObject({timeframe: '1h', time: breakAt, price: pullbackLevel})
-    expect(chart?.events.find((event) => event.kind === 'retest')).toMatchObject({timeframe: '15m', time: retestAt, low: retestLow, high: retestHigh})
-    expect(chart?.events.find((event) => event.kind === 'trigger')).toMatchObject({timeframe: '15m', time: triggerAt, price: triggerPrice})
-    expect(chart?.frames.find((frame) => frame.timeframe === '15m')?.candles[10].close).toBe(triggerPrice)
-    expect(row.reference).toMatchObject({entry: pullbackLevel, planEntry: hour.preview!.close})
   })
 })

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	browser "github.com/alihasan00/crypto/internal/browserengine"
+	"github.com/alihasan00/crypto/internal/strategies"
 )
 
 func lectureScopeFixture(t *testing.T) browser.Request {
@@ -32,17 +33,18 @@ func ichimokuFamily(family string) bool {
 	return false
 }
 
-func TestRequestScopeDefaultsToUnchangedMixedWatchlist(t *testing.T) {
+func TestRequestScopeDefaultsToMixedWatchlist(t *testing.T) {
 	request := fixture("BTCUSDT")
 	implicit := browser.Run(request)
 	request.Scope = "all"
 	explicit := browser.Run(request)
-	requireSuccessful(t, implicit, 4)
+	requireSuccessful(t, implicit, 2)
 	if implicit.Scope != "all" || !reflect.DeepEqual(implicit, explicit) {
 		t.Fatal("omitted and explicit all scopes produce different publications")
 	}
-	if explicit.Result.Limit != 12 || explicit.Result.Strategies.Limit != 12 {
-		t.Fatal("the original mixed watchlist lost its display limit")
+	if explicit.Result.Limit != 0 || explicit.Result.Strategies.Limit != 0 ||
+		len(explicit.Result.Strategies.Summary) != len(strategies.PaperFamilies) {
+		t.Fatal("the mixed Watchlist lost its uncapped paper roster")
 	}
 	// The adapter's default still matches the direct scanner/selector result.
 	if expected := directSelection(t, request); !reflect.DeepEqual(expected, *explicit.Result) {
@@ -118,8 +120,15 @@ func TestIchimokuScopeSelectsOnlyItsFamiliesBeforeAnyDisplayCap(t *testing.T) {
 	}
 	request.Scope = "all"
 	mixed := browser.Run(request)
-	if mixed.Scope != "all" || len(mixed.Result.Strategies.Items) != 12 {
-		t.Fatal("mixed watchlist no longer follows its existing cap")
+	if mixed.Scope != "all" || mixed.Result.Limit != 0 || mixed.Result.Strategies.Limit != 0 ||
+		len(mixed.Result.Strategies.Summary) != len(strategies.PaperFamilies) ||
+		len(mixed.Result.Strategies.Coverage) != len(request.Symbols)*len(strategies.PaperFamilies) {
+		t.Fatal("mixed Watchlist did not cover every requested paper profile")
+	}
+	for _, item := range mixed.Result.Strategies.Items {
+		if strategies.PaperFamilyFrame(item.Opportunity.Family) != item.Opportunity.Interval {
+			t.Fatal("a legacy method entered the mixed Watchlist")
+		}
 	}
 	request.Scope = "ichimoku"
 	for i := range request.Histories {

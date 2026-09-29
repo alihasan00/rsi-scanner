@@ -1,7 +1,6 @@
 // Package browserengine supplies validated browser candle snapshots to the
 // Go scanner and selector, including the local Ichimoku lecture extension.
-// It does not implement indicator or strategy
-// rules, fetch data, persist account state, or execute trades.
+// It does not fetch data, persist account state, or execute trades.
 package browserengine
 
 import (
@@ -20,7 +19,7 @@ import (
 )
 
 const (
-	Version = "0.13.1-26e07587190d+ichimoku.3"
+	Version = "0.13.1-26e07587190d+ichimoku.3.watchlist.2"
 	// SourceHash identifies the upstream archive; local source hashes and the
 	// extension revision are recorded separately in provenance.json.
 	SourceHash = "26e07587190d24c66d62602e968ef24dafafb281b9b1a0140afa7f6c6d0a0d00"
@@ -86,8 +85,9 @@ type Response struct {
 }
 
 type memoryFeed struct {
-	now       time.Time
-	histories map[string]InputHistory
+	now             time.Time
+	strictCompleted bool
+	histories       map[string]InputHistory
 }
 
 func (f memoryFeed) Candles(ctx context.Context, symbol, timeframe string, limit int) ([]market.Candle, *market.Candle, error) {
@@ -134,6 +134,9 @@ func (f memoryFeed) CandlesWithEvidence(ctx context.Context, symbol, timeframe s
 		if candle.CloseTime > f.now.UnixMilli() {
 			return nil, nil, evidence, fmt.Errorf("Completed candle %d ends in the future.", i)
 		}
+		if f.strictCompleted && candle.CloseTime == f.now.UnixMilli() {
+			return nil, nil, evidence, fmt.Errorf("Completed candle %d must end before the paper evaluation time.", i)
+		}
 		if i > 0 && candle.OpenTime != history.Candles[i-1].CloseTime+1 {
 			return nil, nil, evidence, fmt.Errorf("Completed candle %d has a gap, overlap or duplicate.", i)
 		}
@@ -168,6 +171,7 @@ func validateRequest(input Request) (memoryFeed, error) {
 	if !validScope {
 		return feed, errors.New("Scope must be all or ichimoku.")
 	}
+	feed.strictCompleted = scope == "all"
 	if _, valid := requestTimeframe(scope, input.Timeframe); !valid {
 		return feed, errors.New("Choose a supported Ichimoku timeframe: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 8h, 1d, 3d or 1w.")
 	}
@@ -206,7 +210,7 @@ func validateRequest(input Request) (memoryFeed, error) {
 			switch history.Timeframe {
 			case "1d", "4h", "1h", "15m":
 			default:
-				return feed, errors.New("The shared engine requires 1d, 4h, 1h and 15m histories.")
+				return feed, errors.New("Mixed Watchlist history must use 1d or 4h (legacy 1h and 15m inputs are ignored).")
 			}
 		}
 		key := history.Symbol + "/" + history.Timeframe
@@ -261,6 +265,8 @@ func Run(input Request) Response {
 	scanRequest := scanner.DefaultRequest()
 	if scope == "ichimoku" {
 		scanRequest.Timeframes = []string{timeframe}
+	} else {
+		scanRequest.Timeframes = []string{"1d", "4h"}
 	}
 	done, err := engine.Start(context.Background(), scanRequest)
 	if err != nil {
@@ -281,7 +287,7 @@ func Run(input Request) Response {
 	if scope == "ichimoku" {
 		result = selection.BuildIchimokuTimeframe(snapshot, histories, input.Symbols, feed.now, MaxAge, timeframe, selection.DefaultConfig())
 	} else {
-		result = selection.Build(snapshot, histories, input.Symbols, feed.now, MaxAge, selection.DefaultConfig())
+		result = selection.BuildPaperWatchlist(snapshot, histories, input.Symbols, feed.now, MaxAge, selection.DefaultConfig())
 	}
 	response.Result = &result
 	response.Scan.Errors = snapshot.Errors
@@ -303,13 +309,11 @@ func Run(input Request) Response {
 		series := Series{
 			Symbol: frame.Symbol, Interval: frame.Interval, Price: frame.Price, PriceSource: frame.PriceSource,
 			ObservedAt: frame.ObservedAt.UnixMilli(), LastClosedAt: frame.LastClosedAt, ClosedCandles: frame.ClosedCandles,
-			Ready: selection.SeriesReady(frame, feed.now, MaxAge), Trend: frame.Analysis.Regime.Direction,
+			Ready: false, Trend: frame.Analysis.Regime.Direction,
 			Momentum: frame.Analysis.Regime.Momentum.Direction, InternalBias: frame.Analysis.Structure.Internal.Bias, Warnings: frame.Warnings,
 		}
 		history, hasHistory := histories[frame.Symbol+"/"+frame.Interval]
-		if scope == "ichimoku" {
-			series.Ready = hasHistory && selection.IchimokuSeriesReady(frame, history, feed.now, MaxAge)
-		}
+		series.Ready = hasHistory && selection.IchimokuSeriesReady(frame, history, feed.now, MaxAge)
 		if hasHistory && series.Ready {
 			// History is scanner-owned completed input. Preview is deliberately
 			// excluded, including when it provides the evaluated live quote.

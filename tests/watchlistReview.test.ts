@@ -75,6 +75,46 @@ function fixture() {
   return { row, instrument, copiedAt: COPIED_AT, current: true, snapshotCurrent: true, newerAvailable: false }
 }
 
+function paperFixture(family: string, timeframe: '1d' | '4h' = '1d') {
+  const input = fixture()
+  const {row, instrument} = input
+  const ref = row.reference!
+  const captured = ref.chart!.frames.find((frame) => frame.timeframe === timeframe)!
+  row.id = 'spot:' + timeframe + ':BTCUSDT:strategy:' + family
+  row.timeframe = timeframe
+  row.source = 'strategy'
+  row.name = family + ' · ' + timeframe
+  row.price = 103.625
+  row.riskReward = null
+  row.target = family.startsWith('donchian55_atr_trail') ? null : 114.875
+  row.asOf = captured.lastClosedAt
+  row.confirmedAt = captured.lastClosedAt
+  row.next = 'Wait for a later observed opening before any paper entry.'
+  ref.scope = 'all'
+  ref.strategyFamily = family
+  ref.mode = 'Paper research profile'
+  ref.statusLabel = 'Signal confirmed'
+  ref.requiredTimeframes = [timeframe]
+  ref.entry = 101.125
+  ref.planEntry = row.price
+  ref.entryMin = family.startsWith('donchian55_atr_trail') ? null : 100.5
+  ref.entryMax = family.startsWith('donchian55_atr_trail') ? null : 104.5
+  ref.netRiskReward = null
+  ref.feeBps = 20
+  ref.slippageBps = 10
+  ref.frames = [{timeframe, trend: 'bullish', structure: 'bullish', asOf: captured.lastClosedAt}]
+  ref.chart = {...ref.chart!, defaultTimeframe: timeframe, frames: [captured], points: [],
+    events: [{kind: 'trigger', label: 'Paper signal confirmed', timeframe, time: captured.lastClosedAt, price: 101.125}],
+    sourceWindow: {timeframe, startTime: captured.candles[0].openTime, endTime: captured.lastClosedAt},
+    evidence: [{label: 'Profile evidence', detail: 'Completed source signal.', timeframe, time: captured.lastClosedAt}]}
+  instrument.timeframe = timeframe
+  instrument.lead = row
+  instrument.setups = instrument.allSetups = [row]
+  instrument.sources = ['strategy']
+  instrument.hasMixedDirections = false
+  return input
+}
+
 function readEmbeddedData(html: string): unknown {
   const match = html.match(/<pre\b[^>]*\bid=["']watchlist-review-data["'][^>]*>([\s\S]*?)<\/pre>/i)
   expect(match).not.toBeNull()
@@ -146,15 +186,63 @@ describe('saved watchlist review', () => {
       expect(context).toContain(`| ${timeframe} · setup |`)
       expect(context.split('\n').filter((line) => line.includes(' · setup |'))).toHaveLength(1)
       expect(context).not.toContain('entry monitor')
+      expect(result.text).not.toContain('even the latest profile signal')
       expect(snapshotFrom(result.html).frames).toEqual([captured])
     }
   })
 
-  test('mixed reviews retain the original four-frame context', () => {
-    const result = buildWatchlistReview(fixture())
-    expect(result.text).toContain('## Four-timeframe context')
-    expect(result.text).not.toContain('## Captured timeframe context')
-    expect(snapshotFrom(result.html).frames.map((frame) => frame.timeframe)).toEqual([...FRAME_NAMES])
+  test('paper reviews report only their required daily or four-hour source frame', () => {
+    for (const [family, timeframe] of [['cloud_reclaim_volume_2r', '1d'], ['fresh_weekly_range_long', '4h']] as const) {
+      const input = paperFixture(family, timeframe)
+      const result = buildWatchlistReview(input)
+      const context = result.text.split('## Required source timeframe context')[1].split('## Recorded geometry and events')[0]
+      expect(context).toContain('This profile requires ' + timeframe + ' completed candles')
+      expect(context).toContain('| ' + timeframe + ' · source |')
+      expect(context).not.toContain('15m ·')
+      expect(context).not.toContain('1h ·')
+      expect(result.text).toContain('up to 500 completed candles per source frame')
+      expect(result.text).toContain('even the latest profile signal')
+      expect(result.html).toContain('even the latest profile signal')
+      expect(snapshotFrom(result.html).frames.map((frame) => frame.timeframe)).toEqual([timeframe])
+    }
+  })
+
+  test('paper export distinguishes original cloud target, signal close and later unknown opening', () => {
+    const input = paperFixture('cloud_reclaim_volume_2r_ema')
+    const result = buildWatchlistReview(input)
+    expect(result.text).toContain('| Frozen signal close reference | 101.125 |')
+    expect(result.text).toContain('| Latest completed close in reference plan | 103.625 |')
+    expect(result.text).toContain('Distance from frozen signal close, percent')
+    expect(result.text).toContain('| Frozen slipped-entry band minimum | 100.5 |')
+    expect(result.text).toContain('| Frozen slipped-entry band maximum | 104.5 |')
+    expect(result.text).toContain('next whole observed 1-minute opening')
+    expect(result.text).toContain('intervening minute')
+    expect(result.text).toContain('| Original structural target before post-fill cap | 114.875 |')
+    expect(result.text).toContain('20 bps fees + 10 bps slippage/spread; 30 bps total')
+    expect(result.text).not.toContain('per side')
+    expect(result.text).toContain('this scanner has not verified that path or a fill')
+    expect(result.text).toContain('capped at net 2R only after slipped entry')
+    expect(result.text).not.toContain('Plan entry / quote used for risk')
+    expect(result.text).not.toContain('## Captured Ichimoku lecture observations')
+    expect(findObject(readEmbeddedData(result.html), (item) => item.entryRule === 'next_whole_observed_1m_open'
+      && item.interveningMinutePathVerified === false && item.openingFillVerified === false)).toBeDefined()
+    expect(findObject(readEmbeddedData(result.html), (item) => item.strategyFamily === 'cloud_reclaim_volume_2r_ema')).toBeDefined()
+  })
+
+  test('paper Donchian export has an ATR trailing exit and no invented target or after-fill R/R', () => {
+    const result = buildWatchlistReview(paperFixture('donchian55_atr_trail'))
+    expect(result.text).toContain('| Exit rule | ATR trailing stop; no fixed target |')
+    expect(result.text).toContain('| Net reward/risk at reference close, if modeled | Not established |')
+    expect(result.text).toContain('after-fill R/R are unknown')
+    expect(result.text).not.toContain('Frozen slipped-entry band minimum')
+  })
+
+  test('paper expiry changes the opening window label without undoing the recorded signal', () => {
+    const input = paperFixture('fresh_weekly_range_long', '4h')
+    input.row.reference!.expiresAt = COPIED_AT - 1
+    const result = buildWatchlistReview(input)
+    expect(result.text).toContain('Paper entry window expired — the completed signal remains recorded.')
+    expect(result.text).not.toContain('Confirmation expired — the entry window has ended.')
   })
 
   test('includes all captured Ichimoku readings, projection timing and exclusions in text and complete inert HTML', () => {
@@ -263,7 +351,7 @@ describe('saved watchlist review', () => {
     expect(findObject(readEmbeddedData(result.html), (item) => item.snapshotId === fullId && Array.isArray(item.frames))).toBeDefined()
   })
 
-  test('retains all four complete candle histories, previews, events and coordinates in inert HTML data', () => {
+  test('retains every captured candle history, preview, event and coordinate in inert HTML data', () => {
     const input = fixture()
     const result = buildWatchlistReview(input)
     const retained = snapshotFrom(result.html)

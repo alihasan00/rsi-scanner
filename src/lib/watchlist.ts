@@ -44,7 +44,7 @@ export interface WatchlistRow {
   reference?: {
     engineVersion: string
     scope?: 'all' | 'ichimoku'
-    /** Only the selected chart frame for Ichimoku; all four for the mixed Watchlist. */
+    /** Source frames required to keep this specific selected setup current. */
     requiredTimeframes?: readonly Timeframe[]
     /** Exact Go strategy family, independent of the presentation label. */
     strategyFamily?: string
@@ -60,6 +60,9 @@ export interface WatchlistRow {
     entry: number | null
     /** Go plan's evaluated entry/quote, distinct from the geometric entry reference. */
     planEntry?: number | null
+    /** Frozen post-slippage opening band for paper profiles with a fixed target. */
+    entryMin?: number | null
+    entryMax?: number | null
     chart?: WatchlistChartSnapshot
     distanceLabel: string
     expiresAt: number | null

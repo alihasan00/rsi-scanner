@@ -19,17 +19,20 @@ The interface uses Ant Design components with the supplied dark purple theme.
 It groups the scanner's coins into ecosystems, sectors, and memes, showing live
 rolling 24-hour performance, leaders, and gaps between family members.
 
-**Watchlist** runs the Go crypto dashboard's scanner and selection rules, with
-the local Ichimoku lecture extension,
-in the browser. It checks 15m, 1h, 4h and 1d together and shows at most 12 unique
-assets for either market. Each asset has one clickable card with its leading
-setup and chart preview. Open it for the exact evaluated setup, alternative
-selected setups, reference plans, costs and next checkpoint.
+**Watchlist** shows the sibling crypto project's 12 active paper research
+profiles through a Go engine in the browser. Eleven use completed daily
+candles; the fresh weekly-level rebound uses completed four-hour candles. Each
+frame is checked independently, and every qualifying asset has one clickable
+card with its leading signal and chart preview. Open it for the captured
+evidence, other qualifying profiles, reference plan and checks required at the
+next whole one-minute opening after observation.
+The separate **Ichimoku Cloud** screen keeps its own five setup types and
+timeframe picker.
 
-This repository contains the frontend only. The standalone Rust data tool lives
-in the separate sibling project `../cli` and fetches and analyzes market
-data from the command line for AI-assisted analysis. Both projects build and run
-independently.
+This repository contains the frontend and its embedded Go WebAssembly
+Watchlist engine. The standalone Rust data tool lives in the separate sibling
+project `../cli` and fetches and analyzes market data from the command line
+for AI-assisted analysis. Both projects build and run independently.
 
 ## Development
 
@@ -106,64 +109,47 @@ and expiry checks. Changing timeframe starts a new scan and closes the previous
 detail. Detail charts and review exports preserve the selected frame’s captured
 evidence.
 
-Open **Watchlist** and choose Crypto or TradFi for the mixed shortlist. The Go engine based on crypto
-dashboard release **0.13.1-26e07587190d**, extended as **+ichimoku.3**, checks
-15m, 1h, 4h and 1d. It selects six harmonic patterns, trend pullbacks and twelve
-independent methods. The Ichimoku additions include TK/PK crosses with Kijun
-retests and cloud edge-to-edge targets, with the shared lifecycle, history and
-cost safeguards. See [lecture coverage and conventions](docs/ichimoku-lecture.md).
+Open **Watchlist** and choose Crypto or TradFi for the mixed paper research
+signals. Its 12 active profiles are four daily 55-bar Donchian breakout variants,
+six daily volume-screened cloud reclaim variants, a daily Tenkan/Kijun cross
+with RSI, and a four-hour rebound at an untouched previous-week low. Historical
+harmonic, trend-pullback and independent-method setups are no longer selected
+in this mixed view. The dedicated Ichimoku screen above still uses its own
+five setup types; see [lecture coverage and conventions](docs/ichimoku-lecture.md).
 
-- **One card per asset:** at most 12 unique assets, with the leading setup,
-  captured chart, evaluated quote and next checkpoint visible together. Open
-  the card to compare other engine-selected setups and their individual plans.
+- **Independent feeds:** each daily profile needs fresh daily candles; the
+  weekly-level rebound needs fresh four-hour candles. Missing one frame does
+  not suppress a valid signal on the other. REST seeds up to 500 completed
+  candles plus a provisional preview per frame, then WebSockets maintain them.
+  The source project can use longer contiguous stored history. Recursive
+  filters such as Supertrend can therefore change even a latest signal here.
+- **One card per asset:** all qualifying assets can appear, without a 12-card
+  cap. A card shows its leading signal, captured chart and evaluated price.
+  Open it to compare other selected profiles and their individual plans.
   Opposing directions are marked; stops and targets are never averaged.
-- **Shortlist, Triggered and Developing:** these views filter setups before
-  choosing each asset's lead. A secondary confirmation remains discoverable.
-  Developing watches may have incomplete plans, and some selected trend or
-  independent-method observations are blocked. A watch is not trade approval.
-- **Original selection:** the Go engine keeps its limit of 12 per source.
-  The interface interleaves source order, groups matching assets and caps the
-  display at 12 assets. Rejected detector inventory never pads the list.
-  Search, stars, direction, source and status filters cannot bypass eligibility.
-- **Plans and costs:** eligible plans show their original references and
-  modeled reward/risk. The original assumptions are 0.20% fees plus 0.10%
-  slippage/spread round trip, with a minimum net reward/risk of 1. Actual fees,
-  funding, liquidity and fills remain unverified; this is not a win-rate claim.
-- **Fresh context:** REST seeds 500 closed candles plus the current preview
-  per timeframe, then WebSockets maintain them. All four contexts must be
-  usable, with receipt age at most two minutes and the expected latest close.
-  Real TradFi session gaps are preserved and may block selection. The shared
-  request queue is bounded, retries failures and cancels when the view changes.
-- **Progressive loading:** assets appear as their four contexts are evaluated,
-  with a trailing loading card while initial feeds are checked. Initial
-  evaluations are batched at most once every six seconds, then every 30 seconds
-  after the initial scan. Freshness and confirmation expiry are checked between
-  scans; partial context cannot qualify an asset.
-- **Bounded performance:** eight histories can load concurrently under the
-  existing eight-starts-per-second limit. The first complete asset starts an
-  evaluation immediately. Immutable closed histories are shared between
-  snapshots, and unchanged charts skip redraws from coverage updates. Each
-  evaluation still runs the original Go rules with fresh captured inputs.
-- **Selected setup chart:** opening a card shows the captured Go evaluation's
-  candles, harmonic geometry or method source window, price references and
-  available confirmation events. Compare captured timeframes or other selected
-  setups inside the detail. The open candle is clearly provisional; a projected
-  D has no invented pivot. A saved evaluation stays fixed until **Load latest**
-  is selected, with a notice when it has aged or left the current selection.
-- **Ichimoku lecture:** the detail chart shows Tenkan, Kijun, cloud color and
-  the known forward cloud. Captured readings cover twists, flat edges, cloud
-  width, TK/PK validity, edge-to-edge and cloud Fibonacci references, plus the
-  thinning-cloud/widening-gap warning. Qualitative guidance remains context;
-  it does not bypass entry or cost checks. Chikou is excluded as in the lecture.
-- **Share for review:** **Copy setup** copies the selected evaluation's exact
-  levels, evidence, costs and timestamps as a brief for an agent chat.
-  **Save HTML** includes the visible chart and full captured candle data in
-  a standalone file you can attach. Saved evaluations retain their freshness
-  warnings; nothing is uploaded automatically.
-- **Deployment and persistence:** the committed WebAssembly engine works on
-  static Vite/Vercel hosting without a Go server, database, AI or trading
-  worker. Stars and view preferences stay in this browser. There is no trade
-  execution or durable journal, and no monitoring while the app is closed.
+- **Paper plans:** Donchian has an initial stop and managed exits, with no
+  fixed profit target. Cloud plans show the original structural target; any
+  nearer net-2R cap is determined only after an actual slipped opening. The
+  weekly rebound also needs at least 3% raw opening-to-stop distance. A
+  completed signal is a plan for review, not an assumed fill or an order. The
+  paper trial considers the next whole one-minute opening after observation
+  and checks intervening minute candles for protective touches. This browser
+  has no minute execution feed, so it cannot verify that path or an entry.
+- **Costs and evidence:** fixed-target plans use the reference assumptions of
+  0.20% fees plus 0.10% slippage/spread round trip and a minimum net
+  reward/risk of 1. These profiles were historically tested using next daily
+  or four-hour source-bar openings; those tests did not replay the forward
+  trial's minute execution. They remain paper experiments; recent
+  profitability, real costs, liquidity and fills are unproven. Historical
+  short simulations do not establish an executable Spot short or account result.
+- **Live review:** signals appear as their own source feed is evaluated, with
+  a loading card while initial feeds are checked. Open a card for its captured
+  candles, source window, levels and events. A saved evaluation stays fixed
+  until **Load latest** is selected. **Copy setup** and **Save HTML** preserve
+  its evidence and freshness warnings for review.
+- **Deployment:** the committed WebAssembly engine works on static Vite/Vercel
+  hosting. Stars and view preferences stay in this browser. There is no trade
+  execution, durable journal or monitoring while the app is closed.
 
 See [watchlist selection and live-data rules](docs/watchlist.md) and
 [engine provenance, interface and rebuild instructions](engine/README.md).

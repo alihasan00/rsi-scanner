@@ -68,8 +68,13 @@ export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, comp
   const last = candles.at(-1)!.candle
   const duration = first.closeTime - first.openTime + 1
   const frame = snapshot.frames.find((item) => item.timeframe === timeframe)!
+  const paperProfile = row.reference?.mode === 'Paper research profile'
+  const family = row.reference?.strategyFamily ?? ''
+  const trailingDonchian = paperProfile && family.startsWith('donchian55_atr_trail')
+  const cappedCloud = paperProfile && family.startsWith('cloud_reclaim_volume_2r')
   const ichimokuAvailable = !!frame.ichimokuSeries?.length
-  const showIchimoku = ichimokuAvailable && (compact ? isIchimokuMethod(row.name) : overlay?.identity === identity ? overlay.enabled : true)
+  const showIchimoku = ichimokuAvailable && (compact ? isIchimokuMethod(row.name)
+    : overlay?.identity === identity ? overlay.enabled : !paperProfile || isIchimokuMethod(row.name))
   const ichimoku = showIchimoku ? selectIchimokuPlot(frame, first.openTime, last.closeTime, !compact) : null
   const cloudBands = ichimoku ? ichimokuCloudBands(ichimoku.cloud, duration) : []
   const start = first.openTime - duration * 0.7
@@ -87,12 +92,12 @@ export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, comp
   const events = eventInputs.map((event) => ({ ...event, x: candleX(event.time) }))
     .filter((event): event is typeof event & { x: number } => event.x !== null)
   const levels: ChartLevel[] = []
-  if (positive(row.target)) levels.push({ id: 'target', label: 'First target', price: row.target, tone: 'target' })
-  if (positive(row.stop)) levels.push({ id: 'stop', label: 'Stop reference', price: row.stop, tone: 'stop' })
-  if (positive(row.reference?.entry)) levels.push({ id: 'reference', label: row.source === 'trend' ? 'Pullback level' : 'Entry reference', price: row.reference.entry, tone: 'reference' })
+  if (positive(row.target)) levels.push({ id: 'target', label: cappedCloud ? 'Original target' : paperProfile ? 'Source target' : 'First target', price: row.target, tone: 'target' })
+  if (positive(row.stop)) levels.push({ id: 'stop', label: paperProfile ? 'Initial stop' : 'Stop reference', price: row.stop, tone: 'stop' })
+  if (positive(row.reference?.entry)) levels.push({ id: 'reference', label: paperProfile ? 'Signal close' : row.source === 'trend' ? 'Pullback level' : 'Entry reference', price: row.reference.entry, tone: 'reference' })
   const sameQuoteAndEntry = positive(row.reference?.planEntry) && row.reference.planEntry === row.price
-  if (positive(row.reference?.planEntry) && !sameQuoteAndEntry) levels.push({ id: 'plan-entry', label: 'Plan entry', price: row.reference.planEntry, tone: 'plan' })
-  if (positive(row.price)) levels.push({ id: 'quote', label: sameQuoteAndEntry ? 'Evaluated price' : 'Evaluated quote', price: row.price, tone: 'quote' })
+  if (positive(row.reference?.planEntry) && !sameQuoteAndEntry) levels.push({ id: 'plan-entry', label: paperProfile ? 'Screened close' : 'Plan entry', price: row.reference.planEntry, tone: 'plan' })
+  if (positive(row.price)) levels.push({ id: 'quote', label: paperProfile ? 'Latest close' : sameQuoteAndEntry ? 'Evaluated price' : 'Evaluated quote', price: row.price, tone: 'quote' })
   const prices = [...candles.flatMap(({ candle }) => [candle.low, candle.high]), ...points.map((point) => point.price),
     ...[row.zone.low, row.zone.high, row.price].filter(positive),
     ...(ichimoku?.lines.flatMap((point) => [point.tenkan, point.kijun].filter(positive)) ?? []),
@@ -137,7 +142,10 @@ export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, comp
   const inspected = candles[hoverIndex ?? candles.length - 1]
   const inspectionX = x((inspected.candle.openTime + inspected.candle.closeTime) / 2)
   const base = row.symbol.replace(/USDT$/, '')
-  const summary = `${base} ${row.name}, ${timeframe} ${view === 'setup' ? 'Setup' : 'Recent'} view. ${candles.length} captured candles from ${utcStamp(first.openTime)} to ${utcStamp(last.closeTime)}.${candles.at(-1)?.preview ? ' The outlined final candle is open and provisional.' : ''} ${points.length ? `Observed anchors ${points.map((point) => point.label).join(', ')}. ` : ''}Evaluated quote ${positive(row.price) ? formatQuotePrice(row.price) : 'unavailable'}. Stop ${positive(row.stop) ? formatQuotePrice(row.stop) : 'unavailable'}, first target ${positive(row.target) ? formatQuotePrice(row.target) : 'unavailable'}.${showIchimoku ? ` Ichimoku 20/60/120: orange Tenkan, red Kijun and green/red cloud. ${ichimoku?.firstProjectionAt ? 'Dashed forward cloud is already calculated from closed candles and displayed 30 bars ahead, not forecast prices.' : ''}` : ''}`
+  const paperOpeningNote = paperProfile
+    ? ` The source paper account uses the next whole observed 1-minute opening.${positive(row.reference?.entryMin) && positive(row.reference?.entryMax) ? ` Frozen post-slippage opening band: ${formatQuotePrice(row.reference.entryMin)} to ${formatQuotePrice(row.reference.entryMax)}.` : ''} This chart has no intervening minute path or fill.${cappedCloud ? ' A farther target may be capped at net 2R after that fill.' : ''}`
+    : ''
+  const summary = `${base} ${row.name}, ${timeframe} ${view === 'setup' ? 'Setup' : 'Recent'} view. ${candles.length} captured candles from ${utcStamp(first.openTime)} to ${utcStamp(last.closeTime)}.${candles.at(-1)?.preview ? ' The outlined final candle is open and provisional.' : ''} ${points.length ? `Observed anchors ${points.map((point) => point.label).join(', ')}. ` : ''}${paperProfile ? 'Latest completed close reference' : 'Evaluated quote'} ${positive(row.price) ? formatQuotePrice(row.price) : 'unavailable'}. ${paperProfile ? 'Initial stop' : 'Stop'} ${positive(row.stop) ? formatQuotePrice(row.stop) : 'unavailable'}, ${trailingDonchian ? 'no fixed target; exit follows the ATR trail' : `${cappedCloud ? 'original structural target' : paperProfile ? 'source target' : 'first target'} ${positive(row.target) ? formatQuotePrice(row.target) : 'unavailable'}`}.${paperOpeningNote}${showIchimoku ? ` Ichimoku 20/60/120: orange Tenkan, red Kijun and green/red cloud. ${ichimoku?.firstProjectionAt ? 'Dashed forward cloud is already calculated from closed candles and displayed 30 bars ahead, not forecast prices.' : ''}` : ''}`
   const switchView = (nextTimeframe: Timeframe, nextView: 'setup' | 'recent') => {
     setSelection({ identity, timeframe: nextTimeframe, view: nextView })
     onTimeframeChange?.(nextTimeframe)
@@ -197,7 +205,7 @@ export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, comp
         {zoneValid && <g className="watch-setup-chart__zone">
           {zoneStart !== null && zoneStart < plot.right && <rect x={zoneStart} y={zoneTop} width={plot.right - zoneStart} height={Math.max(2, zoneBottom - zoneTop)} />}
           <line x1={zoneStart ?? plot.left} x2={plot.right} y1={zoneTop} y2={zoneTop} /><line x1={zoneStart ?? plot.left} x2={plot.right} y1={zoneBottom} y2={zoneBottom} />
-          {!compact && zoneStart !== null && plot.right - zoneStart > 88 && <text x={zoneStart + 7} y={clamp(zoneTop - 7, plot.top + 10, plot.bottom - 7)}>{row.source === 'trend' ? 'Pullback level' : 'Entry zone'}</text>}
+          {!compact && zoneStart !== null && plot.right - zoneStart > 88 && <text x={zoneStart + 7} y={clamp(zoneTop - 7, plot.top + 10, plot.bottom - 7)}>{paperProfile ? trailingDonchian ? 'Breakout level' : 'Signal zone' : row.source === 'trend' ? 'Pullback level' : 'Entry zone'}</text>}
         </g>}
         {levels.filter((level) => !compact || level.price >= low && level.price <= high).map((level) => <line key={level.id} className={`watch-setup-chart__level is-${level.tone}`} x1={plot.left} x2={plot.right} y1={y(level.price)} y2={y(level.price)} />)}
         {candles.map(({ candle, preview }) => {

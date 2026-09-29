@@ -2,7 +2,7 @@ import type { Timeframe } from '../types'
 import { TIMEFRAME_MILLISECONDS } from './binanceHistory'
 
 export type GoWatchlistScope = 'all' | 'ichimoku'
-export const GO_WATCHLIST_TIMEFRAMES = ['15m', '1h', '4h', '1d'] as const
+export const GO_WATCHLIST_TIMEFRAMES = ['1d', '4h'] as const
 
 export function getGoWatchlistTimeframes(scope: GoWatchlistScope, timeframe: Timeframe = '1h'): readonly Timeframe[] {
   return scope === 'all' ? GO_WATCHLIST_TIMEFRAMES : [timeframe]

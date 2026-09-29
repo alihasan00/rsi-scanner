@@ -7,6 +7,9 @@ import { GO_WATCHLIST_TIMEFRAMES, parseGoWatchlistSeed, startGoWatchlistFeed } f
 import type { GoWatchlistFrameUpdate, GoWatchlistTimeframe } from '../src/lib/goWatchlistFeed'
 
 const NOW = Date.parse('2026-09-28T12:00:00Z')
+// Keep transport and recovery coverage across four intervals while the actual
+// mixed Watchlist default is asserted separately below.
+const TRANSPORT_FIXTURE_TIMEFRAMES = ['15m', '1h', '4h', '1d'] as const
 
 function candle(index: number, timeframe: GoWatchlistTimeframe = '15m', close = 105): Candle {
   const duration = TIMEFRAME_MILLISECONDS[timeframe]
@@ -30,7 +33,8 @@ async function flush(): Promise<void> {
   for (let index = 0; index < 15; index++) await Promise.resolve()
 }
 
-function harness(symbols: readonly string[] = ['BTCUSDT'], market: ScreenerMarket = 'spot', timeframes?: readonly Timeframe[]) {
+function harness(symbols: readonly string[] = ['BTCUSDT'], market: ScreenerMarket = 'spot',
+  timeframes: readonly Timeframe[] = TRANSPORT_FIXTURE_TIMEFRAMES) {
   const events: string[] = []
   const requests: { symbol: string; timeframe: GoWatchlistTimeframe; url: URL; signal: AbortSignal; startedAt: number;
     respond: (raw: unknown, status?: number, headers?: HeadersInit) => void; reject: (error: unknown) => void }[] = []
@@ -130,7 +134,28 @@ describe('raw Go watchlist seed validation', () => {
   })
 })
 
-describe('fixed four-timeframe Go watchlist feed', () => {
+describe('Go watchlist feed sources and transport', () => {
+  test('production mixed scans default to daily and four-hour feeds', () => {
+    const requested: string[] = []
+    const connected: string[] = []
+    const stop = startGoWatchlistFeed({symbols: ['BTCUSDT'], market: 'spot', onUpdate: () => undefined}, {
+      fetcher: ((input: Parameters<typeof fetch>[0]) => {
+        requested.push(new URL(String(input)).searchParams.get('interval')!)
+        return Promise.reject(new Error('Test seed cancelled'))
+      }) as typeof fetch,
+      createStream: () => ({
+        connect: (_symbols, interval) => { connected.push(interval) },
+        disconnect: () => undefined,
+      }),
+      schedule: () => () => undefined,
+      now: () => NOW,
+    })
+    expect(GO_WATCHLIST_TIMEFRAMES).toEqual(['1d', '4h'])
+    expect(connected).toEqual(['1d', '4h'])
+    expect(requested).toEqual(['1d', '4h'])
+    stop()
+  })
+
   test('a dedicated scan requests only its chosen frame and cleans up on a timeframe change', async () => {
     const feed = harness(['BTCUSDT'], 'spot', ['2h', '2h'])
     expect(feed.requests.map((request) => request.timeframe)).toEqual(['2h'])
@@ -158,16 +183,16 @@ describe('fixed four-timeframe Go watchlist feed', () => {
       schedule: () => () => undefined,
     })
     await flush()
-    expect(receivers).toEqual([undefined, undefined, undefined, undefined])
+    expect(receivers).toEqual([undefined, undefined])
     stop()
   })
 
   test('connects every interval before requests, deduplicates symbols and shares an eight-request queue', async () => {
     const symbols = Array.from({ length: 6 }, (_, index) => `ASSET${index}USDT`)
     const feed = harness([...symbols, symbols[0]], 'tradfi')
-    expect(feed.events.slice(0, 4)).toEqual(GO_WATCHLIST_TIMEFRAMES.map((timeframe) => `connect:tradfi:${timeframe}:${symbols.join(',')}`))
+    expect(feed.events.slice(0, 4)).toEqual(TRANSPORT_FIXTURE_TIMEFRAMES.map((timeframe) => `connect:tradfi:${timeframe}:${symbols.join(',')}`))
     expect(feed.requests).toHaveLength(8)
-    expect(feed.requests.map((request) => request.timeframe)).toEqual([...GO_WATCHLIST_TIMEFRAMES, ...GO_WATCHLIST_TIMEFRAMES])
+    expect(feed.requests.map((request) => request.timeframe)).toEqual([...TRANSPORT_FIXTURE_TIMEFRAMES, ...TRANSPORT_FIXTURE_TIMEFRAMES])
     for (let index = 0; index < 8; index++) {
       feed.requests[index].respond(seed(40, feed.requests[index].timeframe))
       await flush()
@@ -186,7 +211,7 @@ describe('fixed four-timeframe Go watchlist feed', () => {
   test('overlaps 750 ms responses across 440 feeds without exceeding either request budget', async () => {
     const symbols = Array.from({ length: 110 }, (_, index) => `ASSET${index}USDT`)
     const feed = harness(symbols)
-    const expectedFrames = symbols.length * GO_WATCHLIST_TIMEFRAMES.length
+    const expectedFrames = symbols.length * TRANSPORT_FIXTURE_TIMEFRAMES.length
     const latency = 750
     const fourConcurrentMinimum = Math.ceil(expectedFrames / 4) * latency
     const responded = new Set<typeof feed.requests[number]>()

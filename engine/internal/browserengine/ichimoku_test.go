@@ -19,22 +19,26 @@ func TestLectureFamiliesReachTheSelectedBrowserResult(t *testing.T) {
 	if err := json.Unmarshal(raw, &request); err != nil {
 		t.Fatal(err)
 	}
-	response := browser.Run(request)
-	requireSuccessful(t, response, 4)
-	for _, family := range []string{"tk_cross", "pk_cross", "cloud_edge_to_edge"} {
-		found := false
+	request.Scope = "ichimoku"
+	found := map[string]bool{}
+	for _, timeframe := range []string{"1d", "4h", "1h", "15m"} {
+		request.Timeframe = timeframe
+		response := browser.Run(request)
+		requireSuccessful(t, response, 1)
 		for _, item := range response.Result.Strategies.Items {
-			if item.Opportunity.Family == family && item.Plan.Status == "ready_for_review" {
-				found = true
+			if item.Plan.Status == "ready_for_review" {
+				found[item.Opportunity.Family] = true
 			}
 		}
-		if !found {
-			t.Fatalf("lecture method did not reach selection: %s", family)
+		for _, series := range response.Scan.Series {
+			if len(response.Result.Strategies.Items) > 0 && len(series.IchimokuSeries) != 500 {
+				t.Fatal("selected lecture setup has no complete chart")
+			}
 		}
 	}
-	for _, series := range response.Scan.Series {
-		if len(series.IchimokuSeries) != 500 {
-			t.Fatal("selected lecture setup has no complete chart")
+	for _, family := range []string{"tk_cross", "pk_cross", "cloud_edge_to_edge"} {
+		if !found[family] {
+			t.Fatalf("lecture method did not reach selection: %s", family)
 		}
 	}
 }
@@ -42,7 +46,7 @@ func TestLectureFamiliesReachTheSelectedBrowserResult(t *testing.T) {
 func TestLectureReadingsAndSelectedChartsUseExactCompletedHistories(t *testing.T) {
 	request := fixture("BTCUSDT", "ETHUSDT")
 	response := browser.Run(request)
-	requireSuccessful(t, response, 8)
+	requireSuccessful(t, response, 4)
 	selected := map[string]bool{}
 	for _, item := range response.Result.Items {
 		selected[item.Setup.Symbol] = true
@@ -85,13 +89,13 @@ func TestLectureReadingsAndSelectedChartsUseExactCompletedHistories(t *testing.T
 func TestLectureTransportExcludesPreviewAndOwnsItsState(t *testing.T) {
 	request := fixture("BTCUSDT")
 	before := browser.Run(request)
-	requireSuccessful(t, before, 4)
+	requireSuccessful(t, before, 2)
 	for i := range request.Histories {
 		request.Histories[i].Preview.High = 100000
 		request.Histories[i].Preview.Close = 100000
 	}
 	after := browser.Run(request)
-	requireSuccessful(t, after, 4)
+	requireSuccessful(t, after, 2)
 	for i := range before.Scan.Series {
 		if !reflect.DeepEqual(before.Scan.Series[i].Ichimoku, after.Scan.Series[i].Ichimoku) {
 			t.Fatal("provisional prices changed completed lecture readings")

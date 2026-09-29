@@ -16,7 +16,6 @@ export interface WatchlistReviewInput {
 
 export interface WatchlistReviewExport { text: string; html: string; filename: string }
 
-const FRAMES = ['15m', '1h', '4h', '1d'] as const
 const exact = (value: number | null | undefined) => value == null || !Number.isFinite(value) ? 'Not established' : String(value)
 const validTime = (value: number | null | undefined): value is number => value != null && Number.isFinite(value) && !Number.isNaN(new Date(value).getTime())
 const stamp = (value: number | null | undefined) => validTime(value) ? new Date(value).toISOString() : 'Unavailable'
@@ -106,13 +105,16 @@ function sanitizeChart(markup: string | undefined): string {
 }
 
 function summarizeSetup(row: WatchlistRow, selected: WatchlistRow, matchingIds: ReadonlySet<string>) {
+  const paperProfile = row.reference?.mode === 'Paper research profile'
   return {
     id: row.id, name: row.name, symbol: row.symbol, market: row.market, source: row.source, timeframe: row.timeframe,
     direction: row.direction, opposing: row.direction !== selected.direction, matchesPinnedFilters: matchingIds.has(row.id),
     recordedStatus: row.status, recordedStatusLabel: row.reference?.statusLabel ?? words(row.status),
     nativeStatus: row.reference?.nativeStatus ?? null, planStatus: row.reference?.planStatus ?? null,
     snapshotId: row.reference?.chart?.snapshotId ?? null, evaluatedAt: row.reference?.chart?.evaluatedAt ?? null,
-    geometricEntryReference: row.reference?.entry ?? null, planEntry: row.reference?.planEntry ?? null,
+    paperProfile, geometricEntryReference: paperProfile ? null : row.reference?.entry ?? null,
+    signalCloseReference: paperProfile ? row.reference?.entry ?? null : null, planEntry: row.reference?.planEntry ?? null,
+    entryMin: row.reference?.entryMin ?? null, entryMax: row.reference?.entryMax ?? null,
     evaluatedQuote: row.price, zone: row.zone, stop: row.stop, target: row.target,
     grossRR: row.riskReward, netRR: row.reference?.netRiskReward ?? null, reason: row.reason, next: row.next,
   }
@@ -124,9 +126,16 @@ export function buildWatchlistReview(input: WatchlistReviewInput, chartMarkup?: 
   const ref = row.reference
   const chart = ref?.chart
   const scopedIchimoku = ref?.scope === 'ichimoku'
+  const paperProfile = ref?.mode === 'Paper research profile'
+  const family = ref?.strategyFamily ?? ''
+  const trailingDonchian = paperProfile && family.startsWith('donchian55_atr_trail')
+  const cappedCloud = paperProfile && family.startsWith('cloud_reclaim_volume_2r')
+  const hasOpeningBand = paperProfile && ref?.entryMin != null && ref?.entryMax != null
+  const ichimokuFrames = chart?.frames.filter((frame) => frame.ichimoku) ?? []
   const contextFrames = scopedIchimoku ? [...new Set([...(ref?.frames.map((frame) => frame.timeframe) ?? []),
     ...(chart?.frames.filter((frame) => frame.candles.length > 0).map((frame) => frame.timeframe) ?? [])])]
-    .sort((a, b) => TIMEFRAME_MILLISECONDS[a as Timeframe] - TIMEFRAME_MILLISECONDS[b as Timeframe]) : FRAMES
+    .sort((a, b) => TIMEFRAME_MILLISECONDS[a as Timeframe] - TIMEFRAME_MILLISECONDS[b as Timeframe])
+    : ref?.requiredTimeframes?.length ? [...ref.requiredTimeframes] : [row.timeframe]
   const snapshotLabel = chart?.snapshotId && chart.snapshotId.length > 120
     ? `${ref?.engineVersion ?? 'Go'}@${stamp(chart.evaluatedAt)} (full snapshot ID in HTML JSON)`
     : chart?.snapshotId ?? 'Unavailable'
@@ -134,7 +143,8 @@ export function buildWatchlistReview(input: WatchlistReviewInput, chartMarkup?: 
   const entryWindowExpired = ref?.planStatus === 'confirmation_expired' || validTime(expiresAt) && copiedAt >= expiresAt
   const exportState = !current ? 'No longer selected — saved evaluation.'
     : !snapshotCurrent ? 'Saved evaluation has aged — current eligibility is not established.'
-      : entryWindowExpired ? 'Confirmation expired — the entry window has ended.'
+      : entryWindowExpired ? paperProfile ? 'Paper entry window expired — the completed signal remains recorded.'
+        : 'Confirmation expired — the entry window has ended.'
         : input.newerAvailable ? 'Saved evaluation — a newer evaluation is available.'
           : 'Current selection at export — review the recorded snapshot.'
   const matchingIds = new Set(instrument.setups.map((setup) => setup.id))
@@ -147,6 +157,8 @@ export function buildWatchlistReview(input: WatchlistReviewInput, chartMarkup?: 
     'Do not claim to have independently recalculated indicators or validated geometry from summaries alone. Request the HTML snapshot or the required source data for those checks.',
     'The frozen Go classifications are recorded observations, not trade approval, an order fill, a measured win rate or a profitability guarantee.',
     'Costs are model assumptions. Actual fees, funding, borrow, leverage, spread, depth and execution remain unverified.',
+    ...(paperProfile ? ['The browser keeps up to 500 completed candles per source frame. The crypto project can use longer stored history; that can change indicator values and even the latest profile signal.'] : []),
+    ...(paperProfile ? ['The current completed close and frozen signal close are references only. The source paper account uses the next whole observed 1-minute opening and checks intervening minutes. This scanner has no verified minute path, opening fill, after-fill reward/risk or execution-time target cap.'] : []),
     'Alternative setups are the engine-selected observations retained for this asset, not a complete raw detector inventory.',
   ]
   const reviewRequest = 'Independently review this saved setup. Check the supporting and opposing evidence, event timing, invalidation and reward/risk assumptions. Identify errors, missing evidence and reasons to wait or reject it; distinguish what you verified from what you could not verify. Do not rubber-stamp the engine label or treat this request as trade approval.'
@@ -157,6 +169,11 @@ export function buildWatchlistReview(input: WatchlistReviewInput, chartMarkup?: 
     exportState: {label: exportState, current, snapshotCurrent, newerAvailable: input.newerAvailable ?? false, entryWindowExpired},
     evaluation: {evaluatedAt: chart?.evaluatedAt ?? null, engineVersion: ref?.engineVersion ?? null, snapshotId: chart?.snapshotId ?? null},
     chartCaption: caption ?? null,
+    paperExecution: paperProfile ? {
+      entryRule: 'next_whole_observed_1m_open', interveningMinutePathVerified: false, openingFillVerified: false,
+      frozenSlippedEntryBand: hasOpeningBand ? {minimum: ref?.entryMin, maximum: ref?.entryMax} : null,
+      originalStructuralTarget: cappedCloud ? row.target : null, postFillNetRewardCapR: cappedCloud ? 2 : null,
+    } : null,
     selectedSetup: row,
     instrument: {id: instrument.id, symbol: instrument.symbol, market: instrument.market, hasMixedDirections: instrument.hasMixedDirections,
       selectedSetupId: row.id, leadSetupId: instrument.lead.id, alternatives},
@@ -181,39 +198,53 @@ export function buildWatchlistReview(input: WatchlistReviewInput, chartMarkup?: 
     `- Engine receipt freshness allowance: ${exact(ref?.maxAgeMs)} ms; completed-candle currency is checked separately.`,
     '', '## Exact price references · USDT', '',
     '| Reference | Value |', '| --- | --- |',
-    `| Geometric entry reference | ${exact(ref?.entry)} |`,
-    `| Plan entry / quote used for risk | ${exact(ref?.planEntry)} |`,
-    `| Evaluated market quote | ${exact(row.price)} |`,
-    `| Zone low | ${exact(row.zone.low)} |`, `| Zone high | ${exact(row.zone.high)} |`,
-    `| Invalidation / stop | ${exact(row.stop)} |`, `| Selected first target | ${exact(row.target)} |`,
-    `| Gross reward/risk | ${exact(row.riskReward)} |`, `| Net reward/risk after modeled costs | ${exact(ref?.netRiskReward)} |`,
-    `| Distance from entry reference, percent | ${exact(row.distancePercent)} |`,
-    `| Distance from entry reference, ATR | ${exact(row.distanceAtr)} |`,
-    '', `Modeled round-trip costs: ${exact(ref?.feeBps)} bps fees + ${exact(ref?.slippageBps)} bps slippage/spread. Minimum net reward/risk: ${exact(ref?.minNetRR)}R.`,
-    'Entry reference, evaluated plan quote and market quote have separate meanings; do not substitute one for another or move the target to improve R/R.',
+    `| ${paperProfile ? 'Frozen signal close reference' : 'Geometric entry reference'} | ${exact(ref?.entry)} |`,
+    `| ${paperProfile ? 'Latest completed close in reference plan' : 'Plan entry / quote used for risk'} | ${exact(ref?.planEntry)} |`,
+    `| ${paperProfile ? 'Latest completed market close' : 'Evaluated market quote'} | ${exact(row.price)} |`,
+    `| ${paperProfile ? 'Source signal zone low' : 'Zone low'} | ${exact(row.zone.low)} |`,
+    `| ${paperProfile ? 'Source signal zone high' : 'Zone high'} | ${exact(row.zone.high)} |`,
+    ...(hasOpeningBand ? [`| Frozen slipped-entry band minimum | ${exact(ref?.entryMin)} |`,
+      `| Frozen slipped-entry band maximum | ${exact(ref?.entryMax)} |`] : []),
+    `| ${paperProfile ? 'Frozen initial stop reference' : 'Invalidation / stop'} | ${exact(row.stop)} |`,
+    `| ${trailingDonchian ? 'Exit rule' : cappedCloud ? 'Original structural target before post-fill cap' : paperProfile ? 'Source target reference' : 'Selected first target'} | ${trailingDonchian ? 'ATR trailing stop; no fixed target' : exact(row.target)} |`,
+    `| ${paperProfile ? 'Gross reward/risk at reference close, if modeled' : 'Gross reward/risk'} | ${exact(row.riskReward)} |`,
+    `| ${paperProfile ? 'Net reward/risk at reference close, if modeled' : 'Net reward/risk after modeled costs'} | ${exact(ref?.netRiskReward)} |`,
+    `| Distance from ${paperProfile ? 'frozen signal close' : 'entry reference'}, percent | ${exact(row.distancePercent)} |`,
+    `| Distance from ${paperProfile ? 'frozen signal close' : 'entry reference'}, ATR | ${exact(row.distanceAtr)} |`,
+    '', paperProfile
+      ? `Modeled round-trip costs: ${exact(ref?.feeBps)} bps fees + ${exact(ref?.slippageBps)} bps slippage/spread; ${ref ? exact(ref.feeBps + ref.slippageBps) : 'Not established'} bps total. Fixed-target screening minimum, when applicable: ${exact(ref?.minNetRR)}R.`
+      : `Modeled round-trip costs: ${exact(ref?.feeBps)} bps fees + ${exact(ref?.slippageBps)} bps slippage/spread. Minimum net reward/risk: ${exact(ref?.minNetRR)}R.`,
+    paperProfile
+      ? `The signal and screened closes are references, not entries or fills. The source paper account enters at the next whole observed 1-minute opening after signal observation and checks every intervening minute; this scanner has not verified that path or a fill. The actual slipped entry and after-fill R/R are unknown.${hasOpeningBand ? ' The frozen entry band applies to the slipped opening entry, not the source signal zone.' : ''}${cappedCloud ? ' A farther original cloud target may be capped at net 2R only after slipped entry and costs are known.' : ''}`
+      : 'Entry reference, evaluated plan quote and market quote have separate meanings; do not substitute one for another or move the target to improve R/R.',
     '', '## Reason and next checkpoint', '',
     `- Why: ${markdown(row.reason)}`,
     `- Next: ${markdown(row.next)}`,
     `- Recorded trigger: ${stamp(row.confirmedAt)}.`,
-    '', scopedIchimoku ? '## Captured timeframe context' : '## Four-timeframe context', '',
-    ...(scopedIchimoku ? [`Setup detection and the algorithm’s trigger, invalidation and expiry rules use only ${row.timeframe} candles.`, ''] : []),
+    '', scopedIchimoku ? '## Captured timeframe context' : paperProfile ? '## Required source timeframe context' : '## Captured timeframe context', '',
+    ...(scopedIchimoku ? [`Setup detection and the algorithm’s trigger, invalidation and expiry rules use only ${row.timeframe} candles.`, '']
+      : paperProfile ? [`This profile requires ${contextFrames.join(', ')} completed candles; unrelated timeframe feeds do not govern this saved signal.`, ''] : []),
     '| Frame | Recorded trend | Recorded structure | Last completed candle | Captured closed candles |',
     '| --- | --- | --- | --- | --- |',
     ...contextFrames.map((timeframe) => {
       const frame = ref?.frames.find((item) => item.timeframe === timeframe)
       const captured = chart?.frames.find((item) => item.timeframe === timeframe)
-      const role = scopedIchimoku ? timeframe === row.timeframe ? ' · setup' : ' · context' : ''
-      return `| ${timeframe}${role} | ${markdown(frame?.trend ?? 'Unavailable')} | ${markdown(frame?.structure ?? 'Unavailable')} | ${stamp(frame?.asOf ?? (scopedIchimoku ? captured?.lastClosedAt : undefined))} | ${captured?.candles.length ?? 'Unavailable'} |`
+      const role = scopedIchimoku ? timeframe === row.timeframe ? ' · setup' : ' · context'
+        : paperProfile ? timeframe === row.timeframe ? ' · source' : ' · context' : ''
+      return `| ${timeframe}${role} | ${markdown(frame?.trend ?? 'Unavailable')} | ${markdown(frame?.structure ?? 'Unavailable')} | ${stamp(frame?.asOf ?? captured?.lastClosedAt)} | ${captured?.candles.length ?? 'Unavailable'} |`
     }),
-    '', '## Captured Ichimoku lecture observations', '',
-    ...(chart?.frames.some((frame) => frame.ichimoku) ? chart.frames.filter((frame) => frame.ichimoku).flatMap((frame) => [
-      `### ${frame.timeframe} · ${markdown(frame.ichimoku!.status)} · ${stamp(frame.ichimoku!.asOf)}`, '',
-      ...ichimokuEvidence(frame.ichimoku!, String).map((item) => `- ${markdown(item.label)}${item.caution ? ' — caution' : ''}: ${markdown(item.detail)}`),
-      ...(frame.ichimoku!.conventions ?? []).map((item) => `- Implementation convention: ${markdown(item)}`),
-      '',
-    ]) : ['- Ichimoku readings were not supplied for the matching captured candles.']),
-    `- ${ICHIMOKU_EXCLUSIONS}`,
-    '- Significant width and overextension are qualitative lecture terms. Recorded widths and distances are measurements, not validated probability thresholds. Cloud Fibonacci levels and the opposite edge are references, not guaranteed targets.',
+    ...(scopedIchimoku || ichimokuFrames.length ? [
+      '', paperProfile ? '## Additional captured Ichimoku readings' : '## Captured Ichimoku lecture observations', '',
+      ...(ichimokuFrames.length ? ichimokuFrames.flatMap((frame) => [
+        `### ${frame.timeframe} · ${markdown(frame.ichimoku!.status)} · ${stamp(frame.ichimoku!.asOf)}`, '',
+        ...ichimokuEvidence(frame.ichimoku!, String).map((item) => `- ${markdown(item.label)}${item.caution ? ' — caution' : ''}: ${markdown(item.detail)}`),
+        ...(frame.ichimoku!.conventions ?? []).map((item) => `- Implementation convention: ${markdown(item)}`),
+        '',
+      ]) : ['- Ichimoku readings were not supplied for the matching captured candles.']),
+      ...(paperProfile ? ['- These captured readings are context; the paper profile’s frozen signal and exit policy govern this candidate.']
+        : [`- ${ICHIMOKU_EXCLUSIONS}`,
+          '- Significant width and overextension are qualitative lecture terms. Recorded widths and distances are measurements, not validated probability thresholds. Cloud Fibonacci levels and the opposite edge are references, not guaranteed targets.']),
+    ] : []),
     '', '## Recorded geometry and events', '',
     ...(chart?.points.length ? chart.points.map((point) => `- ${markdown(point.label)}: ${exact(point.price)} · ${point.timeframe} candle open ${stamp(point.time)}.`) : ['- No timestamped pivot path was supplied; do not invent missing anchors.']),
     ...(chart?.sourceWindow ? [`- Historical source window: ${chart.sourceWindow.timeframe}, ${stamp(chart.sourceWindow.startTime)} to ${stamp(chart.sourceWindow.endTime)}. Availability is recorded separately in the events.`] : []),
@@ -224,7 +255,7 @@ export function buildWatchlistReview(input: WatchlistReviewInput, chartMarkup?: 
     ...row.evidence.map((evidence) => `- ${markdown(evidence.source)} · ${markdown(evidence.family)} · ${markdown(evidence.direction)} · ${stamp(evidence.availableAt)}: ${markdown(evidence.detail)}`),
     ...row.cautions.map((caution) => `- ${markdown(caution)}`),
     '', '## Other selected setups for this asset', '',
-    ...(alternatives.length ? alternatives.map((setup) => `- ${setup.opposing ? 'OPPOSING' : 'Same direction'}: ${markdown(setup.name)} · ${setup.timeframe} · ${setup.direction}; recorded ${markdown(setup.recordedStatusLabel)}, plan ${markdown(setup.planStatus ?? 'unavailable')}; entry reference ${exact(setup.geometricEntryReference)}, plan quote ${exact(setup.planEntry)}, stop ${exact(setup.stop)}, target ${exact(setup.target)}, gross R/R ${exact(setup.grossRR)}, net R/R ${exact(setup.netRR)}. ID: ${markdown(setup.id)}.`) : ['- No other engine-selected setups were retained for this asset.']),
+    ...(alternatives.length ? alternatives.map((setup) => `- ${setup.opposing ? 'OPPOSING' : 'Same direction'}: ${markdown(setup.name)} · ${setup.timeframe} · ${setup.direction}; recorded ${markdown(setup.recordedStatusLabel)}, plan ${markdown(setup.planStatus ?? 'unavailable')}; ${setup.paperProfile ? `frozen signal close ${exact(setup.signalCloseReference)}, screened close ${exact(setup.planEntry)}` : `entry reference ${exact(setup.geometricEntryReference)}, plan quote ${exact(setup.planEntry)}`}, stop ${exact(setup.stop)}, ${setup.paperProfile ? 'original target' : 'target'} ${exact(setup.target)}${setup.paperProfile && setup.entryMin != null && setup.entryMax != null ? `, frozen slipped-entry band ${exact(setup.entryMin)}–${exact(setup.entryMax)}` : ''}, gross R/R ${exact(setup.grossRR)}, net R/R ${exact(setup.netRR)}. ID: ${markdown(setup.id)}.`) : ['- No other engine-selected setups were retained for this asset.']),
     '', '## Review coverage and limits', '', ...limitations.map((limitation) => `- ${limitation}`),
   ]
   const text = lines.join('\n')
