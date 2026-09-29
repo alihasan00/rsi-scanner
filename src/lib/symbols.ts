@@ -14,4 +14,6 @@ export const SYMBOLS: readonly string[] = [
   // Additional top coins with active Binance spot pairs, verified 2026-09-07.
   'SHIBUSDT', 'XAUTUSDT', 'ASTERUSDT', 'SKYUSDT', 'PEPEUSDT', 'MORPHOUSDT', 'JSTUSDT', 'QNTUSDT', 'NEXOUSDT', 'AEROUSDT',
   '币安人生USDT', 'STXUSDT', 'PYTHUSDT', 'NIGHTUSDT', 'FFUSDT',
+  // Additional Binance spot pairs verified in the crypto project 2026-09-29.
+  '0GUSDT', 'JTOUSDT', 'MINAUSDT', 'NILUSDT', 'OPUSDT', 'PLUMEUSDT', 'RAYUSDT', 'SAGAUSDT', 'SYRUPUSDT', 'ZENUSDT',
 ]

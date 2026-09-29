@@ -35,6 +35,7 @@ const CURATED_FAMILIES: readonly CoinFamily[] = [
       member('LDO', 'Lido', 'Ethereum liquid-staking governance'),
       member('ARB', 'Arbitrum', 'Ethereum rollup governance'),
       member('STRK', 'Starknet', 'Ethereum validity-rollup token'),
+      member('OP', 'Optimism', 'Ethereum optimistic-rollup governance'),
       member('ETHFI', 'ether.fi', 'Ethereum staking and restaking'),
       member('EIGEN', 'EigenCloud', 'Ethereum restaking ecosystem'),
       member('ENS', 'Ethereum Name Service', 'Ethereum naming governance'),
@@ -47,6 +48,8 @@ const CURATED_FAMILIES: readonly CoinFamily[] = [
     members: [
       member('SOL', 'Solana', 'Solana network asset'),
       member('JUP', 'Jupiter', 'Solana trading and liquidity'),
+      member('RAY', 'Raydium', 'Solana decentralized exchange'),
+      member('JTO', 'Jito', 'Solana liquid staking and validator infrastructure'),
       member('PYTH', 'Pyth Network', 'Solana-origin oracle network; serves multiple chains'),
       member('RENDER', 'Render', 'Distributed GPU network with token on Solana'),
       member('PUMP', 'Pump.fun', 'Solana token-launch platform'),
@@ -138,6 +141,7 @@ const CURATED_FAMILIES: readonly CoinFamily[] = [
       member('FET', 'Artificial Superintelligence Alliance', 'AI agents and decentralized AI ecosystem'),
       member('RENDER', 'Render', 'Distributed GPU rendering and compute'),
       member('VIRTUAL', 'Virtuals Protocol', 'AI-agent creation and ownership platform'),
+      member('0G', '0G', 'Decentralized AI and data infrastructure'),
       member('KITE', 'Kite', 'AI-agent payment infrastructure'),
       member('ACT', 'Act I', 'AI-community token on Solana'),
     ],
@@ -162,6 +166,8 @@ const CURATED_FAMILIES: readonly CoinFamily[] = [
       member('JUP', 'Jupiter', 'Solana trading and liquidity'),
       member('ASTER', 'Aster', 'Derivatives trading platform'),
       member('AVNT', 'Avantis', 'Base derivatives platform'),
+      member('RAY', 'Raydium', 'Solana decentralized exchange'),
+      member('SYRUP', 'Syrup Token', 'Maple lending ecosystem token'),
     ],
   },
   {
@@ -183,6 +189,7 @@ const CURATED_FAMILIES: readonly CoinFamily[] = [
       member('ONDO', 'Ondo', 'Governance for a tokenized-finance ecosystem'),
       member('LINK', 'Chainlink', 'Oracle and cross-chain infrastructure for tokenization'),
       member('HUMA', 'Huma Finance', 'Onchain payment financing'),
+      member('PLUME', 'Plume', 'Real-world-asset-focused blockchain ecosystem'),
     ],
   },
   {
@@ -200,6 +207,7 @@ const CURATED_FAMILIES: readonly CoinFamily[] = [
       member('ZEC', 'Zcash', 'Network with shielded transactions'),
       member('DASH', 'Dash', 'Payments network with optional mixing features'),
       member('NIGHT', 'Midnight', 'Privacy-oriented smart-contract ecosystem'),
+      member('NIL', 'Nillion', 'Privacy-preserving data and computation network'),
     ],
   },
   {
@@ -210,6 +218,7 @@ const CURATED_FAMILIES: readonly CoinFamily[] = [
       member('AR', 'Arweave', 'Permanent data-storage network'),
       member('GRT', 'The Graph', 'Blockchain data-indexing protocol'),
       member('JASMY', 'JasmyCoin', 'Data ownership and connected-device project'),
+      member('0G', '0G', 'Decentralized data infrastructure for AI applications'),
     ],
   },
   {
@@ -238,6 +247,8 @@ const CURATED_FAMILIES: readonly CoinFamily[] = [
       member('ZIL', 'Zilliqa', 'Sharded smart-contract network'),
       member('EGLD', 'MultiversX', 'Sharded smart-contract network'),
       member('XPL', 'Plasma', 'Stablecoin-focused base network'),
+      member('MINA', 'Mina Protocol', 'Succinct-proof blockchain network'),
+      member('SAGA', 'Saga', 'Application-chain network'),
     ],
   },
   {
@@ -246,6 +257,7 @@ const CURATED_FAMILIES: readonly CoinFamily[] = [
     members: [
       member('ARB', 'Arbitrum', 'Ethereum optimistic-rollup governance'),
       member('STRK', 'Starknet', 'Ethereum validity-rollup token'),
+      member('OP', 'Optimism', 'Ethereum optimistic-rollup governance'),
       member('IMX', 'Immutable', 'Ethereum gaming and scaling ecosystem'),
       member('POL', 'Polygon', 'Polygon scaling ecosystem; includes a separate PoS chain'),
       member('CELO', 'Celo', 'Ethereum layer-2 network'),

@@ -54,7 +54,7 @@ bun run build
 Open **Coin Families** in the header. The view includes Ethereum, Solana, BNB
 Chain, Bitcoin, Cosmos, Base, XRP & payments, memes, AI, DeFi, gaming, privacy,
 storage, Layer 1s, scaling, cross-chain infrastructure, tokenization and gold.
-All 110 scanner coins are available; seven without a curated connection appear
+All 120 scanner coins are available; eight without a curated connection appear
 in **Other assets**, where no linked-group comparison is implied.
 
 The **Best movers** strip at the top gives a quick look at the five largest
