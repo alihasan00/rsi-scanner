@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	Version = "0.13.1-26e07587190d+ichimoku.3.watchlist.2"
+	Version = "0.13.1-26e07587190d+ichimoku.3.watchlist.3"
 	// SourceHash identifies the upstream archive; local source hashes and the
 	// extension revision are recorded separately in provenance.json.
 	SourceHash = "26e07587190d24c66d62602e968ef24dafafb281b9b1a0140afa7f6c6d0a0d00"
@@ -123,6 +123,11 @@ func (f memoryFeed) CandlesWithEvidence(ctx context.Context, symbol, timeframe s
 	if evidence.ObservedAt.After(f.now.Add(market.BoundaryGrace)) {
 		return nil, nil, evidence, errors.New("Market history receipt is in the future.")
 	}
+	sourceLimit := 500
+	if timeframe == "15m" {
+		sourceLimit = 999
+	}
+	limit = min(limit, sourceLimit)
 	if len(history.Candles) == 0 || len(history.Candles) > limit {
 		return nil, nil, evidence, fmt.Errorf("Expected between 1 and %d completed candles.", limit)
 	}
@@ -266,7 +271,8 @@ func Run(input Request) Response {
 	if scope == "ichimoku" {
 		scanRequest.Timeframes = []string{timeframe}
 	} else {
-		scanRequest.Timeframes = []string{"1d", "4h"}
+		scanRequest.Timeframes = []string{"1d", "4h", "15m"}
+		scanRequest.Limit = 1000
 	}
 	done, err := engine.Start(context.Background(), scanRequest)
 	if err != nil {

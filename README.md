@@ -19,9 +19,9 @@ The interface uses Ant Design components with the supplied dark purple theme.
 It groups the scanner's coins into ecosystems, sectors, and memes, showing live
 rolling 24-hour performance, leaders, and gaps between family members.
 
-**Watchlist** shows the sibling crypto project's 12 active paper research
-profiles through a Go engine in the browser. Eleven use completed daily
-candles; the fresh weekly-level rebound uses completed four-hour candles. Each
+**Watchlist** shows the sibling crypto project's twelve earlier profiles and five new
+combinations through a Go engine in the browser. Fourteen use completed daily
+candles, two use four-hour candles and one uses fifteen-minute candles. Each
 frame is checked independently, and every qualifying asset has one clickable
 card with its leading signal and chart preview. Open it for the captured
 evidence, other qualifying profiles, reference plan and checks required at the
@@ -110,24 +110,29 @@ detail. Detail charts and review exports preserve the selected frame’s capture
 evidence.
 
 Open **Watchlist** and choose Crypto or TradFi for the mixed paper research
-signals. Its 12 active profiles are four daily 55-bar Donchian breakout variants,
+signals. Its 17 profiles include four daily 55-bar Donchian breakout variants,
 six daily volume-screened cloud reclaim variants, a daily Tenkan/Kijun cross
-with RSI, and a four-hour rebound at an untouched previous-week low. Historical
+with RSI, and a four-hour rebound at an untouched previous-week low. Five new
+combinations add three daily Trendlines filters, 4h range/weekly agreement and
+a 15m Nadaraya–Watson fade with RSI and Ultimate RSI. The timeframe buttons
+show 14 daily, two 4h and one 15m profile, even with zero current matches. Historical
 harmonic, trend-pullback and independent-method setups are no longer selected
 in this mixed view. The dedicated Ichimoku screen above still uses its own
 five setup types; see [lecture coverage and conventions](docs/ichimoku-lecture.md).
 
 - **Independent feeds:** each daily profile needs fresh daily candles; the
-  weekly-level rebound needs fresh four-hour candles. Missing one frame does
-  not suppress a valid signal on the other. REST seeds up to 500 completed
-  candles plus a provisional preview per frame, then WebSockets maintain them.
+  range profiles need fresh four-hour candles; the envelope needs fresh 15m candles. Missing one frame does
+  not suppress signals on another. REST seeds 500 completed daily/4h candles
+  and 999 completed 15m candles, plus a provisional preview, then WebSockets maintain them.
   The source project can use longer contiguous stored history. Recursive
   filters such as Supertrend can therefore change even a latest signal here.
 - **One card per asset:** all qualifying assets can appear, without a 12-card
   cap. A card shows its leading signal, captured chart and evaluated price.
   Open it to compare other selected profiles and their individual plans.
   Opposing directions are marked; stops and targets are never averaged.
-- **Paper plans:** Donchian has an initial stop and managed exits, with no
+- **Paper plans:** The new combinations retain their original exits; the 15m
+  target is calculated from the actual raw opening, and is not drawn as a known
+  price before execution. See [port validation](docs/combinations-port.md). Donchian has an initial stop and managed exits, with no
   fixed profit target. Cloud plans show the original structural target; any
   nearer net-2R cap is determined only after an actual slipped opening. The
   weekly rebound also needs at least 3% raw opening-to-stop distance. A

@@ -49,7 +49,7 @@ describe('progressive Go watchlist scheduling', () => {
     expect(scheduler.initialScanComplete).toBe(false)
     expect(scheduler.begin(NOW + 60_000, progress)).toBeNull()
     const second = getWatchlistSeedProgress(symbols, btc, GO_WATCHLIST_TIMEFRAMES, 'independent')
-    expect(second.readySourceKeys).toEqual(['BTCUSDT:1d', 'BTCUSDT:4h'])
+    expect(second.readySourceKeys).toEqual(['BTCUSDT:1d', 'BTCUSDT:4h', 'BTCUSDT:15m'])
     expect(scheduler.begin(NOW + 5_999, second)).toBeNull()
     expect(scheduler.begin(NOW + 6_000, second)?.allSeedsAttempted).toBe(false)
   })
@@ -107,8 +107,8 @@ describe('progressive coverage publications', () => {
     const btc = histories('BTCUSDT')
     const prior = evaluation(btc)
     prior.errors = [{symbol: 'ETHUSDT', interval: '1d', error: 'Required timeframe history is unavailable.'}]
-    const {coverage, feedError} = getGoWatchlistCoverage([...btc, histories('ETHUSDT')[0]], prior, btc, NOW, 4)
-    expect(coverage).toEqual({total: 4, fresh: 2, loading: 2, error: 0, delayed: 0})
+    const {coverage, feedError} = getGoWatchlistCoverage([...btc, histories('ETHUSDT')[0]], prior, btc, NOW, 6)
+    expect(coverage).toEqual({total: 6, fresh: 3, loading: 3, error: 0, delayed: 0})
     expect(feedError).toBeNull()
   })
 
@@ -116,10 +116,10 @@ describe('progressive coverage publications', () => {
     const sources = histories('BTCUSDT')
     const prior = evaluation(sources)
     const previews = sources.map((frame) => ({...frame, preview: {...frame.preview!, close: 103}, receivedAt: NOW + 1_000}))
-    expect(getGoWatchlistCoverage(previews, prior, sources, NOW + 1_000, 2).coverage).toEqual({total: 2, fresh: 2, loading: 0, error: 0, delayed: 0})
+    expect(getGoWatchlistCoverage(previews, prior, sources, NOW + 1_000, 3).coverage).toEqual({total: 3, fresh: 3, loading: 0, error: 0, delayed: 0})
     const corrected = [...previews]
     corrected[0] = {...corrected[0], candles: corrected[0].candles.map((candle) => ({...candle, volume: 11}))}
-    expect(getGoWatchlistCoverage(corrected, prior, sources, NOW + 1_000, 2).coverage).toEqual({total: 2, fresh: 1, loading: 1, error: 0, delayed: 0})
+    expect(getGoWatchlistCoverage(corrected, prior, sources, NOW + 1_000, 3).coverage).toEqual({total: 3, fresh: 2, loading: 1, error: 0, delayed: 0})
   })
 
   test('the completed-candle boundary changes coverage to awaiting evaluation without refreshing receipts', () => {
@@ -127,7 +127,7 @@ describe('progressive coverage publications', () => {
     const boundary = Date.parse('2026-09-28T16:00:00Z')
     for (const frame of frames) frame.receivedAt = boundary
     const prior = evaluation(frames)
-    expect(getGoWatchlistCoverage(frames, prior, frames, boundary + 4_999, 2).coverage.fresh).toBe(2)
-    expect(getGoWatchlistCoverage(frames, prior, frames, boundary + 5_000, 2).coverage).toEqual({total: 2, fresh: 1, loading: 1, error: 0, delayed: 0})
+    expect(getGoWatchlistCoverage(frames, prior, frames, boundary + 4_999, 3).coverage.fresh).toBe(2)
+    expect(getGoWatchlistCoverage(frames, prior, frames, boundary + 5_000, 3).coverage).toEqual({total: 3, fresh: 1, loading: 2, error: 0, delayed: 0})
   })
 })

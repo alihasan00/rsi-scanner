@@ -12,7 +12,7 @@ import type { GoWatchlistScope } from './goWatchlistTimeframes'
 
 export type { GoWatchlistScope } from './goWatchlistTimeframes'
 const ICHIMOKU_FAMILIES = new Set(['kijun_reclaim', 'cloud_reclaim', 'tk_cross', 'pk_cross', 'cloud_edge_to_edge'])
-const PAPER_PROFILES = new Map<string, {name: string; timeframe: Timeframe}>([
+export const PAPER_PROFILES = new Map<string, {name: string; timeframe: Timeframe}>([
   ['donchian55_atr_trail', {name: '55-bar trend breakout', timeframe: '1d'}],
   ['donchian55_atr_trail_stoch', {name: '55-bar breakout · Stochastic', timeframe: '1d'}],
   ['donchian55_atr_trail_macd', {name: '55-bar breakout · MACD', timeframe: '1d'}],
@@ -24,6 +24,11 @@ const PAPER_PROFILES = new Map<string, {name: string; timeframe: Timeframe}>([
   ['cloud_reclaim_volume_2r_ao', {name: 'Cloud reclaim · volume + AO + 2R cap', timeframe: '1d'}],
   ['cloud_reclaim_volume_2r_sma_ema_macd', {name: 'Cloud reclaim · volume + SMA/EMA/MACD + 2R cap', timeframe: '1d'}],
   ['fresh_weekly_range_long', {name: 'Fresh weekly-level rebound', timeframe: '4h'}],
+  ['combo_trendlines_adx_daily', {name: 'Trendlines · low ADX', timeframe: '1d'}],
+  ['combo_trendlines_cluster_daily', {name: 'Trendlines · clustered Supertrend', timeframe: '1d'}],
+  ['combo_trendlines_sfp_daily', {name: 'Trendlines · Swing Failure Pattern', timeframe: '1d'}],
+  ['combo_range_weekly_4h', {name: 'Range rejection · fresh weekly signal', timeframe: '4h'}],
+  ['combo_nwe_rsi_ultimate_15m', {name: 'Envelope · RSI + Ultimate RSI', timeframe: '15m'}],
   ['tk_cross_rsi', {name: 'Tenkan / Kijun cross · RSI', timeframe: '1d'}],
 ])
 export function isIchimokuSetup(row: WatchlistRow): boolean {
@@ -218,7 +223,7 @@ export function selectGoWatchlist(rows: readonly WatchlistRow[], now: number, fi
   // into detail tabs, opposing-direction counts or portable reviews.
   const ordered = filters.scope === 'ichimoku'
     ? rows.filter((row) => isIchimokuSetup(row) && (!filters.timeframe || row.timeframe === filters.timeframe))
-    : rows.filter(isPaperProfile)
+    : rows.filter((row) => isPaperProfile(row) && (!filters.timeframe || row.timeframe === filters.timeframe))
   for (const row of ordered) {
     if (query && !row.symbol.toUpperCase().includes(query) || filters.starredOnly && !filters.starredSymbols?.has(row.symbol)) continue
     const id = `${row.market}:${row.symbol}`

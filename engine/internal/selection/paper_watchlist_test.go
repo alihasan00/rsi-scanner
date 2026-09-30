@@ -22,7 +22,11 @@ func paperWatchlistSources(t *testing.T, now time.Time, frames ...string) (scann
 		if !supported || !closed {
 			t.Fatalf("unsupported paper fixture frame %q", frame)
 		}
-		bars := make([]market.Candle, 500)
+		count := 500
+		if frame == "15m" {
+			count = 999
+		}
+		bars := make([]market.Candle, count)
 		for i := range bars {
 			closeTime := last - int64(len(bars)-1-i)*width.Milliseconds()
 			bars[i] = market.Candle{OpenTime: closeTime - width.Milliseconds() + 1, CloseTime: closeTime,
@@ -46,7 +50,7 @@ func paperWatchlistCandidate(items []StrategyCandidate, family string) (Strategy
 	return StrategyCandidate{}, false
 }
 
-func TestPaperWatchlistCoversTwelveFamiliesOnIndependentSources(t *testing.T) {
+func TestPaperWatchlistCoversSeventeenFamiliesOnIndependentSources(t *testing.T) {
 	now := time.Date(2026, 9, 29, 12, 30, 0, 0, time.UTC)
 	wantFrame := map[string]string{
 		strategies.PaperDonchianBase:            "1d",
@@ -61,16 +65,18 @@ func TestPaperWatchlistCoversTwelveFamiliesOnIndependentSources(t *testing.T) {
 		strategies.PaperCloudVolume2RStack:      "1d",
 		strategies.PaperFreshWeeklyRangeLong:    "4h",
 		strategies.PaperTKCrossRSI:              "1d",
+		strategies.PaperTrendADX:                "1d", strategies.PaperTrendCluster: "1d", strategies.PaperTrendSFP: "1d", strategies.PaperRangeWeekly: "4h", strategies.PaperNWEMomentum: "15m",
 	}
-	if len(wantFrame) != 12 {
-		t.Fatal("paper roster fixture must name twelve distinct families")
+	if len(wantFrame) != 17 {
+		t.Fatal("paper roster fixture must name seventeen distinct families")
 	}
 	for _, scenario := range []struct {
 		name    string
 		present []string
 		failed  string
 	}{
-		{name: "both", present: []string{"1d", "4h"}},
+		{name: "all", present: []string{"1d", "4h", "15m"}},
+		{name: "fifteen_minute_only", present: []string{"15m"}},
 		{name: "daily_only", present: []string{"1d"}},
 		{name: "four_hour_only", present: []string{"4h"}},
 		{name: "failed_daily", present: []string{"1d", "4h"}, failed: "1d"},
@@ -84,8 +90,8 @@ func TestPaperWatchlistCoversTwelveFamiliesOnIndependentSources(t *testing.T) {
 					Interval: scenario.failed, Error: "source failed"})
 			}
 			result := BuildPaperWatchlist(snapshot, histories, []string{paperWatchlistSymbol}, now, time.Minute)
-			if len(result.Strategies.Summary) != 12 || len(result.Strategies.Coverage) != 12 || len(result.Strategies.Contexts) != 1 {
-				t.Fatalf("each symbol needs all twelve family summaries and coverage rows: %+v", result.Strategies)
+			if len(result.Strategies.Summary) != 17 || len(result.Strategies.Coverage) != 17 || len(result.Strategies.Contexts) != 1 {
+				t.Fatalf("each symbol needs all seventeen family summaries and coverage rows: %+v", result.Strategies)
 			}
 			ready := map[string]bool{}
 			for _, frame := range scenario.present {
@@ -93,7 +99,7 @@ func TestPaperWatchlistCoversTwelveFamiliesOnIndependentSources(t *testing.T) {
 			}
 			delete(ready, scenario.failed)
 			context := result.Strategies.Contexts[0]
-			if available := ready["1d"] || ready["4h"]; (context.Availability == "ready") != available ||
+			if available := ready["1d"] || ready["4h"] || ready["15m"]; (context.Availability == "ready") != available ||
 				(len(result.Strategies.Unavailable) == 0) != available {
 				t.Fatalf("one missing source changed symbol availability: context=%+v unavailable=%+v", context, result.Strategies.Unavailable)
 			}
@@ -108,7 +114,7 @@ func TestPaperWatchlistCoversTwelveFamiliesOnIndependentSources(t *testing.T) {
 				if ready[frame] {
 					wantStatus = "ready"
 				}
-				if row.Status != wantStatus || ready[frame] && (row.HistoryBars != 500 || row.AsOf == nil) {
+				if row.Status != wantStatus || ready[frame] && (row.HistoryBars != len(histories[paperWatchlistSymbol+"/"+frame].Candles) || row.AsOf == nil) {
 					t.Fatalf("%s source coverage depends on another frame: %+v", frame, row)
 				}
 			}

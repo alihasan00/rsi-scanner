@@ -56,8 +56,9 @@ test('Ichimoku uses the shared timeframe picker and describes only the selected 
       expect(html).not.toContain('entry monitoring')
     }
     const mixed = renderToStaticMarkup(createElement(Watchlist, { universe }))
-    expect(mixed.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ')).toContain('11 daily 1 four-hour paper profiles')
-    expect(mixed).not.toContain('15m')
+    expect(mixed.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ')).toContain('14 daily 2 four-hour 1 fifteen-minute paper profiles')
+    expect(mixed).toContain('15m')
+    expect(mixed).toContain('aria-label="Watchlist timeframes"')
     expect(mixed).not.toContain('aria-label="Choose timeframe"')
   } finally {
     initialState.timeframe = originalTimeframe

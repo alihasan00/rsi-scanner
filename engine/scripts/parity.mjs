@@ -113,7 +113,9 @@ try {
   const paperFamilies = ['donchian55_atr_trail', 'donchian55_atr_trail_stoch', 'donchian55_atr_trail_macd',
     'donchian55_atr_trail_adx_range', 'cloud_reclaim_volume_2r', 'cloud_reclaim_volume_2r_ema',
     'cloud_reclaim_volume_2r_sma', 'cloud_reclaim_volume_2r_supertrend', 'cloud_reclaim_volume_2r_ao',
-    'cloud_reclaim_volume_2r_sma_ema_macd', 'fresh_weekly_range_long', 'tk_cross_rsi']
+    'cloud_reclaim_volume_2r_sma_ema_macd', 'fresh_weekly_range_long', 'tk_cross_rsi',
+    'combo_trendlines_adx_daily', 'combo_trendlines_cluster_daily', 'combo_trendlines_sfp_daily',
+    'combo_range_weekly_4h', 'combo_nwe_rsi_ultimate_15m']
   for (const [name, fixture] of [['daily breakout', request], ['changed preview', previewChanged],
     ['daily cloud without four-hour source', paperCloud], ['paper candle at exact close', exactClose],
     ['legacy lecture data in mixed scope', lecture],
@@ -134,10 +136,10 @@ try {
       assert.equal(wasmOutput.result.strategies.limit, 0)
       assert.deepEqual(wasmOutput.result.strategies.summary.map((summary) => summary.family), paperFamilies)
       assert(wasmOutput.result.strategies.items.every((item) => paperFamilies.includes(item.opportunity.family)
-        && ['1d', '4h'].includes(item.opportunity.interval)), `Legacy or misplaced setup in mixed watchlist: ${name}`)
+        && ['1d', '4h', '15m'].includes(item.opportunity.interval)), `Legacy or misplaced setup in mixed watchlist: ${name}`)
     }
     if (name === 'daily breakout') {
-      assert.equal(wasmOutput.scan.series.length, 4)
+      assert.equal(wasmOutput.scan.series.length, 6)
       assert(wasmOutput.scan.series.every((series) => series.ichimoku?.status === 'ready'))
       const donchian = wasmOutput.result.strategies.items.find((item) => item.opportunity.family === 'donchian55_atr_trail')
       assert(donchian?.eligible && donchian.plan.target === null, 'Missing target-free daily breakout')
@@ -145,18 +147,18 @@ try {
     } else if (name === 'changed preview') {
       assert.deepEqual(wasmOutput.scan.series.map((series) => series.ichimoku), baseline.scan.series.map((series) => series.ichimoku), 'Preview altered lecture observations')
     } else if (name === 'daily cloud without four-hour source') {
-      assert.equal(wasmOutput.scan.errors.length, 1)
-      assert.equal(wasmOutput.scan.errors[0].interval, '4h')
+      assert.equal(wasmOutput.scan.errors.length, 2)
+      assert.deepEqual(wasmOutput.scan.errors.map((error) => error.interval).sort(), ['15m', '4h'])
       const cloud = wasmOutput.result.strategies.items.find((item) => item.opportunity.family === 'cloud_reclaim_volume_2r')
       assert(cloud?.eligible && cloud.opportunity.target === 125 && cloud.plan.target === 125,
         'Missing daily cloud or its original structural target')
     } else if (name === 'paper candle at exact close') {
-      assert.equal(wasmOutput.scan.errors.length, 2)
+      assert.equal(wasmOutput.scan.errors.length, 3)
       assert(wasmOutput.scan.errors.some((error) => error.interval === '1d'
         && error.error.includes('before the paper evaluation time')))
       assert.equal(wasmOutput.result.strategies.items.length, 0)
     } else if (name === 'legacy lecture data in mixed scope') {
-      assert.equal(wasmOutput.scan.series.length, 2)
+      assert.equal(wasmOutput.scan.series.length, 3)
     } else if (fixture?.scope === 'ichimoku') {
       const expectedFamilies = name === 'Ichimoku edge scope' ? ['cloud_edge_to_edge'] : ['tk_cross', 'pk_cross']
       for (const family of expectedFamilies) {
@@ -182,6 +184,24 @@ try {
     }
     process.stdout.write(`Native/browser parity: ${name}.\n`)
   }
+  const combinations = JSON.parse(readFileSync(resolve(engineDirectory, 'internal/strategies/testdata/combinations_rust.json'), 'utf8'))
+  for (const [index, fixture] of combinations.entries()) {
+    const now = fixture.candles.at(-1).closeTime + 1
+    const input = {now, symbols: [fixture.symbol], histories: [{symbol: fixture.symbol, timeframe: fixture.frame,
+      candles: fixture.candles, preview: null, receivedAt: now, status: 'ready', error: null}]}
+    const raw = JSON.stringify(input)
+    const nativeOutput = JSON.parse(execFileSync(native, {input: raw, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024}))
+    const wasmOutput = JSON.parse(globalThis.goWatchlistScan(raw))
+    assert.deepEqual(wasmOutput, nativeOutput, `Combination native/browser mismatch: ${index}`)
+    const found = wasmOutput.result.strategies.items.find((item) => item.opportunity.family === fixture.method)
+    assert.equal(!!found, fixture.expected, `Rust/browser signal mismatch: ${index}`)
+    if (found) {
+      assert.equal(found.opportunity.id, fixture.entry.id)
+      assert.equal(found.eligible, true, `Combination cannot be reviewed: ${index}`)
+      assert.equal(found.plan.target, fixture.entry.managedPlan.target)
+    }
+  }
+  process.stdout.write(`Rust/native/browser parity: ${combinations.length} combination cases.\n`)
 } finally {
   rmSync(workspace, { recursive: true, force: true })
 }

@@ -1,6 +1,6 @@
 package strategies
 
-// PaperFamilies is the crypto project's 29 September 2026 fresh paper roster.
+// PaperFamilies is the crypto project's 30 September 2026 fresh paper roster.
 // Historical scanner families remain available to the dedicated Ichimoku view
 // and to existing regression tests, but do not enter the mixed Watchlist.
 var PaperFamilies = []string{
@@ -16,10 +16,14 @@ var PaperFamilies = []string{
 	"cloud_reclaim_volume_2r_sma_ema_macd",
 	"fresh_weekly_range_long",
 	"tk_cross_rsi",
+	PaperTrendADX, PaperTrendCluster, PaperTrendSFP, PaperRangeWeekly, PaperNWEMomentum,
 }
 
 func PaperFamilyFrame(family string) string {
-	if family == PaperFreshWeeklyRangeLong {
+	if family == PaperNWEMomentum {
+		return "15m"
+	}
+	if family == PaperFreshWeeklyRangeLong || family == PaperRangeWeekly {
 		return "4h"
 	}
 	for _, selected := range PaperFamilies {

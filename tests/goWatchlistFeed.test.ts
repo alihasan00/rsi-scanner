@@ -118,7 +118,7 @@ describe('raw Go watchlist seed validation', () => {
   })
 
   test('rejects malformed numbers, timestamp coercion, wrong intervals and unordered candles', () => {
-    const invalid = [null, [], seed(501), [[...rawCandle(candle(0)).slice(0, 6)]],
+    const invalid = [null, [], seed(1000), [[...rawCandle(candle(0)).slice(0, 6)]],
       [[String(candle(0).openTime), ...rawCandle(candle(0)).slice(1)]],
       [rawCandle(candle(0, '1h'))], [rawCandle({ ...candle(0), openTime: 1 })],
       [rawCandle(candle(1)), rawCandle(candle(0))], [rawCandle(candle(0)), rawCandle(candle(0))],
@@ -135,7 +135,7 @@ describe('raw Go watchlist seed validation', () => {
 })
 
 describe('Go watchlist feed sources and transport', () => {
-  test('production mixed scans default to daily and four-hour feeds', () => {
+  test('production mixed scans load all three strategy timeframes', () => {
     const requested: string[] = []
     const connected: string[] = []
     const stop = startGoWatchlistFeed({symbols: ['BTCUSDT'], market: 'spot', onUpdate: () => undefined}, {
@@ -150,9 +150,9 @@ describe('Go watchlist feed sources and transport', () => {
       schedule: () => () => undefined,
       now: () => NOW,
     })
-    expect(GO_WATCHLIST_TIMEFRAMES).toEqual(['1d', '4h'])
-    expect(connected).toEqual(['1d', '4h'])
-    expect(requested).toEqual(['1d', '4h'])
+    expect(GO_WATCHLIST_TIMEFRAMES).toEqual(['1d', '4h', '15m'])
+    expect(connected).toEqual(['1d', '4h', '15m'])
+    expect(requested).toEqual(['1d', '4h', '15m'])
     stop()
   })
 
@@ -203,7 +203,7 @@ describe('Go watchlist feed sources and transport', () => {
     expect(feed.requests).toHaveLength(8)
     feed.advance(1)
     expect(feed.requests).toHaveLength(16)
-    expect(feed.requests.every((request) => request.url.origin === 'https://fapi.binance.com' && request.url.searchParams.get('limit') === '501')).toBe(true)
+    expect(feed.requests.every((request) => request.url.origin === 'https://fapi.binance.com' && request.url.searchParams.get('limit') === (request.timeframe === '15m' ? '1000' : '501'))).toBe(true)
     expect(feed.updates).toHaveLength(8)
     feed.stop()
   })
@@ -408,8 +408,8 @@ describe('Go watchlist feed sources and transport', () => {
     feed.emit(tick(500, true))
     feed.advance(100)
     feed.emit(tick(501, false))
-    expect(feed.frameUpdates().at(-1)?.candles).toHaveLength(500)
-    expect(feed.frameUpdates().at(-1)?.candles[0].openTime).toBe(candle(1).openTime)
+    expect(feed.frameUpdates().at(-1)?.candles).toHaveLength(501)
+    expect(feed.frameUpdates().at(-1)?.candles[0].openTime).toBe(candle(0).openTime)
     feed.advance(100)
     feed.emit(tick(400, true, 120))
     const corrected = feed.frameUpdates().at(-1)!
@@ -501,4 +501,28 @@ describe('Go watchlist feed sources and transport', () => {
     feed.stop()
     expect(feed.disconnected).toBe(0)
   })
+})
+
+test('fifteen-minute envelope history retains 999 completed bars through new finals', async () => {
+  const feed = harness(['BTCUSDT'], 'spot', ['15m'])
+  expect(feed.requests[0].url.searchParams.get('limit')).toBe('1000')
+  feed.requests[0].respond(seed(999))
+  await flush()
+  expect(feed.frameUpdates().at(-1)?.candles).toHaveLength(999)
+  expect(feed.frameUpdates().at(-1)?.preview).toEqual(candle(999))
+  feed.emit(tick(999, true))
+  expect(feed.frameUpdates().at(-1)?.candles).toHaveLength(999)
+  expect(feed.frameUpdates().at(-1)?.candles[0]).toEqual(candle(1))
+  feed.stop()
+})
+
+test('dedicated fifteen-minute indicator scans retain their 500-bar request', () => {
+  let limit: string | null = null
+  const stop = startGoWatchlistFeed({symbols: ['BTCUSDT'], market: 'spot', timeframes: ['15m'], longEnvelopeHistory: false, onUpdate: () => undefined}, {
+    fetcher: ((url: Parameters<typeof fetch>[0]) => { limit = new URL(String(url)).searchParams.get('limit'); return new Promise(() => undefined) }) as typeof fetch,
+    createStream: () => ({connect: () => undefined, disconnect: () => undefined}),
+    schedule: () => () => undefined, now: () => NOW,
+  })
+  expect(limit).toBe('501')
+  stop()
 })

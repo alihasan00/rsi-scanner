@@ -8,12 +8,12 @@ import (
 	"github.com/alihasan00/crypto/internal/strategies"
 )
 
-func TestMixedWatchlistUsesOnlyItsTwoIndependentSources(t *testing.T) {
+func TestMixedWatchlistUsesOnlyItsThreeIndependentSources(t *testing.T) {
 	request := lectureScopeFixture(t)
 	response := browser.Run(request)
-	requireSuccessful(t, response, 2)
-	if response.Scan.Progress.Total != 2 || response.Scan.Progress.Done != 2 {
-		t.Fatal("legacy hourly or fifteen-minute feeds were scanned")
+	requireSuccessful(t, response, 3)
+	if response.Scan.Progress.Total != 3 || response.Scan.Progress.Done != 3 {
+		t.Fatal("legacy hourly feeds were scanned")
 	}
 	if len(response.Result.Items) != 0 || len(response.Result.Trends) != 0 || len(response.Result.Breadth) != 0 {
 		t.Fatal("a legacy setup section entered the mixed Watchlist")
@@ -24,16 +24,16 @@ func TestMixedWatchlistUsesOnlyItsTwoIndependentSources(t *testing.T) {
 		}
 	}
 	for _, frame := range response.Scan.Series {
-		if frame.Interval != "1d" && frame.Interval != "4h" {
+		if frame.Interval != "1d" && frame.Interval != "4h" && frame.Interval != "15m" {
 			t.Fatal("an unrelated timeframe was scanned")
 		}
 	}
-	// Old callers may still provide cached 1h/15m histories. They cannot alter
+	// Old callers may still provide cached 1h histories. They cannot alter
 	// the source-only paper results or chart evidence.
 	filtered := request
 	filtered.Histories = nil
 	for _, history := range request.Histories {
-		if history.Timeframe == "1d" || history.Timeframe == "4h" {
+		if history.Timeframe == "1d" || history.Timeframe == "4h" || history.Timeframe == "15m" {
 			filtered.Histories = append(filtered.Histories, history)
 		}
 	}

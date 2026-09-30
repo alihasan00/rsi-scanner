@@ -20,12 +20,12 @@ closes any saved setup detail.
 
 The Ichimoku chart and context summary show the selected frame’s captured
 evidence. Unavailable histories are not offered as empty charts. Copied reviews
-and saved HTML retain this exact evidence scope. The two-frame paper rules below
+and saved HTML retain this exact evidence scope. The three-frame paper rules below
 describe the separate mixed Watchlist.
 
-The mixed **Watchlist** presents the sibling crypto project's 12 active paper
-research profiles from its 29 September 2026 catalog. Eleven use completed
-daily candles; the fresh weekly-level rebound uses completed four-hour candles.
+The mixed **Watchlist** presents the sibling crypto project's twelve earlier paper
+profiles plus five combinations from 30 September 2026: 17 in total. Fourteen use
+daily candles, two use four-hour candles and one uses fifteen-minute candles.
 Crypto uses Binance Spot and TradFi uses Binance USDT perpetual histories. Each
 source frame qualifies independently: a missing four-hour feed does not block a
 valid daily profile, or vice versa. All qualifying assets can appear, grouped
@@ -50,6 +50,17 @@ The mixed selector recognizes exactly these profile IDs:
 | `cloud_reclaim_volume_2r_sma_ema_macd` | 1d | Long or short | Cloud rule with SMA, EMA and MACD agreement. |
 | `fresh_weekly_range_long` | 4h | Long | Untouched prior-week low, sweep/reclaim and confirmation. |
 | `tk_cross_rsi` | 1d | Long or short | TK-cross retest with RSI14 above 50 for long or below 50 for short. |
+
+| `combo_trendlines_adx_daily` | 1d | Long | Trendlines breakout with defined Signal Forge ADX14 ≤20. |
+| `combo_trendlines_cluster_daily` | 1d | Long | Breakout with latest clustered-Supertrend event bullish, age 0–2. |
+| `combo_trendlines_sfp_daily` | 1d | Long | Breakout with latest SFP event bullish, age 0–2. |
+| `combo_range_weekly_4h` | 4h | Long | Weekly event at first raw range eligibility or preceding two source bars. |
+| `combo_nwe_rsi_ultimate_15m` | 15m | Long | Causal NWE lower-band fade, Signal Forge RSI14 >50, persistent bullish Ultimate RSI event. |
+
+The new combinations' exact exit rules and source comparisons are documented in
+[Combination port](combinations-port.md). Timeframe buttons filter before asset
+grouping and show both enabled profile counts and current matching asset counts.
+An empty timeframe still has its active profiles; no signal is manufactured.
 
 The Donchian filters are read on the breakout close. Cloud and TK filter states
 are frozen at the first raw eligible emission; a later favorable indicator
@@ -148,10 +159,10 @@ places nor tracks paper or live orders.
   distance must be at least 3%, in addition to the entry-band and cost checks.
   Maximum holding is 24 four-hour bars.
 
-All 12 forward paper profiles consider the next whole one-minute opening after
+All 17 forward paper profiles consider the next whole one-minute opening after
 observation. The source checks minute candles from the latest completed source
 candle through observation for prior protective touches. This browser fetches
-daily and four-hour source candles, not that minute execution path, and cannot
+daily, four-hour and fifteen-minute source candles, not that minute execution path, and cannot
 verify whether a setup remains eligible or would fill at that opening.
 
 The reference cost assumptions are **20 basis points of fees plus 10 basis
@@ -173,7 +184,7 @@ unverified. Bearish Spot observations do not establish that an instrument can
 be shorted. The crypto historical tests do not validate these profiles on
 TradFi perpetual contracts.
 
-The source catalog calls all 12 **forward paper experiments**. Historical
+The source catalog calls these profiles **forward paper experiments**. Historical
 backtests used next daily or four-hour source-bar openings and did not replay
 the trial's minute execution cadence. Its corrected
 evidence review finds that recent Donchian profitability is unproven, the small
@@ -192,9 +203,10 @@ candles for contracts tracking stocks, ETFs and commodities. Real session gaps
 remain in the input and can block selection; no synthetic candles are added
 to make an asset pass.
 
-For each asset and requested timeframe, REST requests 501 klines to obtain up
-to **500 completed candles plus the provisional candle**. The mixed Watchlist
-loads only `1d` and `4h`; the dedicated Ichimoku screen loads only its selected
+REST requests 501 klines for **500 completed candles plus the provisional candle**.
+The mixed Watchlist requests 1000 klines for its 15m envelope, preserving 999
+completed candles so both causal bands can warm up. The mixed Watchlist
+loads `1d`, `4h` and `15m`; the dedicated Ichimoku screen loads only its selected
 picker timeframe. A genuinely shorter history is assessed by the applicable
 warmup rules. The provisional candle can supply a live quote, but never enters
 closed-candle indicators or the mixed paper plan's completed-close assessment.
@@ -202,8 +214,8 @@ WebSocket updates maintain the same bounded histories and request recovery
 when needed.
 
 The sibling crypto dashboard can calculate indicators over its full stored
-contiguous history. This browser retains only the latest 500 completed bars
-per frame. Recursive filters such as Supertrend can retain older state, so
+contiguous history. This browser retains the latest 500 daily/4h bars and 999 mixed 15m bars.
+Dedicated Ichimoku retains its existing 500-bar history on every selected frame. Recursive filters such as Supertrend can retain older state, so
 even the latest indicator decision and profile signal may differ from the
 source. Full source-history parity is unavailable with this bounded feed.
 

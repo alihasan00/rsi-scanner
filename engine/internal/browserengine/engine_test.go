@@ -79,7 +79,7 @@ func directSelection(t *testing.T, request browser.Request) selection.Result {
 	t.Helper()
 	engine := scanner.New(referenceFeed{request}, request.Symbols, "Independent test feed", 1, harmonic.DefaultConfig())
 	scanRequest := scanner.DefaultRequest()
-	scanRequest.Timeframes = []string{"1d", "4h"}
+	scanRequest.Timeframes = []string{"1d", "4h", "15m"}
 	done, err := engine.Start(context.Background(), scanRequest)
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +122,7 @@ func TestRunMatchesScannerAndWatchlistSelector(t *testing.T) {
 	}
 	want := directSelection(t, request)
 	response := browser.Run(request)
-	requireSuccessful(t, response, 4)
+	requireSuccessful(t, response, 6)
 	if !reflect.DeepEqual(*response.Result, want) {
 		t.Fatal("browser adapter changed the scanner/watchlist selector result")
 	}
@@ -141,7 +141,7 @@ func TestRunMatchesScannerAndWatchlistSelector(t *testing.T) {
 	if response.Version != browser.Version || response.SourceHash != browser.SourceHash || response.MaxAgeMS != 120000 || response.Now != request.Now {
 		t.Fatal("response lost frozen-source provenance or freshness policy")
 	}
-	if response.Scan.Progress.Done != 4 || response.Scan.Progress.Total != 4 {
+	if response.Scan.Progress.Done != 6 || response.Scan.Progress.Total != 6 {
 		t.Fatalf("incomplete scan publication: %+v", response.Scan.Progress)
 	}
 	for _, frame := range response.Scan.Series {
@@ -177,22 +177,22 @@ func TestReceiptFreshnessIsNotRenewedByReading(t *testing.T) {
 			}
 			response := browser.Run(request)
 			if test.valid {
-				requireSuccessful(t, response, 2)
+				requireSuccessful(t, response, 3)
 				for _, frame := range response.Scan.Series {
 					if frame.ObservedAt != request.Now+test.delta.Milliseconds() {
 						t.Fatal("receipt timestamp was renewed or clamped")
 					}
 				}
-			} else if response.Error != "" || len(response.Scan.Errors) != 2 || len(response.Scan.Series) != 0 {
+			} else if response.Error != "" || len(response.Scan.Errors) != 3 || len(response.Scan.Series) != 0 {
 				t.Fatalf("expired/future receipts escaped feed rejection: %+v", response.Scan)
 			}
 		})
 	}
 	request := fixture("BTCUSDT")
-	requireSuccessful(t, browser.Run(request), 2)
+	requireSuccessful(t, browser.Run(request), 3)
 	request.Now += (2 * time.Minute).Milliseconds()
 	response := browser.Run(request)
-	if len(response.Scan.Errors) != 2 || len(response.Scan.Series) != 0 {
+	if len(response.Scan.Errors) != 3 || len(response.Scan.Series) != 0 {
 		t.Fatal("re-reading the same candles renewed their original receipts")
 	}
 }
@@ -204,7 +204,7 @@ func TestPaperSourceMustCloseBeforeEvaluationTime(t *testing.T) {
 		request.Histories[i].ReceivedAt = request.Now
 	}
 	response := browser.Run(request)
-	if response.Error != "" || len(response.Scan.Errors) != 2 || len(response.Scan.Series) != 0 || response.Result == nil {
+	if response.Error != "" || len(response.Scan.Errors) != 3 || len(response.Scan.Series) != 0 || response.Result == nil {
 		t.Fatalf("a candle at the exact close millisecond entered the paper Watchlist: %+v", response.Scan)
 	}
 	for _, failure := range response.Scan.Errors {
@@ -253,7 +253,7 @@ func TestInvalidHistoryCannotSupplyASetup(t *testing.T) {
 			request := fixture("BTCUSDT")
 			test.change(&request.Histories[0])
 			response := browser.Run(request)
-			if response.Error != "" || response.Result == nil || len(response.Scan.Errors) != 1 || len(response.Scan.Series) != 1 {
+			if response.Error != "" || response.Result == nil || len(response.Scan.Errors) != 1 || len(response.Scan.Series) != 2 {
 				t.Fatalf("invalid history was not isolated: %+v", response.Scan)
 			}
 			failure := response.Scan.Errors[0]
@@ -276,7 +276,7 @@ func TestMissingTimeframeAndCandleBoundaryRemainUnavailable(t *testing.T) {
 	request := fixture("BTCUSDT", "ETHUSDT")
 	request.Histories = request.Histories[1:]
 	response := browser.Run(request)
-	if response.Error != "" || response.Result == nil || len(response.Scan.Errors) != 1 || len(response.Scan.Series) != 3 {
+	if response.Error != "" || response.Result == nil || len(response.Scan.Errors) != 1 || len(response.Scan.Series) != 5 {
 		t.Fatalf("missing timeframe coverage was hidden: %+v", response.Scan)
 	}
 	if len(response.Result.Breadth) != 0 {
@@ -305,10 +305,10 @@ func TestMissingTimeframeAndCandleBoundaryRemainUnavailable(t *testing.T) {
 	// During delivery grace, an older close may be ready. Once grace passes,
 	// the same recently received data cannot stand in for the missing close.
 	request = fixtureAt(time.Date(2026, 9, 28, 12, 0, 2, 0, time.UTC), "BTCUSDT")
-	requireSuccessful(t, browser.Run(request), 2)
+	requireSuccessful(t, browser.Run(request), 3)
 	request.Now += (4 * time.Second).Milliseconds()
 	response = browser.Run(request)
-	if len(response.Scan.Errors) != 1 || response.Scan.Errors[0].Interval != "4h" {
+	if len(response.Scan.Errors) != 2 || !((response.Scan.Errors[0].Interval == "4h" && response.Scan.Errors[1].Interval == "15m") || (response.Scan.Errors[0].Interval == "15m" && response.Scan.Errors[1].Interval == "4h")) {
 		t.Fatalf("new 4h close was not required after grace: %+v", response.Scan.Errors)
 	}
 }
@@ -316,13 +316,13 @@ func TestMissingTimeframeAndCandleBoundaryRemainUnavailable(t *testing.T) {
 func TestPreviewChangesQuoteWithoutBecomingCompletedEvidence(t *testing.T) {
 	request := fixture("BTCUSDT")
 	before := browser.Run(request)
-	requireSuccessful(t, before, 2)
+	requireSuccessful(t, before, 3)
 	for i := range request.Histories {
 		request.Histories[i].Preview.High = 100000
 		request.Histories[i].Preview.Close = 100000
 	}
 	after := browser.Run(request)
-	requireSuccessful(t, after, 2)
+	requireSuccessful(t, after, 3)
 	for i, frame := range after.Scan.Series {
 		previous := before.Scan.Series[i]
 		if frame.Price != 100000 || frame.PriceSource != "provisional_candle" {
@@ -336,7 +336,7 @@ func TestPreviewChangesQuoteWithoutBecomingCompletedEvidence(t *testing.T) {
 		request.Histories[i].Preview = nil
 	}
 	without := browser.Run(request)
-	requireSuccessful(t, without, 2)
+	requireSuccessful(t, without, 3)
 	for _, frame := range without.Scan.Series {
 		if frame.PriceSource != "closed_candle" || frame.ClosedCandles != 500 || frame.Price == 100000 {
 			t.Fatal("absent preview did not retain the final completed-candle quote")
@@ -379,7 +379,7 @@ func TestRunJSONPreservesResultAndReportsMalformedInput(t *testing.T) {
 	if err := json.Unmarshal([]byte(browser.RunJSON(string(raw))), &response); err != nil {
 		t.Fatal(err)
 	}
-	requireSuccessful(t, response, 2)
+	requireSuccessful(t, response, 3)
 	want, _ := json.Marshal(browser.Run(request))
 	got, _ := json.Marshal(response)
 	if string(got) != string(want) {

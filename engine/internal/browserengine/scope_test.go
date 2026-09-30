@@ -38,7 +38,7 @@ func TestRequestScopeDefaultsToMixedWatchlist(t *testing.T) {
 	implicit := browser.Run(request)
 	request.Scope = "all"
 	explicit := browser.Run(request)
-	requireSuccessful(t, implicit, 2)
+	requireSuccessful(t, implicit, 3)
 	if implicit.Scope != "all" || !reflect.DeepEqual(implicit, explicit) {
 		t.Fatal("omitted and explicit all scopes produce different publications")
 	}

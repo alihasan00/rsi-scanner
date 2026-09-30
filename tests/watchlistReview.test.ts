@@ -75,7 +75,7 @@ function fixture() {
   return { row, instrument, copiedAt: COPIED_AT, current: true, snapshotCurrent: true, newerAvailable: false }
 }
 
-function paperFixture(family: string, timeframe: '1d' | '4h' = '1d') {
+function paperFixture(family: string, timeframe: '1d' | '4h' | '15m' = '1d') {
   const input = fixture()
   const {row, instrument} = input
   const ref = row.reference!
@@ -186,7 +186,7 @@ describe('saved watchlist review', () => {
       expect(context).toContain(`| ${timeframe} · setup |`)
       expect(context.split('\n').filter((line) => line.includes(' · setup |'))).toHaveLength(1)
       expect(context).not.toContain('entry monitor')
-      expect(result.text).not.toContain('even the latest profile signal')
+      expect(result.text).not.toContain('persistent helper states and signals')
       expect(snapshotFrom(result.html).frames).toEqual([captured])
     }
   })
@@ -200,9 +200,9 @@ describe('saved watchlist review', () => {
       expect(context).toContain('| ' + timeframe + ' · source |')
       expect(context).not.toContain('15m ·')
       expect(context).not.toContain('1h ·')
-      expect(result.text).toContain('up to 500 completed candles per source frame')
-      expect(result.text).toContain('even the latest profile signal')
-      expect(result.html).toContain('even the latest profile signal')
+      expect(result.text).toContain('999 fifteen-minute candles')
+      expect(result.text).toContain('persistent helper states and signals')
+      expect(result.html).toContain('persistent helper states and signals')
       expect(snapshotFrom(result.html).frames.map((frame) => frame.timeframe)).toEqual([timeframe])
     }
   })
@@ -433,4 +433,19 @@ describe('saved watchlist review', () => {
     expect(result.filename).not.toMatch(/[\\/:<>"']/)
     expect([...result.filename].some((character) => character.charCodeAt(0) < 32)).toBe(false)
   })
+})
+
+
+test('new managed combinations export exit policy without inventing a target', () => {
+  for (const family of ['combo_trendlines_adx_daily', 'combo_nwe_rsi_ultimate_15m']) {
+    const input = paperFixture(family, family.includes('15m') ? '15m' : '1d')
+    input.row.target = null
+    input.row.reference!.entryMin = null
+    input.row.reference!.entryMax = null
+    const result = buildWatchlistReview(input)
+    expect(result.text).toContain(family.includes('15m') ? 'Raw opening + 2 × (raw opening − initial stop); unknown before execution' : 'ATR trailing stop; no fixed target')
+    expect(result.text).toContain('no verified minute path')
+    const saved = findObject(readEmbeddedData(result.html), (item) => item.id === input.row.id && 'target' in item)
+    expect(saved?.target).toBeNull()
+  }
 })

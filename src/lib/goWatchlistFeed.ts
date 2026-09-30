@@ -10,6 +10,8 @@ import { GO_WATCHLIST_TIMEFRAMES, isGoWatchlistCandleAligned } from './goWatchli
 export { GO_WATCHLIST_TIMEFRAMES } from './goWatchlistTimeframes'
 export type GoWatchlistTimeframe = Timeframe
 export const GO_WATCHLIST_HISTORY_LIMIT = 500
+// NWE needs two fully formed 499-error bands: 999 completed bars.
+export const goWatchlistHistoryLimit = (timeframe: Timeframe) => timeframe === '15m' ? 999 : GO_WATCHLIST_HISTORY_LIMIT
 
 export interface GoWatchlistFrameUpdate {
   symbol: string
@@ -26,6 +28,8 @@ export interface GoWatchlistFeedOptions {
   symbols: readonly string[]
   market: ScreenerMarket
   timeframes?: readonly Timeframe[]
+  /** Dedicated indicator scans retain their existing 500-bar window. */
+  longEnvelopeHistory?: boolean
   onUpdate: (update: GoWatchlistFrameUpdate) => void
 }
 
@@ -42,7 +46,7 @@ const STARTS_PER_SECOND = 8
 const REQUEST_TIMEOUT_MS = 15_000
 const RETRY_MS = 5_000
 const MAX_RETRY_MS = 120_000
-const MAX_BUFFERED_CANDLES = GO_WATCHLIST_HISTORY_LIMIT + 12
+const MAX_BUFFERED_CANDLES = 999 + 12
 const GAP_MESSAGE = 'Missing completed candles; refreshing market history.'
 
 interface History {
@@ -84,7 +88,7 @@ function numberField(value: unknown): number {
 
 /** A following REST candle proves earlier rows closed; the newest stays provisional. */
 export function parseGoWatchlistSeed(raw: unknown, timeframe: GoWatchlistTimeframe): Pick<History, 'candles' | 'preview'> {
-  if (!Array.isArray(raw) || raw.length === 0 || raw.length > GO_WATCHLIST_HISTORY_LIMIT + 1) {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > goWatchlistHistoryLimit(timeframe) + 1) {
     throw new Error('Invalid Binance watchlist history.')
   }
   const bars = raw.map((row: unknown): Candle => {
@@ -115,19 +119,19 @@ function quoteTime(history: History): number {
   return history.preview?.openTime ?? history.candles.at(-1)?.openTime ?? -1
 }
 
-function recoverHistory(previous: History, seed: History): History {
+function recoverHistory(previous: History, seed: History, limit: number): History {
   const candles = new Map(previous.candles.map((candle) => [candle.openTime, candle]))
   // REST may correct old completed candles, but cannot remove a newer final
   // which was already received while the exchange snapshot lagged.
   for (const candle of seed.candles) candles.set(candle.openTime, candle)
-  const closed = [...candles.values()].sort((a, b) => a.openTime - b.openTime).slice(-GO_WATCHLIST_HISTORY_LIMIT)
+  const closed = [...candles.values()].sort((a, b) => a.openTime - b.openTime).slice(-limit)
   const latest = closed.at(-1)
   const preview = [seed.preview, previous.preview].filter((candle): candle is Candle => candle !== null
     && (!latest || candle.openTime > latest.openTime)).sort((a, b) => b.openTime - a.openTime)[0] ?? null
   return { candles: closed, preview, receivedAt: quoteTime(seed) >= quoteTime(previous) ? seed.receivedAt : previous.receivedAt }
 }
 
-function applyTick(history: History, event: BufferedTick): { state: 'updated' | 'ignored' | 'gap'; history: History } {
+function applyTick(history: History, event: BufferedTick, limit: number): { state: 'updated' | 'ignored' | 'gap'; history: History } {
   const { tick, receivedAt } = event
   const candle: Candle = { openTime: tick.openTime, closeTime: tick.closeTime, open: tick.open, high: tick.high,
     low: tick.low, close: tick.close, volume: tick.volume }
@@ -149,7 +153,7 @@ function applyTick(history: History, event: BufferedTick): { state: 'updated' | 
   if (tick.isFinal) {
     const preview = history.preview && history.preview.openTime > tick.openTime ? history.preview : null
     return { state: 'updated', history: {
-      candles: [...history.candles, candle].slice(-GO_WATCHLIST_HISTORY_LIMIT), preview,
+      candles: [...history.candles, candle].slice(-limit), preview,
       receivedAt: preview ? history.receivedAt : receivedAt,
     } }
   }
@@ -171,6 +175,7 @@ function retryAfter(response: Response, now: number): number | null {
 /** Independent raw histories for only the requested chart frames. */
 export function startGoWatchlistFeed(options: GoWatchlistFeedOptions, overrides: Partial<GoWatchlistFeedDependencies> = {}): () => void {
   const { market, onUpdate } = options
+  const historyLimit = (frame: Timeframe) => options.longEnvelopeHistory === false ? GO_WATCHLIST_HISTORY_LIMIT : goWatchlistHistoryLimit(frame)
   const symbols = [...new Set(options.symbols)]
   const timeframes = [...new Set(options.timeframes ?? GO_WATCHLIST_TIMEFRAMES)]
   if (!symbols.length) return () => undefined
@@ -289,7 +294,7 @@ export function startGoWatchlistFeed(options: GoWatchlistFeedOptions, overrides:
     let needsRetry = false
     try {
       const request = async (): Promise<History> => {
-        const params = new URLSearchParams({ symbol: frame.symbol, interval: frame.timeframe, limit: String(GO_WATCHLIST_HISTORY_LIMIT + 1) })
+        const params = new URLSearchParams({ symbol: frame.symbol, interval: frame.timeframe, limit: String(historyLimit(frame.timeframe) + 1) })
         const response = await fetcher(`${MARKETS[market].restBase}/klines?${params}`, { signal: controller.signal })
         controller.signal.throwIfAborted()
         if (!response.ok) throw new SeedRequestError(`Binance watchlist history unavailable (HTTP ${response.status}).`, retryAfter(response, dependencies.now()))
@@ -299,11 +304,11 @@ export function startGoWatchlistFeed(options: GoWatchlistFeedOptions, overrides:
       }
       const seed = await Promise.race([request(), aborted])
       if (stopped) return
-      let history = recoverHistory(frames.get(key)!, seed)
+      let history = recoverHistory(frames.get(key)!, seed, historyLimit(frame.timeframe))
       const buffered = [...(pending.get(key)?.values() ?? [])].sort((a, b) => a.tick.openTime - b.tick.openTime)
       pending.delete(key)
       for (let index = 0; index < buffered.length; index++) {
-        const update = applyTick(history, buffered[index])
+        const update = applyTick(history, buffered[index], historyLimit(frame.timeframe))
         if (update.state === 'gap') {
           for (const event of buffered.slice(index)) buffer(key, event)
           needsRetry = true
@@ -346,7 +351,7 @@ export function startGoWatchlistFeed(options: GoWatchlistFeedOptions, overrides:
         enqueue(key)
         return
       }
-      const update = applyTick(frame, event)
+      const update = applyTick(frame, event, historyLimit(timeframe))
       if (update.state === 'gap') {
         buffer(key, event)
         reportError(key, GAP_MESSAGE)

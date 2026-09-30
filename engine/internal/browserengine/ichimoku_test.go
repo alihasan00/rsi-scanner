@@ -46,7 +46,7 @@ func TestLectureFamiliesReachTheSelectedBrowserResult(t *testing.T) {
 func TestLectureReadingsAndSelectedChartsUseExactCompletedHistories(t *testing.T) {
 	request := fixture("BTCUSDT", "ETHUSDT")
 	response := browser.Run(request)
-	requireSuccessful(t, response, 4)
+	requireSuccessful(t, response, 6)
 	selected := map[string]bool{}
 	for _, item := range response.Result.Items {
 		selected[item.Setup.Symbol] = true
@@ -89,13 +89,13 @@ func TestLectureReadingsAndSelectedChartsUseExactCompletedHistories(t *testing.T
 func TestLectureTransportExcludesPreviewAndOwnsItsState(t *testing.T) {
 	request := fixture("BTCUSDT")
 	before := browser.Run(request)
-	requireSuccessful(t, before, 2)
+	requireSuccessful(t, before, 3)
 	for i := range request.Histories {
 		request.Histories[i].Preview.High = 100000
 		request.Histories[i].Preview.Close = 100000
 	}
 	after := browser.Run(request)
-	requireSuccessful(t, after, 2)
+	requireSuccessful(t, after, 3)
 	for i := range before.Scan.Series {
 		if !reflect.DeepEqual(before.Scan.Series[i].Ichimoku, after.Scan.Series[i].Ichimoku) {
 			t.Fatal("provisional prices changed completed lecture readings")

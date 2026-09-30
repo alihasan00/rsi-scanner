@@ -3,7 +3,7 @@
 This subtree embeds the scanner from Go crypto dashboard release
 `0.13.1-26e07587190d` (upstream scan schema 12). Its local extension serves
 the separate Ichimoku Cloud screen and ports the sibling crypto project's
-12 active paper research profiles, cataloged on 29 September 2026, into the
+twelve earlier profiles plus five combinations from 30 September 2026, into the
 mixed Watchlist. The browser supplies completed candle histories; a Web Worker
 executes the Go code as WebAssembly. There is no local server, database, AI
 worker, account ledger or trading action.
@@ -12,7 +12,7 @@ The frozen upstream files and their SHA256 hashes are recorded in
 `provenance.json`, extracted from that release's verified `source.tar.gz`.
 The harmonic detector, regime, structure and historical selection calculations
 are retained in the source tree, but the mixed Watchlist selects only the
-12 paper profiles. The original production source adaptation replaces the
+17 paper profiles. The original production source adaptation replaces the
 database adapter's `cachefeed.BoundaryGrace` import with existing
 `market.BoundaryGrace`; both constants are exactly five seconds. Two tests use
 the same alias adaptation. This keeps the dependency closure in Go's standard
@@ -39,7 +39,7 @@ globalThis.goWatchlistScan(JSON.stringify({
   symbols: ['BTCUSDT'],
   histories: [{
     symbol: 'BTCUSDT',
-    timeframe: '1d', // also supply 4h to evaluate the weekly rebound
+    timeframe: '1d', // also supply 4h and 15m for the range and envelope profiles
     candles: [{ openTime, closeTime, open, high, low, close, volume }],
     preview: { openTime, closeTime, open, high, low, close, volume },
     receivedAt: successfulProviderReceiptInMilliseconds,
@@ -52,7 +52,9 @@ globalThis.goWatchlistScan(JSON.stringify({
 Timestamps are milliseconds, with inclusive Binance candle closing times.
 Supply up to the latest **500 completed candles plus the current provisional
 candle** for each requested frame. Request 501 exchange klines to obtain that
-window; requesting 500 usually returns only 499 completed candles. A genuinely
+window; requesting 500 usually returns only 499 completed candles. For mixed 15m, request 1000 klines and supply up to 999 completed candles plus
+a preview; the first NWE crossing needs 999 completed bars. Dedicated Ichimoku
+retains 500 bars on every timeframe. A genuinely
 shorter history is allowed, subject to each paper family's warmup requirement.
 Unsorted, overlapping, duplicated, missing or invalid candles are not repaired.
 The provisional candle can supply a live quote, but never enters indicators or
@@ -63,8 +65,8 @@ or invalid frames, and provider errors become per-frame scanner errors. A recent
 does not make a missing latest candle fresh. The deployed `--max-cache-age`
 default is two minutes, retained here and returned as `maxAgeMs: 120000`.
 The selector independently requires expected latest closes and complete
-evidence on a profile's own frame: `1d` for eleven mixed profiles and `4h` for
-the fresh weekly rebound. Each frame can qualify without the other. The
+evidence on a profile's own frame: `1d` for fourteen mixed profiles, `4h` for
+two range profiles and `15m` for the envelope combination. Each frame can qualify without the other. The
 dedicated Ichimoku tab requires only its selected timeframe. Do not overwrite
 receipts on cached reads or when the watchlist is opened.
 
@@ -92,8 +94,8 @@ The mixed `result` retains the surrounding `selection.Result` schema but uses
 only `result.strategies.items`. Its `items` and `trends` are empty; neither the
 engine nor UI applies the old 12-item/asset cap. Candidates can have a
 `ready_for_review` plan or a blocked plan status. Every mixed candidate's
-`family` must be one of the 12 IDs in `internal/strategies/paper_catalog.go`,
-and its interval must be that family's declared `1d` or `4h` frame. `result`
+`family` must be one of the 17 IDs in `internal/strategies/paper_catalog.go`,
+and its interval must be that family's declared `1d`, `4h` or `15m` frame. `result`
 is absent on invalid top-level input.
 
 With `scope: 'ichimoku'`, `timeframe` selects one of `1m`, `3m`, `5m`, `15m`,
@@ -117,10 +119,10 @@ positions. Every value comes from completed scanner history; previews never
 enter Ichimoku. The dedicated view groups all active setups by asset, without
 a display cap.
 
-The mixed scanner requests daily and four-hour histories and calls
+The mixed scanner requests daily, four-hour and fifteen-minute histories and calls
 `selection.BuildPaperWatchlist`. Four daily Donchian variants, six daily cloud
 reclaim variants, daily TK cross with RSI and four-hour fresh weekly rebound
-are the only selected families. Each profile's indicators and trigger use
+are joined by five combinations (see [port notes](../docs/combinations-port.md)). Each profile's indicators and trigger use
 completed source candles. Donchian filters are checked on the breakout close;
 cloud and TK filters are frozen at first raw eligibility, so a later favorable
 indicator cannot revive a rejected identity. The separate Ichimoku scope
@@ -137,7 +139,7 @@ plans retain their frozen target and 24-source-bar maximum hold; the weekly
 entry additionally requires at least 3% raw opening-to-stop distance. The
 forward paper trial considers the next whole one-minute opening after
 observation and checks intervening minute candles for protective touches.
-This browser has only daily and four-hour source candles for mixed profiles;
+This browser has only daily, four-hour and fifteen-minute source candles for mixed profiles;
 it cannot verify that minute path, an opening fill, amended trailing stop or
 realized exit from the signal card.
 
@@ -145,7 +147,7 @@ Fixed-target plans use the reference cost model of 20bps fees plus 10bps
 slippage/spread round trip and minimum net reward/risk 1. These are screening
 assumptions, not measured fees or executable quantities. The sibling crypto
 project computes indicators over full stored contiguous history. This browser
-retains only 500 completed candles per frame, so recursive indicators and
+retains 500 daily/4h and 999 mixed 15m completed candles, so recursive indicators and
 even the latest profile signal can differ from the source dashboard.
 Identical valid inputs produce identical native and WebAssembly decisions here;
 full source-project history parity is unavailable with this bounded feed.

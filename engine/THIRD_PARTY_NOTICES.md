@@ -32,3 +32,25 @@ selection gate is changed by the boundary-constant adaptation. The separate
 Ichimoku lecture extension and paper Watchlist are identified by the local
 release suffix and per-file amendment notes. `internal/browserengine` and
 `cmd/watchlist-*` are local adapters.
+
+## 30 September 2026 combination additions
+
+`internal/strategies/paper_luxalgo.go` is a Go translation of the sibling
+crypto project's causal Rust research adaptations of Trendlines with Breaks,
+Swing Failure Pattern, Nadaraya–Watson Envelope, SuperTrend AI (Clustering)
+and Ultimate RSI, © LuxAlgo, [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+Original publications:
+
+- [Trendlines with Breaks](https://www.tradingview.com/script/IYL88A1N-Trendlines-with-Breaks-LuxAlgo/)
+- [Swing Failure Pattern](https://www.tradingview.com/script/YmWELClV-Swing-Failure-Pattern-SFP-LuxAlgo/)
+- [Nadaraya–Watson Envelope](https://www.tradingview.com/script/Iko0E2kL-Nadaraya-Watson-Envelope-LuxAlgo/)
+- [SuperTrend AI (Clustering)](https://www.tradingview.com/script/wP7WWjLL-SuperTrend-AI-Clustering-LuxAlgo/)
+- [Ultimate RSI](https://www.tradingview.com/script/17Jj7Vcg-Ultimate-RSI-LuxAlgo/)
+
+The envelope uses only its causal endpoint; clustered performance uses all
+available past bars rather than a future-relative chart cutoff. The helper
+state gates and paper exit recipes are local research adaptations, not claims
+of TradingView parity. Explicit rounding barriers preserve the Rust operation
+order in native Go and WebAssembly. `paper_range_combo.go` combines the local
+range detector with the existing prior-week helper. Attribution and applicable
+share-alike/noncommercial terms are retained for the adapted indicator code.

@@ -1,3 +1,4 @@
+import { isTrailingPaperProfile, isOpeningTargetProfile } from './watchlistPaperPolicy'
 import type { WatchlistRow } from './watchlist'
 import type { WatchlistInstrument } from './watchlistInstruments'
 import { ICHIMOKU_EXCLUSIONS, ichimokuEvidence } from './watchlistIchimoku'
@@ -128,7 +129,8 @@ export function buildWatchlistReview(input: WatchlistReviewInput, chartMarkup?: 
   const scopedIchimoku = ref?.scope === 'ichimoku'
   const paperProfile = ref?.mode === 'Paper research profile'
   const family = ref?.strategyFamily ?? ''
-  const trailingDonchian = paperProfile && family.startsWith('donchian55_atr_trail')
+  const trailingDonchian = paperProfile && isTrailingPaperProfile(family)
+  const openingTarget = isOpeningTargetProfile(family ?? '')
   const cappedCloud = paperProfile && family.startsWith('cloud_reclaim_volume_2r')
   const hasOpeningBand = paperProfile && ref?.entryMin != null && ref?.entryMax != null
   const ichimokuFrames = chart?.frames.filter((frame) => frame.ichimoku) ?? []
@@ -157,7 +159,7 @@ export function buildWatchlistReview(input: WatchlistReviewInput, chartMarkup?: 
     'Do not claim to have independently recalculated indicators or validated geometry from summaries alone. Request the HTML snapshot or the required source data for those checks.',
     'The frozen Go classifications are recorded observations, not trade approval, an order fill, a measured win rate or a profitability guarantee.',
     'Costs are model assumptions. Actual fees, funding, borrow, leverage, spread, depth and execution remain unverified.',
-    ...(paperProfile ? ['The browser keeps up to 500 completed candles per source frame. The crypto project can use longer stored history; that can change indicator values and even the latest profile signal.'] : []),
+    ...(paperProfile ? ['The browser keeps 500 daily and four-hour candles and 999 fifteen-minute candles. Longer stored history in the crypto app can change indicator values, persistent helper states and signals.'] : []),
     ...(paperProfile ? ['The current completed close and frozen signal close are references only. The source paper account uses the next whole observed 1-minute opening and checks intervening minutes. This scanner has no verified minute path, opening fill, after-fill reward/risk or execution-time target cap.'] : []),
     'Alternative setups are the engine-selected observations retained for this asset, not a complete raw detector inventory.',
   ]
@@ -206,7 +208,7 @@ export function buildWatchlistReview(input: WatchlistReviewInput, chartMarkup?: 
     ...(hasOpeningBand ? [`| Frozen slipped-entry band minimum | ${exact(ref?.entryMin)} |`,
       `| Frozen slipped-entry band maximum | ${exact(ref?.entryMax)} |`] : []),
     `| ${paperProfile ? 'Frozen initial stop reference' : 'Invalidation / stop'} | ${exact(row.stop)} |`,
-    `| ${trailingDonchian ? 'Exit rule' : cappedCloud ? 'Original structural target before post-fill cap' : paperProfile ? 'Source target reference' : 'Selected first target'} | ${trailingDonchian ? 'ATR trailing stop; no fixed target' : exact(row.target)} |`,
+    `| ${openingTarget ? 'Target at actual opening' : trailingDonchian ? 'Exit rule' : cappedCloud ? 'Original structural target before post-fill cap' : paperProfile ? 'Source target reference' : 'Selected first target'} | ${openingTarget ? 'Raw opening + 2 × (raw opening − initial stop); unknown before execution' : trailingDonchian ? 'ATR trailing stop; no fixed target' : exact(row.target)} |`,
     `| ${paperProfile ? 'Gross reward/risk at reference close, if modeled' : 'Gross reward/risk'} | ${exact(row.riskReward)} |`,
     `| ${paperProfile ? 'Net reward/risk at reference close, if modeled' : 'Net reward/risk after modeled costs'} | ${exact(ref?.netRiskReward)} |`,
     `| Distance from ${paperProfile ? 'frozen signal close' : 'entry reference'}, percent | ${exact(row.distancePercent)} |`,

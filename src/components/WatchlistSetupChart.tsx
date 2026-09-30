@@ -1,3 +1,4 @@
+import { isTrailingPaperProfile, isOpeningTargetProfile } from '../lib/watchlistPaperPolicy'
 import { memo, useEffect, useId, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { Timeframe } from '../types'
@@ -70,7 +71,8 @@ export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, comp
   const frame = snapshot.frames.find((item) => item.timeframe === timeframe)!
   const paperProfile = row.reference?.mode === 'Paper research profile'
   const family = row.reference?.strategyFamily ?? ''
-  const trailingDonchian = paperProfile && family.startsWith('donchian55_atr_trail')
+  const trailingDonchian = paperProfile && isTrailingPaperProfile(family)
+  const openingTarget = isOpeningTargetProfile(family ?? '')
   const cappedCloud = paperProfile && family.startsWith('cloud_reclaim_volume_2r')
   const ichimokuAvailable = !!frame.ichimokuSeries?.length
   const showIchimoku = ichimokuAvailable && (compact ? isIchimokuMethod(row.name)
@@ -145,7 +147,7 @@ export const WatchlistSetupChart = memo(function WatchlistSetupChart({ row, comp
   const paperOpeningNote = paperProfile
     ? ` The source paper account uses the next whole observed 1-minute opening.${positive(row.reference?.entryMin) && positive(row.reference?.entryMax) ? ` Frozen post-slippage opening band: ${formatQuotePrice(row.reference.entryMin)} to ${formatQuotePrice(row.reference.entryMax)}.` : ''} This chart has no intervening minute path or fill.${cappedCloud ? ' A farther target may be capped at net 2R after that fill.' : ''}`
     : ''
-  const summary = `${base} ${row.name}, ${timeframe} ${view === 'setup' ? 'Setup' : 'Recent'} view. ${candles.length} captured candles from ${utcStamp(first.openTime)} to ${utcStamp(last.closeTime)}.${candles.at(-1)?.preview ? ' The outlined final candle is open and provisional.' : ''} ${points.length ? `Observed anchors ${points.map((point) => point.label).join(', ')}. ` : ''}${paperProfile ? 'Latest completed close reference' : 'Evaluated quote'} ${positive(row.price) ? formatQuotePrice(row.price) : 'unavailable'}. ${paperProfile ? 'Initial stop' : 'Stop'} ${positive(row.stop) ? formatQuotePrice(row.stop) : 'unavailable'}, ${trailingDonchian ? 'no fixed target; exit follows the ATR trail' : `${cappedCloud ? 'original structural target' : paperProfile ? 'source target' : 'first target'} ${positive(row.target) ? formatQuotePrice(row.target) : 'unavailable'}`}.${paperOpeningNote}${showIchimoku ? ` Ichimoku 20/60/120: orange Tenkan, red Kijun and green/red cloud. ${ichimoku?.firstProjectionAt ? 'Dashed forward cloud is already calculated from closed candles and displayed 30 bars ahead, not forecast prices.' : ''}` : ''}`
+  const summary = `${base} ${row.name}, ${timeframe} ${view === 'setup' ? 'Setup' : 'Recent'} view. ${candles.length} captured candles from ${utcStamp(first.openTime)} to ${utcStamp(last.closeTime)}.${candles.at(-1)?.preview ? ' The outlined final candle is open and provisional.' : ''} ${points.length ? `Observed anchors ${points.map((point) => point.label).join(', ')}. ` : ''}${paperProfile ? 'Latest completed close reference' : 'Evaluated quote'} ${positive(row.price) ? formatQuotePrice(row.price) : 'unavailable'}. ${paperProfile ? 'Initial stop' : 'Stop'} ${positive(row.stop) ? formatQuotePrice(row.stop) : 'unavailable'}, ${openingTarget ? 'target calculated at the actual raw opening; no assumed target price' : trailingDonchian ? 'no fixed target; exit follows the ATR trail' : `${cappedCloud ? 'original structural target' : paperProfile ? 'source target' : 'first target'} ${positive(row.target) ? formatQuotePrice(row.target) : 'unavailable'}`}.${paperOpeningNote}${showIchimoku ? ` Ichimoku 20/60/120: orange Tenkan, red Kijun and green/red cloud. ${ichimoku?.firstProjectionAt ? 'Dashed forward cloud is already calculated from closed candles and displayed 30 bars ahead, not forecast prices.' : ''}` : ''}`
   const switchView = (nextTimeframe: Timeframe, nextView: 'setup' | 'recent') => {
     setSelection({ identity, timeframe: nextTimeframe, view: nextView })
     onTimeframeChange?.(nextTimeframe)

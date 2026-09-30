@@ -9,7 +9,7 @@ import (
 )
 
 // BuildPaperWatchlist presents the crypto project's active paper roster on
-// independent completed 1d and 4h sources. Each frame stands on its own:
+// independent completed 1d, 4h and 15m sources. Each frame stands on its own:
 // missing four-hour data cannot suppress a valid daily signal, and vice versa.
 // The view never places an order or treats an opening check as a known fill.
 func BuildPaperWatchlist(snapshot scanner.Snapshot, histories map[string]scanner.History, symbols []string, now time.Time, maxAge time.Duration, configs ...Config) Result {
@@ -29,16 +29,16 @@ func BuildPaperWatchlist(snapshot scanner.Snapshot, histories map[string]scanner
 		seen[symbol] = true
 		readyFrames := map[string]bool{}
 		inputs := map[string]strategies.Input{}
-		for _, tf := range []string{"1d", "4h"} {
+		for _, tf := range []string{"1d", "4h", "15m"} {
 			in, ready := paperFrameInput(snapshot, histories, symbol, tf, now, maxAge)
 			inputs[tf], readyFrames[tf] = in, ready
 		}
 		context := strategies.Context{Symbol: symbol, Availability: "unavailable", DirectionalState: "unavailable",
 			VolatilityState: "unavailable", Relative: []strategies.RelativeStrength{}}
-		if readyFrames["1d"] || readyFrames["4h"] {
+		if readyFrames["1d"] || readyFrames["4h"] || readyFrames["15m"] {
 			context.Availability = "ready"
 			at := int64(0)
-			for _, tf := range []string{"1d", "4h"} {
+			for _, tf := range []string{"1d", "4h", "15m"} {
 				if readyFrames[tf] && inputs[tf].Frames[tf].LastClosedAt > at {
 					at = inputs[tf].Frames[tf].LastClosedAt
 				}
@@ -69,11 +69,17 @@ func BuildPaperWatchlist(snapshot scanner.Snapshot, histories map[string]scanner
 		if readyFrames["1d"] {
 			in := inputs["1d"]
 			paperAppendCandidates(&methods, index, in, now, cfg, strategies.PaperDonchianOpportunities(in))
+			paperAppendCandidates(&methods, index, in, now, cfg, strategies.PaperLuxAlgoOpportunities(in, "1d"))
 			paperAppendCandidates(&methods, index, in, now, cfg, strategies.PaperCloudTKOpportunities(in, now.UnixMilli()))
 		}
 		if readyFrames["4h"] {
 			in := inputs["4h"]
 			paperAppendCandidates(&methods, index, in, now, cfg, strategies.PaperWeeklyOpportunities(in))
+			paperAppendCandidates(&methods, index, in, now, cfg, strategies.PaperRangeWeeklyOpportunities(in))
+		}
+		if readyFrames["15m"] {
+			in := inputs["15m"]
+			paperAppendCandidates(&methods, index, in, now, cfg, strategies.PaperLuxAlgoOpportunities(in, "15m"))
 		}
 	}
 	sort.SliceStable(methods.Items, func(i, j int) bool {
@@ -114,7 +120,11 @@ func paperFamilyWarmup(family string) int {
 	case strategies.PaperDonchianBase, strategies.PaperDonchianStoch,
 		strategies.PaperDonchianMACD, strategies.PaperDonchianADXRange:
 		return 56
-	case strategies.PaperFreshWeeklyRangeLong:
+	case strategies.PaperTrendADX, strategies.PaperTrendCluster, strategies.PaperTrendSFP:
+		return 30
+	case strategies.PaperNWEMomentum:
+		return 999
+	case strategies.PaperFreshWeeklyRangeLong, strategies.PaperRangeWeekly:
 		return 44
 	case "tk_cross_rsi":
 		return 151
@@ -213,11 +223,19 @@ func assessPaperCandidate(op strategies.Opportunity, in strategies.Input, now ti
 	isDonchian := op.Family == strategies.PaperDonchianBase || op.Family == strategies.PaperDonchianStoch ||
 		op.Family == strategies.PaperDonchianMACD || op.Family == strategies.PaperDonchianADXRange
 	isCloud := len(op.Family) >= len("cloud_reclaim_volume_2r") && op.Family[:len("cloud_reclaim_volume_2r")] == "cloud_reclaim_volume_2r"
-	if isDonchian {
+	isTrendCombo := op.Family == strategies.PaperTrendADX || op.Family == strategies.PaperTrendCluster || op.Family == strategies.PaperTrendSFP
+	isNWE := op.Family == strategies.PaperNWEMomentum
+	if isDonchian || isTrendCombo || isNWE {
 		if op.Target != nil || op.Direction != "bullish" || op.ReferenceATR == nil || !positive(*op.ReferenceATR) {
-			return block("invalid_evidence", "The daily trend plan needs its original ATR stop and no fixed target.")
+			return block("invalid_evidence", "This plan needs its original ATR stop and no target known before execution.")
 		}
 		plan.Management = "The paper trial checks the next whole one-minute opening above the initial 2-ATR stop, after verifying intervening minute candles. Ratchet a 3.5-ATR stop after completed daily closes without widening it; a close below the previous 20-bar low exits at the following one-minute opening. Exit after at most 96 daily bars."
+		if isTrendCombo {
+			plan.Management = "Initial 2×Wilder ATR14 stop; never-widening 3.5×Wilder ATR14 trail after completed daily closes. Ungated opposite raw Trendlines events exit at the next one-minute opening. Maximum holding: 96 daily bars. Check intervening minutes and the next whole opening before entry."
+		}
+		if isNWE {
+			plan.Management = "Keep the initial 2×Wilder ATR14 stop fixed. At execution, target = raw opening + 2 × (raw opening − stop), using the actual raw opening before slippage. No trail or opposite-event exit. Maximum holding: 24 fifteen-minute bars. Check intervening minutes and opening costs before entry; the target and after-fill reward/risk are unknown here."
+		}
 	} else {
 		if op.Target == nil || op.EntryMin == nil || op.EntryMax == nil || op.ReferenceATR == nil ||
 			!positive(*op.Target) || !positive(*op.EntryMin) || !positive(*op.EntryMax) || !positive(*op.ReferenceATR) ||
@@ -232,6 +250,8 @@ func assessPaperCandidate(op strategies.Opportunity, in strategies.Input, now ti
 		plan.Target = clonePointer(op.Target) // original structural target, before any execution-time cap
 		if isCloud {
 			plan.Management = "Volume and directional filters were frozen at the first eligible completed close. The paper trial checks the next whole one-minute opening inside the frozen band after verifying intervening minute candles. Keep the original stop; shorten a farther target to a net 2R after actual slipped entry costs. Maximum holding: 24 daily bars. The chart target is the original structural reference."
+		} else if op.Family == strategies.PaperRangeWeekly {
+			plan.Management = "Weekly agreement is frozen at the first eligible range emission. Check the next whole one-minute opening inside the original band and intervening minute candles. Keep the original stop and target; maximum holding: 24 four-hour bars. The weekly helper adds no 3% opening-width guard."
 		} else if op.Family == strategies.PaperFreshWeeklyRangeLong {
 			plan.Management = "The paper trial checks the next whole one-minute opening inside the frozen band after verifying intervening minute candles, only if raw opening-to-stop distance is at least 3%. Keep the original range target; maximum holding: 24 four-hour bars."
 		} else {

@@ -102,7 +102,7 @@ export function useGoWatchlist(symbols: readonly string[], market: ScreenerMarke
       worker.terminate()
       fail('The watchlist engine could not load within 30 seconds. Reload to retry.')
     }, 30_000)
-    const stopFeed = startGoWatchlistFeed({symbols, market, timeframes, onUpdate: (frame) => {
+    const stopFeed = startGoWatchlistFeed({symbols, market, timeframes, longEnvelopeHistory: scope === 'all', onUpdate: (frame) => {
       if (stopped) return
       const key = `${frame.symbol}:${frame.timeframe}`
       const previous = frames.get(key)

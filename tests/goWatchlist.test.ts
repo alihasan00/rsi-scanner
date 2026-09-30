@@ -23,6 +23,11 @@ const PROFILES = [
   ['cloud_reclaim_volume_2r_sma_ema_macd', '1d', 'Cloud reclaim · volume + SMA/EMA/MACD + 2R cap'],
   ['fresh_weekly_range_long', '4h', 'Fresh weekly-level rebound'],
   ['tk_cross_rsi', '1d', 'Tenkan / Kijun cross · RSI'],
+  ['combo_trendlines_adx_daily', '1d', 'Trendlines · low ADX'],
+  ['combo_trendlines_cluster_daily', '1d', 'Trendlines · clustered Supertrend'],
+  ['combo_trendlines_sfp_daily', '1d', 'Trendlines · Swing Failure Pattern'],
+  ['combo_range_weekly_4h', '4h', 'Range rejection · fresh weekly signal'],
+  ['combo_nwe_rsi_ultimate_15m', '15m', 'Envelope · RSI + Ultimate RSI'],
 ] as const
 
 const closeAt = (timeframe: Timeframe) => getGoWatchlistExpectedClose(NOW, timeframe, LAST_SUNDAY)
@@ -76,9 +81,9 @@ function history(frame: GoSeries): GoWatchlistFrameUpdate {
 }
 
 describe('paper profile Watchlist adapter', () => {
-  test('admits all twelve active method IDs on their catalog frames and keeps source order', () => {
+  test('admits all seventeen active method IDs on their catalog frames and keeps source order', () => {
     const rows = adaptGoWatchlist(output(PROFILES.map(([family, timeframe]) => strategy('BTCUSDT', family, timeframe))), 'spot')
-    expect(rows).toHaveLength(12)
+    expect(rows).toHaveLength(17)
     expect(rows.map((row) => [row.reference?.strategyFamily, row.timeframe, row.name])).toEqual(
       PROFILES.map(([family, timeframe, name]) => [family, timeframe, name + ' · ' + timeframe]))
     expect(rows.every((row) => row.source === 'strategy' && row.reference?.mode === 'Paper research profile')).toBe(true)
@@ -258,4 +263,14 @@ describe('independent Ichimoku scope', () => {
     result.timeframe = '6h' as Timeframe
     expect(() => adaptGoWatchlist(result, 'spot')).toThrow('Unsupported Ichimoku timeframe')
   })
+})
+
+test('mixed timeframe filters retain every variant on only the chosen source', () => {
+  const rows = adaptGoWatchlist(output(PROFILES.map(([family, frame]) => strategy('BTCUSDT', family, frame))), 'spot')
+  for (const timeframe of ['1d', '4h', '15m'] as const) {
+    const groups = selectGoWatchlist(rows, NOW, {scope: 'all', timeframe})
+    expect(groups).toHaveLength(1)
+    expect(groups[0].allSetups.every((row) => row.timeframe === timeframe)).toBe(true)
+    expect(groups[0].allSetups).toHaveLength(timeframe === '1d' ? 14 : timeframe === '4h' ? 2 : 1)
+  }
 })

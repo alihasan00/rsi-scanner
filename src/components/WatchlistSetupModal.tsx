@@ -1,3 +1,4 @@
+import { isTrailingPaperProfile, isOpeningTargetProfile } from '../lib/watchlistPaperPolicy'
 import { useRef, useState } from 'react'
 import { Button, Modal } from 'antd'
 import { ArrowDownOutlined, ArrowUpOutlined, ReloadOutlined } from '@ant-design/icons'
@@ -31,12 +32,13 @@ export function WatchlistSetupModal({instrument, latestInstrument, now, onClose,
   const scopedIchimoku = ref?.scope === 'ichimoku'
   const paperProfile = ref?.mode === 'Paper research profile'
   const family = ref?.strategyFamily ?? ''
-  const trailingDonchian = paperProfile && family.startsWith('donchian55_atr_trail')
+  const trailingDonchian = paperProfile && isTrailingPaperProfile(family)
+  const openingTarget = isOpeningTargetProfile(family ?? '')
   const cappedCloud = paperProfile && family.startsWith('cloud_reclaim_volume_2r')
   const hasOpeningBand = paperProfile && ref?.entryMin != null && ref?.entryMax != null
   const signalZone = row.zone.low === row.zone.high ? quote(row.zone.low) : `${quote(row.zone.low)}–${quote(row.zone.high)}`
   const costDescription = !ref ? '' : paperProfile
-    ? `${(ref.feeBps + ref.slippageBps) / 100}% modeled round-trip costs (${ref.feeBps / 100}% fees + ${ref.slippageBps / 100}% slippage). ${trailingDonchian ? 'The managed exit has no fixed R/R.' : `Fixed-target screening minimum: ${ref.minNetRR}R.`} The source paper account checks the next whole observed 1-minute opening and intervening minutes; this scanner has not verified that path or an opening fill.${hasOpeningBand ? ' The frozen entry band applies after adverse slippage.' : ''}${cappedCloud ? ' A farther cloud target may be capped at net 2R only after the fill and costs are known.' : ''}`
+    ? `${(ref.feeBps + ref.slippageBps) / 100}% modeled round-trip costs (${ref.feeBps / 100}% fees + ${ref.slippageBps / 100}% slippage). ${openingTarget ? 'The target depends on the unknown raw opening; after-fill R/R is unverified.' : trailingDonchian ? 'The managed exit has no fixed R/R.' : `Fixed-target screening minimum: ${ref.minNetRR}R.`} The source paper account checks the next whole observed 1-minute opening and intervening minutes; this scanner has not verified that path or an opening fill.${hasOpeningBand ? ' The frozen entry band applies after adverse slippage.' : ''}${cappedCloud ? ' A farther cloud target may be capped at net 2R only after the fill and costs are known.' : ''}`
     : `${ref.feeBps / 100}% fees + ${ref.slippageBps / 100}% slippage round trip. Minimum ${ref.minNetRR}R after costs.`
   const contextFrames = scopedIchimoku ? [...new Set([...(ref?.frames.map((frame) => frame.timeframe) ?? []),
     ...(chart?.frames.filter((frame) => frame.candles.length > 0).map((frame) => frame.timeframe) ?? [])])]
@@ -92,7 +94,7 @@ export function WatchlistSetupModal({instrument, latestInstrument, now, onClose,
         {paperProfile && <div><dt>Source signal zone</dt><dd>{signalZone}</dd></div>}
         {hasOpeningBand && <div><dt>Frozen slipped-entry band</dt><dd>{quote(ref?.entryMin)}–{quote(ref?.entryMax)}</dd></div>}
         <div className="is-stop"><dt>{paperProfile ? 'Initial stop reference' : 'Invalidation / stop'}</dt><dd>{quote(row.stop)}</dd></div>
-        <div className="is-target"><dt>{trailingDonchian ? 'Exit rule' : cappedCloud ? 'Original structural target' : paperProfile ? 'Source target reference' : 'First target'}</dt><dd>{trailingDonchian ? 'ATR trail · no fixed target' : quote(row.target)}</dd></div>
+        <div className="is-target"><dt>{openingTarget ? 'Target at actual opening' : trailingDonchian ? 'Exit rule' : cappedCloud ? 'Original structural target' : paperProfile ? 'Source target reference' : 'First target'}</dt><dd>{openingTarget ? 'Opening + 2× raw stop distance' : trailingDonchian ? 'ATR trail · no fixed target' : quote(row.target)}</dd></div>
       </dl><div className="watch-detail__rr"><span>{paperProfile ? 'Reference R/R after costs' : 'Reward / risk after costs'}</span><strong>{ref?.netRiskReward != null ? `${ref.netRiskReward.toFixed(2)}R` : 'Not established'}</strong></div><p className="watch-detail__costs">{costDescription}</p></section>
     </aside></div>
     <div className="watch-detail__support"><section><h3>Setup timeline</h3>{timeline.length ? <ul>{timeline.map((event,index) => <li key={`${event.kind}:${index}`}><b>{event.label} · {event.timeframe}</b><span>{stamp(event.time)} UTC{event.price != null ? ` · ${quote(event.price)}` : ''}</span></li>)}</ul> : <p>A completed-candle event has not been established yet.</p>}{supportingEvidence.length > 0 && <ul>{supportingEvidence.map((item,index) => <li key={`${item.label}:${index}`}><b>{item.label}</b><span>{item.detail}</span></li>)}</ul>}</section><section><h3>Keep in mind</h3><ul>{row.cautions.map((note) => <li key={note}>{note}</li>)}</ul></section></div>
